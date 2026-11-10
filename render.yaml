@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: funeral-smart-api
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: funeral-smart-db
+          property: connectionString
+      - key: ADMIN_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+
+databases:
+  - name: funeral-smart-db
+    plan: basic-256mb
+    databaseName: funeral_smart
+    user: funeral_smart_user
