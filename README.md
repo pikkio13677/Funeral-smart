@@ -43,7 +43,7 @@ Impostare nelle Environment Variables del servizio:
 - `CORS_ORIGIN`: origine HTTPS autorizzata del frontend, senza slash finale.
 - `NODE_ENV=production`.
 
-La chiave `ADMIN_API_KEY` non va mai inserita in `index.html`, `api-config.js`, file pubblici o messaggi. Per la prima area gestionale viene digitata dall'amministratore nel browser e resta solo in `sessionStorage) fino alla chiusura della sessione. È una protezione provvisoria: prima dell'uso con dati reali sostituirla con login nominativi, ruoli, MFA, sessioni server-side e audit log.
+La chiave `ADMIN_API_KEY` non va mai inserita in `index.html`, `api-config.js`, file pubblici o messaggi. Per la prima area gestionale viene digitata dall'amministratore nel browser e resta solo in `sessionStorage fino alla chiusura della sessione. È una protezione provvisoria: prima dell'uso con dati reali sostituirla con login nominativi, ruoli, MFA, sessioni server-side e audit log.
 
 ## API gestionali
 Tutte le rotte seguenti richiedono l'header `x-admin-key`:
