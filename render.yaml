@@ -2,7 +2,7 @@ services:
   - type: web
     name: funeral-smart-api
     runtime: node
-    plan: starter
+    plan: plan: free
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
@@ -20,6 +20,6 @@ services:
 
 databases:
   - name: funeral-smart-db
-    plan: basic-256mb
+    plan: plan: free
     databaseName: funeral_smart
     user: funeral_smart_user
