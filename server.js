@@ -133,6 +133,9 @@ app.get('/api/v1/admin/provider-applications', adminOnly, async (_req, res, next
   catch (e) { next(e); }
 });
 
+// Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
+app.use('/api/v1/admin', require('./admin-routes')(pool, adminOnly));
+
 app.use((err, _req, res, _next) => {
   console.error(err.message);
   res.status(500).json({ error: 'Errore interno. Riprova più tardi.' });
