@@ -1,53 +1,74 @@
-# FUNERAL SMART — Backend iniziale
+# FUNERAL SMART — Piattaforma gestionale (prima versione)
 
-API Node.js + Express + PostgreSQL. È una base tecnica pronta per essere configurata su Render; non è ancora pubblicata e non contiene imprese o tariffe reali.
+FUNERAL SMART è in sviluppo come piattaforma web per imprese funebri. Il repository contiene un frontend pubblico dimostrativo, un'API Node.js/Express e un database PostgreSQL. Le nuove funzioni gestionali sono una prima base operativa: non sostituiscono ancora un gestionale certificato né una verifica legale, fiscale o privacy.
 
-## Contenuto
-- `src/server.js`: API REST, validazione input, rate limit, CORS e intestazioni di sicurezza.
-- `db/schema.sql`: database per imprese, servizi, listini, candidature e richieste.
-- `.env.example`: variabili necessarie.
-- `render.yaml`: blueprint per un servizio web e un database PostgreSQL su Render. La creazione delle risorse può comportare costi secondo il piano scelto.
+## File principali
+- `index.html`: area pubblica dimostrativa per famiglie.
+- `admin.html`: prima area gestionale responsive, protetta da chiave amministratore.
+- `server.js`: API REST, validazione input, rate limit, CORS e intestazioni di sicurezza.
+- `admin-routes.js`: API gestionali protette.
+- `schema.sql`: schema iniziale per imprese, servizi, listini, candidature e richieste.
+- `gestionale.sql`: migrazione additiva per pratiche funebri, clienti, personale, veicoli, magazzino, attività, fatture e pagamenti.
+- `api-config.js`: URL del backend per il frontend pubblico (da configurare).
+- `render.yaml`: Blueprint Render per servizio web e database PostgreSQL.
 
-## Avvio locale
-Richiede Node.js 20+ e PostgreSQL.
+## Moduli gestionali inclusi nella prima versione
+- Dashboard: pratiche attive, clienti, personale, mezzi disponibili, scorte basse, attività aperte e importi da incassare.
+- Pratiche/funerali: apertura pratica, dati essenziali, stato e importo preventivato.
+- Clienti e famiglie: anagrafiche e recapiti.
+- Personale: collaboratori e ruoli.
+- Veicoli: mezzi, disponibilità e manutenzioni.
+- Magazzino: articoli, giacenze, soglie minime e movimenti di carico/scarico.
+- Attività: incarichi, priorità, scadenze e stato.
+- Fatture e pagamenti: registrazione documenti e incassi con controllo del residuo.
+- Area pubblica: richieste informative e consultazione di eventuali listini verificati.
+
+## Configurazione database
+Richiede Node.js 20+ e PostgreSQL. Eseguire le migrazioni sul database corretto, una volta sola per ogni ambiente (gli script sono ripetibili):
 
 ```bash
-cp .env.example .env
-# Compilare DATABASE_URL, ADMIN_API_KEY e CORS_ORIGIN in .env
-psql "$DATABASE_URL" -f db/schema.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f schema.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f gestionale.sql
 npm install
+npm run check
 npm start
 ```
 
-Test: `GET http://localhost:10000/api/health`.
+Su Render, usare il valore privato di `DATABASE_URL` del database associato. Non inserire mai credenziali o chiavi nel repository. La migrazione `gestionale.sql` non è eseguita automaticamente dal Blueprint: va applicata al database prima di usare i nuovi moduli.
 
-## API
+## Configurazione Render
+Impostare nelle Environment Variables del servizio:
+- `DATABASE_URL`: collegamento privato al database Render.
+- `ADMIN_API_KEY`: chiave casuale lunga e non riutilizzata.
+- `CORS_ORIGIN`: origine HTTPS autorizzata del frontend, senza slash finale.
+- `NODE_ENV=production`.
+
+La chiave `ADMIN_API_KEY` non va mai inserita in `index.html`, `api-config.js`, file pubblici o messaggi. Per la prima area gestionale viene digitata dall'amministratore nel browser e resta solo in `sessionStorage) fino alla chiusura della sessione. È una protezione provvisoria: prima dell'uso con dati reali sostituirla con login nominativi, ruoli, MFA, sessioni server-side e audit log.
+
+## API gestionali
+Tutte le rotte seguenti richiedono l'header `x-admin-key`:
+- `GET /api/v1/admin/dashboard`
+- `GET|POST /api/v1/admin/customers`
+- `GET|POST /api/v1/admin/cases`, `PATCH /api/v1/admin/cases/:id/status`
+- `GET|POST /api/v1/admin/staff`
+- `GET|POST /api/v1/admin/vehicles`
+- `GET|POST /api/v1/admin/inventory`, `POST /api/v1/admin/inventory/:id/movements`
+- `GET|POST /api/v1/admin/tasks`, `PATCH /api/v1/admin/tasks/:id/status`
+- `GET|POST /api/v1/admin/invoices`, `POST /api/v1/admin/invoices/:id/payments`
+
+API pubbliche:
 - `GET /api/health` — stato API e database.
 - `GET /api/v1/services` — servizi attivi.
-- `GET /api/v1/providers?city=Torino&service=burial` — sole imprese verificate.
-- `GET /api/v1/price-lists?city=Torino&service=burial` — listini pubblicati di imprese verificate.
-- `POST /api/v1/inquiries` — crea una richiesta con consenso privacy e recapito.
-- `POST /api/v1/provider-applications` — candidatura impresa in stato pending, non pubblicata.
-- `GET /api/v1/admin/inquiries` — richieste per amministratore (`x-admin-key`).
-- `GET /api/v1/admin/provider-applications` — candidature per amministratore (`x-admin-key`).
+- `GET /api/v1/providers` e `GET /api/v1/price-lists` — sole imprese verificate/listini pubblicati.
+- `POST /api/v1/inquiries` — richiesta informativa con consenso e recapito.
+- `POST /api/v1/provider-applications` — candidatura impresa non pubblicata.
 
-## Esempio richiesta
-```json
-{
-  "city": "Torino",
-  "serviceType": "Rimpatrio internazionale",
-  "destinationCountry": "Romania",
-  "contactEmail": "famiglia@example.it",
-  "privacyConsent": true
-}
-```
+## Verifiche indispensabili prima dei dati reali
+1. Eseguire la migrazione e verificare `/api/health` e tutte le rotte con dati di prova.
+2. Configurare CORS con il dominio reale del frontend.
+3. Implementare autenticazione nominativa e permessi per ruolo; la chiave amministratore è solo un ponte per test controllati.
+4. Aggiungere audit log, backup automatici e test di ripristino, retention e procedure di cancellazione.
+5. Definire informativa privacy, titolare, base giuridica, tempi di conservazione e contratti con i fornitori. I dati relativi al decesso e alle famiglie richiedono particolare cautela.
+6. Verificare con professionisti competenti gli aspetti fiscali, documentali e normativi. Non usare i dati demo come prezzi o preventivi reali.
 
-## Prima della messa online
-1. Impostare segreti forti in Render; mai inserirli nel frontend o nel repository.
-2. Definire informativa privacy, titolare, base giuridica, tempi di conservazione, procedure per accesso/cancellazione e contratti con fornitori.
-3. Fare revisione legale e sicurezza, aggiungere autenticazione amministrativa robusta (preferibilmente account con MFA), audit log e policy di retention automatica.
-4. Verificare manualmente identità e requisiti di ogni impresa prima di cambiarne lo stato in `verified`.
-5. Pubblicare listini solo dopo verifica documentale; indicare IVA, inclusioni, esclusioni e costi terzi. Non sono precaricati prezzi né operatori.
-6. Collegare il frontend solo dopo aver configurato `CORS_ORIGIN` con il dominio effettivo.
-
-La API non inoltra automaticamente le richieste alle imprese e non costituisce consulenza legale o gestione di pratiche di rimpatrio.
+Le richieste pubbliche non vengono inoltrate automaticamente alle imprese. Non sono precaricati operatori o listini reali.
