@@ -19,7 +19,7 @@ app.use(cors({ origin(origin, cb) {
   return cb(new Error('Origine non autorizzata'));
 } }));
 app.use(express.json({ limit: '30kb' }));
-app.use('/api/', rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-7', legacyHeaders: false }));
+app.use('/api/v1/', rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-7', legacyHeaders: false }));
 
 const citySchema = z.string().trim().min(2).max(100);
 const providerSchema = z.object({
