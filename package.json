@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "description": "Backend iniziale per FUNERAL SMART",
-  "main": "src/server.js",
-  "scripts": {"start": "node src/server.js", "dev": "node --watch src/server.js", "check": "node --check src/server.js"},
+  "main": "main": "server.js",
+  "scripts": {"start":"start": "node server.js",  "dev":"dev": "node --watch server.js", "check":"check": "node --check server.js" },
   "engines": {"node": ">=20"},
   "dependencies": {
     "cors": "^2.8.5",
