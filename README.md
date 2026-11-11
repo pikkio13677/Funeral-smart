@@ -48,8 +48,6 @@ Test: `GET http://localhost:10000/api/health`.
 3. Fare revisione legale e sicurezza, aggiungere autenticazione amministrativa robusta (preferibilmente account con MFA), audit log e policy di retention automatica.
 4. Verificare manualmente identità e requisiti di ogni impresa prima di cambiarne lo stato in `verified`.
 5. Pubblicare listini solo dopo verifica documentale; indicare IVA, inclusioni, esclusioni e costi terzi. Non sono precaricati prezzi né operatori.
-6. Impostare `CORS_ORIGIN` con il dominio HTTPS effettivo del frontend (senza slash finale).
-7. Dopo il deploy, inserire l'URL HTTPS Render in `frontend/api-config.js` e ripubblicare il frontend.
-8. Prima di raccogliere dati personali, pubblicare informativa privacy completa e far verificare flussi, titolare, basi giuridiche e tempi di conservazione da un professionista.
+6. Collegare il frontend solo dopo aver configurato `CORS_ORIGIN` con il dominio effettivo.
 
 La API non inoltra automaticamente le richieste alle imprese e non costituisce consulenza legale o gestione di pratiche di rimpatrio.
