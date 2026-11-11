@@ -137,7 +137,11 @@ app.get('/api/v1/admin/provider-applications', adminOnly, async (_req, res, next
 app.use('/api/v1/admin', require('./admin-routes')(pool, adminOnly));
 
 // Area gestionale web: disponibile sullo stesso servizio Render all'indirizzo /admin.
-app.get('/admin', (_req, res) => res.sendFile(require('path').join(__dirname, 'admin.html')));
+app.get('/admin', (_req, res) => {
+  // La pagina gestionale usa script e stili inline: abilitarli solo su questa pagina.
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  res.sendFile(require('path').join(__dirname, 'admin.html'));
+});
 
 app.use((err, _req, res, _next) => {
   console.error(err.message);
