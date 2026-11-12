@@ -18,7 +18,7 @@ Supporto condiviso:
 - `tenant-permissions.js`: autorizzazione per ruolo aziendale.
 - `company-context-routes.js`: elenco e selezione azienda nella sessione.
 
-Ultimo controllo CI del blocco dashboard: commit `70c9a3f089e1425fa6dfa492c35d55e4fbc4aab5`, 55 test superati, 0 falliti. Il modulo profilo/membership è stato aggiunto successivamente ed è in verifica CI separata. I test sono unitari con database simulato, non un collaudo PostgreSQL reale.
+Ultimo controllo CI: commit `28b7510723eec92d30c15ad391c1e16e4c7e45b1`, **62 test superati, 0 falliti**. I test sono unitari con database simulato, non un collaudo PostgreSQL reale.
 
 **Non confondere questi router con le rotte esistenti in `admin-routes.js`:** quelle restano le rotte single-tenant operative. I nuovi router sono implementazioni tenant-aware alternative, non ancora integrate o montate. Il passaggio richiederà separazione dei router marketplace/gestionale, verifica schema, migrazioni e test su clone PostgreSQL.
 
