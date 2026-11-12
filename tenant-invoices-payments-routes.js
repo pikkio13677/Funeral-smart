@@ -41,14 +41,22 @@ function createTenantInvoicesPaymentsRouter(pool) {
       const result = await pool.query(
         `SELECT i.id, i.invoice_number AS "invoiceNumber", i.case_id AS "caseId",
                 i.customer_id AS "customerId", i.issue_date AS "issueDate",
-                i.due_date AS "dueDate", i.amount, i.status, i.notes,
-                i.created_at AS "createdAt",
+                i.due_date AS "dueDate", i.amount,
+                CASE WHEN i.status IN ('issued','partial','overdue')
+                       AND i.due_date < CURRENT_DATE
+                       AND COALESCE(SUM(p.amount),0) < i.amount
+                     THEN 'overdue' ELSE i.status END AS status,
+                i.notes, i.created_at AS "createdAt",
                 c.first_name AS "customerFirstName", c.last_name AS "customerLastName",
-                f.case_code AS "caseCode"
+                f.case_code AS "caseCode",
+                COALESCE(SUM(p.amount),0)::numeric(10,2) AS "paidAmount",
+                GREATEST(i.amount - COALESCE(SUM(p.amount),0),0)::numeric(10,2) AS "remainingAmount"
          FROM invoices i
          LEFT JOIN customers c ON c.id = i.customer_id AND c.company_id = i.company_id
          LEFT JOIN funeral_cases f ON f.id = i.case_id AND f.company_id = i.company_id
+         LEFT JOIN payments p ON p.invoice_id = i.id AND p.company_id = i.company_id
          WHERE i.company_id = $1
+         GROUP BY i.id, c.first_name, c.last_name, f.case_code
          ORDER BY i.issue_date DESC, i.created_at DESC LIMIT 300`,
         [req.tenant.companyId]
       );
