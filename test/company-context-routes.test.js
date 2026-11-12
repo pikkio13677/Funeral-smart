@@ -107,3 +107,40 @@ test('rolls back when the user is not a member of the requested company', async 
   assert.ok(calls.includes('ROLLBACK'));
   assert.ok(!calls.includes('COMMIT'));
 });
+
+test('uses the configured session cookie name when selecting a company', async () => {
+  let receivedArgs;
+  const client = {
+    async query(sql, args) {
+      if (sql === 'BEGIN' || sql === 'COMMIT') return { rowCount: null, rows: [] };
+      if (/SELECT id/.test(sql)) { receivedArgs = args; return { rowCount: 1, rows: [{ id: 'session-custom' }] }; }
+      if (/SELECT m\\.id/.test(sql)) return { rowCount: 1, rows: [{ membershipId: 'member-custom', companyId: '44444444-4444-4444-8444-444444444444', role: 'admin', legalName: 'Impresa Custom' }] };
+      if (/UPDATE app_sessions/.test(sql)) return { rowCount: 1, rows: [] };
+      throw new Error('Unexpected query: ' + sql);
+    },
+    release() {}
+  };
+  const router = createCompanyContextRouter(
+    { connect: async () => client },
+    (_req, _res, next) => next(),
+    token => 'custom-hash:' + token,
+    'custom_session'
+  );
+  const res = response();
+  await routeHandler(router, '/active-company', 'post')({
+    user: { id: 'user-custom' },
+    cookies: { custom_session: 'z'.repeat(40) },
+    body: { companyId: '44444444-4444-4444-8444-444444444444' }
+  }, res, () => {});
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(receivedArgs, ['custom-hash:' + 'z'.repeat(40), 'user-custom']);
+});
+
+test('rejects an invalid configured cookie name', () => {
+  assert.throws(() => createCompanyContextRouter(
+    { connect: async () => ({}) },
+    (_req, _res, next) => next(),
+    token => token,
+    'bad cookie name'
+  ), TypeError);
+});
