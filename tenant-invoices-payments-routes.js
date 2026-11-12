@@ -163,11 +163,6 @@ function createTenantInvoicesPaymentsRouter(pool) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'La fattura non è in uno stato che consente pagamenti.' });
       }
-      const balance = await client.query(
-        `SELECT COALESCE(SUM(amount),0)::numeric AS paid
-         FROM payments WHERE invoice_id = $1 AND company_id = $2`,
-        [id.data, req.tenant.companyId]
-      );
       const payment = await client.query(
         `INSERT INTO payments (company_id, invoice_id, amount, payment_date, method, reference)
          VALUES ($1,$2,$3,COALESCE($4::date,CURRENT_DATE),$5,$6)
