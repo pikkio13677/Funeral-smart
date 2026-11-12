@@ -1,6 +1,25 @@
 # FUNERAL SMART — Inventario rotte e query da rendere tenant-aware
 
-Stato: audit statico del branch `feat/multi-azienda-foundation`. Nessun codice runtime modificato.
+Stato: inventario aggiornato con i router tenant-aware isolati nel branch `feat/multi-azienda-foundation`. I router non sono montati in `server.js`; nessuna migrazione è stata eseguita e nessun codice di produzione è stato modificato.
+
+
+## Stato implementazione verificato (12 novembre 2026)
+
+Router tenant-aware implementati come factory isolate e coperti da test unitari:
+- `tenant-customers-cases-routes.js`: clienti e pratiche.
+- `tenant-staff-vehicles-routes.js`: personale e veicoli.
+- `tenant-inventory-tasks-routes.js`: magazzino, movimenti e attività.
+- `tenant-invoices-payments-routes.js`: fatture, emissione, pagamenti e saldi.
+- `tenant-dashboard-routes.js`: aggregati dashboard per azienda.
+
+Supporto condiviso:
+- `tenant-context.js`: contesto membership/azienda verificato da sessione.
+- `tenant-permissions.js`: autorizzazione per ruolo aziendale.
+- `company-context-routes.js`: elenco e selezione azienda nella sessione.
+
+Ultimo controllo CI: commit `70c9a3f089e1425fa6dfa492c35d55e4fbc4aab5`, 55 test superati, 0 falliti. Sono test unitari con database simulato, non un collaudo PostgreSQL reale.
+
+**Non confondere questi router con le rotte esistenti in `admin-routes.js`:** quelle restano le rotte single-tenant operative. I nuovi router sono implementazioni tenant-aware alternative, non ancora integrate o montate. Il passaggio richiederà separazione dei router marketplace/gestionale, verifica schema, migrazioni e test su clone PostgreSQL.
 
 ## Confine tra piattaforma e azienda
 
