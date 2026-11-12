@@ -5,12 +5,15 @@ const { z } = require('zod');
 
 // Dormant router: intentionally not mounted until migrations 005/006 are
 // tested on a restored database and the application integration is reviewed.
-module.exports = function createCompanyContextRouter(pool, authenticate, tokenHash) {
+module.exports = function createCompanyContextRouter(pool, authenticate, tokenHash, cookieName = 'fs_session') {
   if (!pool || typeof pool.connect !== 'function') {
     throw new TypeError('A PostgreSQL pool with connect() is required.');
   }
   if (typeof authenticate !== 'function' || typeof tokenHash !== 'function') {
     throw new TypeError('Authentication and token hashing functions are required.');
+  }
+  if (typeof cookieName !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(cookieName)) {
+    throw new TypeError('A valid session cookie name is required.');
   }
 
   const router = express.Router();
@@ -44,7 +47,7 @@ module.exports = function createCompanyContextRouter(pool, authenticate, tokenHa
       return res.status(400).json({ error: 'Selezione azienda non valida.' });
     }
 
-    const token = req.cookies?.fs_session;
+    const token = req.cookies?.[cookieName];
     if (typeof token !== 'string' || token.length < 32) {
       return res.status(401).json({ error: 'Sessione non valida.' });
     }
