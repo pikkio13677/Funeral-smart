@@ -49,7 +49,7 @@ module.exports = function createAdminRouter(pool, adminOnly) {
   const invoiceSchema = z.object({
     invoiceNumber: text(60, 1), caseId: z.string().uuid().optional().nullable(),
     customerId: z.string().uuid().optional().nullable(), issueDate: dateText,
-    dueDate: dateText, amount: money, status: z.enum(['draft','issued','partial','paid','overdue','cancelled']).optional().default('draft'),
+    dueDate: dateText, amount: money, status: z.enum(['draft','issued']).optional().default('draft'),
     notes: optionalText(1000)
   });
   const paymentSchema = z.object({
