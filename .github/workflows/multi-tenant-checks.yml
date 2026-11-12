@@ -1,0 +1,29 @@
+name: Multi-tenant branch checks
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - feat/multi-azienda-foundation
+
+permissions:
+  contents: read
+
+jobs:
+  node-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies without creating a lockfile
+        run: npm install --no-package-lock --ignore-scripts
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Run isolated unit tests
+        run: npm test
