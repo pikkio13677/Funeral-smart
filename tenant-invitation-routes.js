@@ -72,7 +72,7 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
       }
       const user = userResult.rows[0];
       const invitedEmail = normalizeEmail(invite.email);
-      if (user.email && normalizeEmail(user.email) !== invitedEmail && user.email_verified_at) {
+      if (user.email && normalizeEmail(user.email) !== invitedEmail && user.emailVerifiedAt) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'Questo account è già associato a un altro indirizzo email verificato.' });
       }
