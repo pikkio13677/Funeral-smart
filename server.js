@@ -13,7 +13,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process
 
 app.disable('x-powered-by');
 app.use(helmet());
-const allowedOrigins = (process.env.CORS_ORIGIN || 'https://pikkio13677.github.io').split(',').map(x => x.trim()).filter(Boolean);
+const allowedOrigins = [...new Set(['https://pikkio13677.github.io', 'https://funeral-smart-api.onrender.com', ...(process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean)])];
 app.use(cors({ credentials: true, origin(origin, cb) {
   if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
   return cb(new Error('Origine non autorizzata'));
