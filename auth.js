@@ -279,7 +279,7 @@ module.exports = function createAuth(pool) {
     const parsed = z.object({ username: z.string().trim().min(1).max(60), password: z.string().min(1).max(200) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Inserisci username e password.' });
     try {
-      const result = await pool.query('SELECT id,username,display_name AS "displayName",password_hash,role,active FROM app_users WHERE username=$1', [parsed.data.username.toLowerCase()]);
+      const result = await pool.query('SELECT id,username,display_name AS "displayName",password_hash,role,active,totp_enabled_at FROM app_users WHERE username=$1', [parsed.data.username.toLowerCase()]);
       const user = result.rows[0];
       if (!user || !user.active || !(await verifyPassword(parsed.data.password, user.password_hash))) {
         return res.status(401).json({ error: 'Credenziali non corrette.' });
