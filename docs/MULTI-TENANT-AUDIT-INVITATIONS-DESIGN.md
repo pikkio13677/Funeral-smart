@@ -1,6 +1,6 @@
 # FUNERAL SMART — Progettazione registro attività e inviti aziendali
 
-Stato: DESIGN ONLY — nessuna migrazione o rotta attivata.
+Stato: IMPLEMENTAZIONE ISOLATA IN CORSO — nessuna migrazione eseguita e nessuna rotta montata.
 Branch: `feat/multi-azienda-foundation`.
 
 ## 1. Evidenze dello schema attuale
@@ -137,3 +137,24 @@ Tutto resta isolato nel branch di sviluppo fino a test su clone e approvazione e
 - Corretta la bozza 007: la FK dell'invitante ora dispone dell'indice univoco richiesto su `company_memberships(id, company_id)`; il contesto tenant dell'audit ha un CHECK dedicato separato dalla FK. È stata aggiunta anche una coerenza minima tra stato pending e scadenza.
 - La migrazione resta una bozza non eseguita e non è stata validata su un server PostgreSQL reale. I test mock non provano sintassi SQL, vincoli, concorrenza o isolamento database.
 - Gli inviti NON sono ancora implementati come flusso operativo: manca una email verificata associata a `app_users`, un provider email configurato e il flusso sicuro di accettazione. Non viene creato alcun invito né dichiarata alcuna consegna.
+
+
+## 9. Router inviti isolato — prima implementazione
+
+- Aggiunto `tenant-invitation-routes.js`, non montato in `server.js`.
+- L'invio richiede un adattatore `sendInvitationEmail` e un URL pubblico HTTPS; se mancano, l'endpoint risponde 503 prima di creare righe nel database.
+- Token CSPRNG da 256 bit; nel database viene salvato solo SHA-256. Scadenza 72 ore.
+- Ruoli ammessi: admin aziendale, manager, operator, warehouse, accounting. Nessun ruolo piattaforma.
+- Lista e revoca sono limitate a `req.tenant.companyId`; la revoca agisce solo su inviti pendenti.
+- Accettazione richiede un account autenticato esistente e il token ricevuto via email. La prova del possesso dell'indirizzo è il token inviato alla casella; email, creazione membership, stato accepted e audit sono gestiti nella stessa transazione con lock dell'invito.
+- In caso di errore del provider, l'invito viene marcato revoked e l'API non dichiara la consegna.
+- La bozza 007 aggiunge `app_users.email`, `email_verified_at` e unicità degli indirizzi verificati. Non modifica gli account esistenti né assegna loro email.
+- Aggiunti test mock iniziali per provider assente, contesto tenant mancante, autenticazione/validazione token e rifiuto di platform_admin.
+
+### Limiti non ancora risolti
+
+- Non è stato scelto né configurato un provider email; quindi l'invio reale resta disabilitato.
+- L'accettazione supporta account FUNERAL SMART già esistenti; la registrazione di nuovi account da invito richiede un flusso separato con username/password, rate limit e test.
+- I test attuali sono mock/unitari: non provano SQL, lock PostgreSQL, concorrenza, FK o isolamento end-to-end.
+- La migrazione 007 resta bozza e NON è stata aggiunta a `migrate.js`.
+- Il router resta NON montato; non cambia il comportamento della produzione.
