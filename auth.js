@@ -41,7 +41,7 @@ async function verifyPassword(password, stored) {
   } catch (_e) { return false; }
 }
 function cookieOptions() {
-  return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000 };
+  return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/', maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000 };
 }
 
 module.exports = function createAuth(pool) {
@@ -163,7 +163,7 @@ module.exports = function createAuth(pool) {
       const token = req.cookies?.[SESSION_COOKIE];
       if (token) await pool.query('DELETE FROM app_sessions WHERE token_hash=$1', [tokenHash(token)]);
       await audit(req.user, req, 'auth.logout');
-      res.clearCookie(SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' });
+      res.clearCookie(SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/' });
       res.json({ message: 'Sessione terminata.' });
     } catch (e) { next(e); }
   });
