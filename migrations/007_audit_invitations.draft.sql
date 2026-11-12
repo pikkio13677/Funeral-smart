@@ -15,6 +15,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_company_memberships_id_company_user
 CREATE UNIQUE INDEX IF NOT EXISTS uq_company_memberships_id_company
   ON company_memberships(id, company_id);
 
+-- Email dell'identità globale: viene verificata solo quando l'utente
+-- accetta un invito ricevuto a quell'indirizzo. Nessun indirizzo è inventato
+-- o importato dagli account preesistenti.
+ALTER TABLE app_users
+  ADD COLUMN IF NOT EXISTS email VARCHAR(254),
+  ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'ck_app_users_email_normalized'
+      AND conrelid = 'public.app_users'::regclass
+  ) THEN
+    ALTER TABLE app_users
+      ADD CONSTRAINT ck_app_users_email_normalized
+      CHECK (email IS NULL OR email = lower(btrim(email)));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'ck_app_users_email_verification_requires_email'
+      AND conrelid = 'public.app_users'::regclass
+  ) THEN
+    ALTER TABLE app_users
+      ADD CONSTRAINT ck_app_users_email_verification_requires_email
+      CHECK (email_verified_at IS NULL OR email IS NOT NULL);
+  END IF;
+END $;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_app_users_verified_email
+  ON app_users(email)
+  WHERE email_verified_at IS NOT NULL;
+
 -- Audit globale già esistente: gli eventi storici rimangono con company_id NULL.
 -- Gli eventi aziendali futuri devono valorizzare company_id, membership_id e user_id.
 ALTER TABLE audit_log
