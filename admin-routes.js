@@ -12,7 +12,8 @@ module.exports = function createAdminRouter(pool, adminOnly) {
     res.on('finish', () => {
       if (res.statusCode < 200 || res.statusCode >= 400) return;
       const resource = (req.path.split('/').filter(Boolean)[0] || 'admin').slice(0, 80);
-      const resourceId = req.params?.id ? String(req.params.id).slice(0, 80) : null;
+      const pathParts = req.path.split('/').filter(Boolean);
+      const resourceId = pathParts.length > 1 ? String(pathParts[1]).slice(0, 80) : null;
       pool.query(
         'INSERT INTO audit_log(user_id, username, action, resource, resource_id, ip_address) VALUES($1,$2,$3,$4,$5,$6)',
         [req.user?.id || null, req.user?.username || null, 'admin.' + req.method.toLowerCase(), resource, resourceId, req.ip || null]
