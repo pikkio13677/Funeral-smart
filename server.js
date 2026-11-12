@@ -13,7 +13,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process
 
 app.disable('x-powered-by');
 app.use(helmet());
-const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean);
+const allowedOrigins = (process.env.CORS_ORIGIN || 'https://pikkio13677.github.io').split(',').map(x => x.trim()).filter(Boolean);
 app.use(cors({ origin(origin, cb) {
   if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return cb(null, true);
   return cb(new Error('Origine non autorizzata'));
@@ -45,7 +45,13 @@ const inquirySchema = z.object({
 
 function adminOnly(req, res, next) {
   const key = req.get('x-admin-key');
-  if (!process.env.ADMIN_API_KEY || !key || key !== process.env.ADMIN_API_KEY) return res.status(401).json({ error: 'Non autorizzato' });
+  const expected = process.env.ADMIN_API_KEY;
+  if (!expected || !key) return res.status(401).json({ error: 'Non autorizzato' });
+  const suppliedBuffer = Buffer.from(key, 'utf8');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  if (suppliedBuffer.length !== expectedBuffer.length || !require('node:crypto').timingSafeEqual(suppliedBuffer, expectedBuffer)) {
+    return res.status(401).json({ error: 'Non autorizzato' });
+  }
   next();
 }
 
