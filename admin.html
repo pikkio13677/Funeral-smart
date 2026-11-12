@@ -35,7 +35,7 @@ staff:{label:'Personale',endpoint:'staff',fields:[['firstName','Nome','text',tru
 vehicles:{label:'Veicoli',endpoint:'vehicles',fields:[['plate','Targa','text',true],['makeModel','Marca e modello','text',true],['vehicleType','Tipo mezzo','text'],['status','Stato','select',['available','assigned','maintenance','inactive']],['nextMaintenance','Prossima manutenzione','date'],['notes','Note','textarea']],columns:['plate','makeModel','vehicleType','status','nextMaintenance'],labels:['Targa','Mezzo','Tipo','Stato','Manutenzione']},
 inventory:{label:'Magazzino',endpoint:'inventory',fields:[['sku','Codice articolo','text'],['name','Articolo','text',true],['category','Categoria','text',true],['quantity','Giacenza iniziale','number'],['minQuantity','Scorta minima','number'],['unit','Unità (pz, confezioni...)','text'],['unitCost','Costo unitario (€)','number']],columns:['sku','name','category','quantity','unit','lowStock'],labels:['Codice','Articolo','Categoria','Giacenza','Unità','Scorta bassa']},
 tasks:{label:'Attività e scadenze',endpoint:'tasks',fields:[['caseId','Pratica collegata / Linked case','reference',{endpoint:'cases',label:['caseCode','deceasedFirstName','deceasedLastName']}],['assignedTo','Assegnato a / Assigned to','reference',{endpoint:'staff',label:['firstName','lastName']}],['title','Attività','text',true],['description','Descrizione','textarea'],['dueDate','Scadenza','datetime-local'],['priority','Priorità','select',['low','normal','high','urgent']]],columns:['title','caseCode','staffFirstName','staffLastName','dueDate','priority','status'],labels:['Attività','Pratica','Nome assegnatario','Cognome assegnatario','Scadenza','Priorità','Stato']},
-invoices:{label:'Fatture e pagamenti',endpoint:'invoices',fields:[['caseId','Pratica collegata / Linked case','reference',{endpoint:'cases',label:['caseCode','deceasedFirstName','deceasedLastName']}],['customerId','Cliente / Customer','reference',{endpoint:'customers',label:['firstName','lastName']}],['invoiceNumber','Numero documento','text',true],['amount','Importo (€)','number',true],['issueDate','Data emissione','date'],['dueDate','Scadenza','date'],['status','Stato','select',['draft','issued','partial','paid','overdue','cancelled']],['notes','Note','textarea']],columns:['invoiceNumber','customerFirstName','customerLastName','caseCode','issueDate','dueDate','amount','paidAmount','remainingAmount','status'],labels:['Numero','Nome cliente','Cognome cliente','Pratica','Emissione','Scadenza','Importo','Incassato','Residuo','Stato']}
+invoices:{label:'Fatture e pagamenti',endpoint:'invoices',fields:[['caseId','Pratica collegata / Linked case','reference',{endpoint:'cases',label:['caseCode','deceasedFirstName','deceasedLastName']}],['customerId','Cliente / Customer','reference',{endpoint:'customers',label:['firstName','lastName']}],['invoiceNumber','Numero documento','text',true],['amount','Importo (€)','number',true],['issueDate','Data emissione','date'],['dueDate','Scadenza','date'],['status','Stato','select',['draft','issued']],['notes','Note','textarea']],columns:['invoiceNumber','customerFirstName','customerLastName','caseCode','issueDate','dueDate','amount','paidAmount','remainingAmount','status'],labels:['Numero','Nome cliente','Cognome cliente','Pratica','Emissione','Scadenza','Importo','Incassato','Residuo','Stato']}
 };
 const bilingualLabels={
  draft:'Bozza / Draft',issued:'Emessa / Issued',partial:'Parzialmente pagata / Partially paid',paid:'Pagata / Paid',overdue:'Scaduta / Overdue',cancelled:'Annullata / Cancelled',
@@ -54,7 +54,45 @@ function renderTabs(){const nav=$('tabs');nav.replaceChildren();Object.entries(d
 function fieldNode(f){const [name,label,type,extra]=f;const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent=label;const isSelect=type==='select'||type==='reference';const el=type==='textarea'?document.createElement('textarea'):isSelect?document.createElement('select'):document.createElement('input');if(type==='select'){(extra||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=displayValue(v);el.append(o);});}else if(type==='reference'){const o=document.createElement('option');o.value='';o.textContent='Nessuna selezione / None';el.append(o);el.dataset.reference=JSON.stringify(extra);}else el.type=type==='datetime-local'?'datetime-local':type;el.name=name;if(extra===true)el.required=true;if(type==='number'){el.step='0.01';el.min='0';}l.htmlFor='f-'+name;el.id='f-'+name;wrap.append(l,el);return wrap;}
 async function populateReferences(form,fields){for(const f of fields.filter(x=>x[2]==='reference')){const el=form.elements.namedItem(f[0]);if(!el)continue;try{const cfg=f[3],result=await request('/'+cfg.endpoint);(result.data||[]).forEach(item=>{const o=document.createElement('option');o.value=item.id;o.textContent=cfg.label.map(k=>safe(item[k])).filter(Boolean).join(' · ');el.append(o);});}catch(e){const o=document.createElement('option');o.value='';o.textContent='Elenco non disponibile / List unavailable';el.append(o);}}}
 function renderModule(){const host=$('modules');host.replaceChildren();const d=definitions[active],section=document.createElement('section');section.className='module active';const h=document.createElement('h2');h.textContent=d.label;const p=document.createElement('p');p.className='hint';p.textContent='I dati sono visibili solo dopo autenticazione amministrativa.';const form=document.createElement('form');form.className='panel';form.append(Object.assign(document.createElement('h2'),{textContent:'Nuovo inserimento'}));const grid=document.createElement('div');grid.className='grid';d.fields.forEach(f=>grid.append(fieldNode(f)));const submit=document.createElement('button');submit.className='btn form-actions';submit.textContent='Salva';form.append(grid,submit);form.onsubmit=async e=>{e.preventDefault();const data={};new FormData(form).forEach((v,k)=>{if(v!==''){const f=d.fields.find(x=>x[0]===k);data[k]=f&&f[2]==='number'?Number(v):v;}});try{await request('/'+d.endpoint,{method:'POST',body:JSON.stringify(data)});form.reset();await loadModule();showMessage('Dato salvato correttamente.',true);}catch(err){showMessage(err.message);}};const tableBox=document.createElement('div');tableBox.className='panel table-wrap';tableBox.id='table-'+active;section.append(h,p,form,tableBox);host.append(section);populateReferences(form,d.fields);loadModule();}
-async function loadModule(){const d=definitions[active],box=$('table-'+active);if(!box)return;box.textContent='Caricamento...';try{const result=await request('/'+d.endpoint);const rows=result.data||[];box.replaceChildren();if(!rows.length){box.textContent='Nessun elemento registrato.';return;}const table=document.createElement('table'),thead=document.createElement('thead'),tr=document.createElement('tr');d.labels.forEach(label=>{const th=document.createElement('th');th.textContent=label;tr.append(th);});if(['cases','tasks','inventory','invoices'].includes(active)){const th=document.createElement('th');th.textContent='Azioni';tr.append(th);}thead.append(tr);table.append(thead);const tbody=document.createElement('tbody');rows.forEach(row=>{const line=document.createElement('tr');d.columns.forEach(col=>{const td=document.createElement('td');td.textContent=displayValue(row[col]);line.append(td);});if(['cases','tasks','inventory','invoices'].includes(active)){const td=document.createElement('td');const b=document.createElement('button');b.className='btn alt';b.textContent=active==='cases'?'Completa':active==='tasks'?'Segna fatto':active==='inventory'?'Movimento':'Registra incasso';b.onclick=()=>{if(active==='invoices'){showPaymentForm(row,td);}else rowAction(row);};td.append(b);line.append(td);}tbody.append(line);});table.append(tbody);box.append(table);}catch(e){box.textContent='Errore caricamento: '+e.message;}}
+async function loadModule(){
+ const d=definitions[active],box=$('table-'+active);if(!box)return;
+ box.textContent='Caricamento...';
+ try{
+  const result=await request('/'+d.endpoint),rows=result.data||[];box.replaceChildren();
+  if(!rows.length){box.textContent='Nessun elemento registrato.';return;}
+  const table=document.createElement('table'),thead=document.createElement('thead'),tr=document.createElement('tr');
+  d.labels.forEach(label=>{const th=document.createElement('th');th.textContent=label;tr.append(th);});
+  if(['cases','tasks','inventory','invoices'].includes(active)){const th=document.createElement('th');th.textContent='Azioni';tr.append(th);}
+  thead.append(tr);table.append(thead);const tbody=document.createElement('tbody');
+  rows.forEach(row=>{
+   const line=document.createElement('tr');
+   d.columns.forEach(col=>{const td=document.createElement('td');td.textContent=displayValue(row[col]);line.append(td);});
+   if(['cases','tasks','inventory','invoices'].includes(active)){
+    const td=document.createElement('td'),b=document.createElement('button');b.className='btn alt';
+    if(active==='invoices'){
+     if(row.status==='draft'){b.textContent='Emetti fattura';b.className='btn gold';b.onclick=()=>issueInvoice(row);}
+     else if(row.status==='paid'){b.textContent='Pagata';b.disabled=true;}
+     else if(row.status==='cancelled'){b.textContent='Annullata';b.disabled=true;}
+     else {b.textContent='Registra incasso';b.onclick=()=>showPaymentForm(row,td);}
+    }else{
+     b.textContent=active==='cases'?'Completa':active==='tasks'?'Segna fatto':'Movimento';
+     b.onclick=()=>rowAction(row);
+    }
+    td.append(b);line.append(td);
+   }
+   tbody.append(line);
+  });
+  table.append(tbody);box.append(table);
+ }catch(e){box.textContent='Errore caricamento: '+e.message;}
+}
+async function issueInvoice(row){
+ if(!confirm('Confermi l’emissione della fattura '+safe(row.invoiceNumber)+'? Dopo l’emissione sarà possibile registrare gli incassi.'))return;
+ try{
+  await request('/invoices/'+row.id+'/issue',{method:'PATCH'});
+  await loadModule();await loadDashboard();
+  showMessage('Fattura emessa correttamente. Ora puoi registrare gli incassi.',true);
+ }catch(e){showMessage('Emissione non riuscita: '+e.message);}
+}
 function showPaymentForm(row,cell){
  cell.replaceChildren();
  const form=document.createElement('form');form.className='grid';
