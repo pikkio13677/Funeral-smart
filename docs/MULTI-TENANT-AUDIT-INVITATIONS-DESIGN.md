@@ -121,3 +121,8 @@ Questo documento non autorizza:
 - merge della PR o deploy.
 
 Tutto resta isolato nel branch di sviluppo fino a test su clone e approvazione esplicita.
+
+
+## 7. Bozza schema predisposta
+
+È stata aggiunta `migrations/007_audit_invitations.draft.sql` come bozza non eseguita, dipendente dalla 005. Introduce i campi tenant per audit e la tabella inviti con token hashato, scadenza, stato e vincoli membership/azienda. Non implementa invio email, verifica destinatario, accettazione applicativa o trigger append-only. Rimane fuori da `migrate.js`.
