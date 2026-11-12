@@ -117,6 +117,9 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
       return res.status(201).json({ message: 'Invito accettato. Ora puoi selezionare l’azienda.', data: { companyId: invite.companyId } });
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch (_) {}
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'Questo indirizzo email è già associato a un altro account.' });
+      }
       return next(error);
     } finally {
       client.release();
