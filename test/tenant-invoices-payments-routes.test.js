@@ -84,11 +84,10 @@ test('payment history joins invoice and payment by tenant', async () => {
 
 test('payment is locked, recorded and invoice status recalculated in transaction', async () => {
   const calls = [];
-  let totalsReads = 0;
   const client = { query: async (sql, args) => {
     calls.push({ sql, args });
     if (sql.startsWith('SELECT id, amount, status')) return { rowCount: 1, rows: [{ amount: '100.00', status: 'issued' }] };
-    if (sql.startsWith('SELECT COALESCE(SUM(amount)')) { totalsReads += 1; return { rows: [{ paid: totalsReads === 1 ? '30.00' : '50.00' }] }; }
+    if (sql.startsWith('SELECT COALESCE(SUM(amount)')) return { rows: [{ paid: '50.00' }] };
     if (sql.startsWith('INSERT INTO payments')) return { rowCount: 1, rows: [{ id: 'p1', amount: '20.00' }] };
     return { rowCount: 1, rows: [] };
   }, release() {} };
@@ -108,11 +107,10 @@ test('payment is locked, recorded and invoice status recalculated in transaction
 
 test('payment over the invoice total is rolled back', async () => {
   const calls = [];
-  let totalsReads = 0;
   const client = { query: async (sql) => {
     calls.push(sql);
     if (sql.startsWith('SELECT id, amount, status')) return { rowCount: 1, rows: [{ amount: '100.00', status: 'issued' }] };
-    if (sql.startsWith('SELECT COALESCE(SUM(amount)')) { totalsReads += 1; return { rows: [{ paid: totalsReads === 1 ? '0.00' : '110.00' }] }; }
+    if (sql.startsWith('SELECT COALESCE(SUM(amount)')) return { rows: [{ paid: '110.00' }] };
     if (sql.startsWith('INSERT INTO payments')) return { rowCount: 1, rows: [{ id: 'p2' }] };
     return { rows: [] };
   }, release() {} };
