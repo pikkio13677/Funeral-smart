@@ -247,6 +247,7 @@ module.exports = function createAuth(pool) {
 
   router.post('/mfa/setup', authenticate, async (req, res, next) => {
     if (!req.user?.id) return res.status(403).json({ error: 'Account nominativo richiesto.' });
+    if (req.user.mfaEnabled) return res.status(409).json({ error: 'La verifica in due passaggi è già attiva. Per modificarla serve una procedura di recupero amministrata.' });
     try {
       encryptionKey();
       const secret = base32Encode(crypto.randomBytes(20));
@@ -270,6 +271,8 @@ module.exports = function createAuth(pool) {
       const recoveryCodes = Array.from({ length: 10 }, () => crypto.randomBytes(5).toString('hex').toUpperCase());
       const hashes = recoveryCodes.map(code => tokenHash(code));
       await pool.query('UPDATE app_users SET totp_secret_enc=totp_pending_secret_enc,totp_pending_secret_enc=NULL,totp_enabled_at=NOW(),recovery_codes_hashes=$1,updated_at=NOW() WHERE id=$2', [hashes, req.user.id]);
+      const currentSession = req.cookies?.[SESSION_COOKIE];
+      if (currentSession) await pool.query('DELETE FROM app_sessions WHERE user_id=$1 AND token_hash<>$2', [req.user.id, tokenHash(currentSession)]);
       await audit(req.user, req, 'auth.mfa.enabled');
       res.json({ message: 'Verifica in due passaggi attivata. Conserva i codici di recupero: saranno mostrati una sola volta.', recoveryCodes });
     } catch (e) { next(e); }
@@ -285,6 +288,7 @@ module.exports = function createAuth(pool) {
         return res.status(401).json({ error: 'Credenziali non corrette.' });
       }
       if (user.totp_enabled_at) {
+        await pool.query('DELETE FROM app_mfa_challenges WHERE expires_at<NOW()');
         const challenge = crypto.randomBytes(32).toString('base64url');
         await pool.query("INSERT INTO app_mfa_challenges(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '5 minutes')", [user.id, tokenHash(challenge)]);
         res.cookie('fs_mfa_challenge', challenge, challengeCookieOptions());
