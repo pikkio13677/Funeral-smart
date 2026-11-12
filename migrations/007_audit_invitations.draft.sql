@@ -11,6 +11,10 @@ BEGIN;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_company_memberships_id_company_user
   ON company_memberships(id, company_id, user_id);
 
+-- Target univoco necessario alla FK invitante (membership + azienda).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_company_memberships_id_company
+  ON company_memberships(id, company_id);
+
 -- Audit globale già esistente: gli eventi storici rimangono con company_id NULL.
 -- Gli eventi aziendali futuri devono valorizzare company_id, membership_id e user_id.
 ALTER TABLE audit_log
@@ -28,7 +32,12 @@ BEGIN
       ADD CONSTRAINT fk_audit_log_tenant_membership
       FOREIGN KEY (membership_id, company_id, user_id)
       REFERENCES company_memberships(id, company_id, user_id)
-      ON DELETE RESTRICT;
+      ON DELETE RESTRICT,
+  CHECK (
+    (company_id IS NULL AND membership_id IS NULL)
+    OR
+    (company_id IS NOT NULL AND membership_id IS NOT NULL AND user_id IS NOT NULL)
+  );
   END IF;
 END $$;
 
@@ -60,6 +69,7 @@ CREATE TABLE IF NOT EXISTS company_invitations (
   CHECK (email = lower(btrim(email))),
   CHECK ((status = 'accepted') = (accepted_at IS NOT NULL)),
   CHECK ((status = 'revoked') = (revoked_at IS NOT NULL)),
+  CHECK (status <> 'pending' OR expires_at > created_at),
   FOREIGN KEY (invited_by_membership_id, company_id)
     REFERENCES company_memberships(id, company_id)
     ON DELETE RESTRICT
