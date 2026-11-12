@@ -71,11 +71,18 @@ async function populateReferences(form,fields){for(const f of fields.filter(x=>x
 async function renderUsersModule(host){
  const section=document.createElement('section');section.className='module active';
  const heading=document.createElement('h2');heading.textContent='Gestione utenti e permessi';
- const hint=document.createElement('p');hint.className='hint';hint.textContent='Crea un account personale per ogni dipendente. Le password sono memorizzate solo come hash protetto.';
- const create=document.createElement('button');create.className='btn gold';create.textContent='Crea nuovo account';
- const tableBox=document.createElement('div');tableBox.className='panel table-wrap';section.append(heading,hint,create,tableBox);host.append(section);
- create.onclick=async()=>{const username=prompt('Username (almeno 3 caratteri)');if(!username)return;const displayName=prompt('Nome e cognome');if(!displayName)return;const password=prompt('Password iniziale (almeno 12 caratteri). Comunicala in modo riservato.');if(!password)return;const role=prompt('Ruolo: manager, operator, warehouse oppure accounting','operator');if(!['manager','operator','warehouse','accounting'].includes(role))return showMessage('Ruolo non valido.');try{await authRequest('/users',{method:'POST',body:JSON.stringify({username,displayName,password,role})});showMessage('Account creato correttamente.',true);await refreshUsersTable(tableBox);}catch(e){showMessage(e.message);}};
- await refreshUsersTable(tableBox);
+ const hint=document.createElement('p');hint.className='hint';hint.textContent='Crea un account personale per ogni dipendente. La password è protetta con hash e non viene mostrata dopo il salvataggio.';
+ const form=document.createElement('form');form.className='panel';
+ const grid=document.createElement('div');grid.className='grid';
+ const addField=(id,label,type,minLength=0)=>{const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.htmlFor=id;l.textContent=label;const input=document.createElement('input');input.id=id;input.name=id;input.type=type;input.required=true;if(minLength)input.minLength=minLength;wrap.append(l,input);grid.append(wrap);return input;};
+ const username=addField('user-username','Username','text',3);
+ const displayName=addField('user-display','Nome e cognome','text',2);
+ const password=addField('user-password','Password (almeno 12 caratteri)','password',12);
+ const roleWrap=document.createElement('div');roleWrap.className='field';const roleLabel=document.createElement('label');roleLabel.htmlFor='user-role';roleLabel.textContent='Ruolo / reparto';const role=document.createElement('select');role.id='user-role';[['manager','Responsabile'],['operator','Operatore'],['warehouse','Magazziniere'],['accounting','Amministrazione']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;role.append(o);});roleWrap.append(roleLabel,role);grid.append(roleWrap);
+ const submit=document.createElement('button');submit.className='btn gold form-actions';submit.type='submit';submit.textContent='Crea account';form.append(grid,submit);
+ const tableBox=document.createElement('div');tableBox.className='panel table-wrap';
+ form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{await authRequest('/users',{method:'POST',body:JSON.stringify({username:username.value,displayName:displayName.value,password:password.value,role:role.value})});form.reset();showMessage('Account creato correttamente. Consegna la password iniziale in modo riservato.',true);await refreshUsersTable(tableBox);}catch(err){showMessage(err.message);}finally{submit.disabled=false;}};
+ section.append(heading,hint,form,tableBox);host.append(section);await refreshUsersTable(tableBox);
 }
 async function refreshUsersTable(box){
  box.textContent='Caricamento utenti...';
