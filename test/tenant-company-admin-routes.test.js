@@ -110,7 +110,7 @@ test('membership role update is company-scoped and serialized on company row', a
     tenant, params: { membershipId: memberId }, body: { role: 'manager' }
   }, res, e => { throw e; });
   assert.equal(res.statusCode, 200);
-  assert.match(calls[0].sql, /FROM companies WHERE id = \$1 FOR UPDATE/);
+  assert.match(calls.find(x => x.sql.startsWith('SELECT id FROM companies')).sql, /FROM companies WHERE id = \\$1 FOR UPDATE/);
   const update = calls.find(x => x.sql.startsWith('UPDATE company_memberships'));
   assert.match(update.sql, /WHERE id = \$2 AND company_id = \$3/);
   assert.equal(update.args[2], 'company-alpha');
