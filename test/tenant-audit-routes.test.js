@@ -48,7 +48,7 @@ test('invalid cursor is rejected before database access', async () => {
 
 test('tenant activity route rejects missing tenant context', async () => {
   const router = createRouter({ query: async () => ({ rows: [] }) });
-  const layer = router.stack.find(x => x.name === '<anonymous>');
+  const layer = router.stack[0];
   assert.ok(layer);
   const res = response();
   let nextCalled = false;
