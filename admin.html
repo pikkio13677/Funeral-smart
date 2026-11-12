@@ -67,11 +67,12 @@ function showPaymentForm(row,cell){
  const method=document.createElement('select');method.name='method';method.required=true;
  [['','Seleziona metodo'],['contanti','Contanti'],['bonifico','Bonifico'],['carta','Carta'],['assegno','Assegno'],['altro','Altro']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;method.append(o);});
  methodLabel.append(method);methodWrap.append(methodLabel);
+ const feedback=document.createElement('div');feedback.className='msg';feedback.setAttribute('role','status');
  const actions=document.createElement('div');actions.className='row';
  const save=document.createElement('button');save.className='btn';save.type='submit';save.textContent='Conferma incasso';
  const cancel=document.createElement('button');cancel.className='btn alt';cancel.type='button';cancel.textContent='Annulla';cancel.onclick=()=>{cell.replaceChildren();const b=document.createElement('button');b.className='btn alt';b.textContent='Registra incasso';b.onclick=()=>showPaymentForm(row,cell);cell.append(b);};
- actions.append(save,cancel);form.append(amountWrap,methodWrap,actions);
- form.onsubmit=async e=>{e.preventDefault();const value=Number(amount.value);if(!Number.isFinite(value)||value<=0){showMessage('Inserisci un importo valido.');return;}save.disabled=true;try{await request('/invoices/'+row.id+'/payments',{method:'POST',body:JSON.stringify({amount:value,method:method.value})});await loadModule();await loadDashboard();showMessage('Incasso registrato correttamente.',true);}catch(err){save.disabled=false;showMessage(err.message);}};
+ actions.append(save,cancel);form.append(amountWrap,methodWrap,actions,feedback);
+ form.onsubmit=async e=>{e.preventDefault();const value=Number(amount.value);if(!Number.isFinite(value)||value<=0){feedback.textContent='Inserisci un importo valido.';return;}if(!method.value){feedback.textContent='Seleziona il metodo di pagamento.';return;}save.disabled=true;save.textContent='Salvataggio...';feedback.textContent='Invio del pagamento in corso...';try{await request('/invoices/'+row.id+'/payments',{method:'POST',body:JSON.stringify({amount:value,paymentDate:new Date().toISOString().slice(0,10),method:method.value})});feedback.textContent='Incasso registrato correttamente.';feedback.className='msg ok';await loadModule();await loadDashboard();}catch(err){save.disabled=false;save.textContent='Conferma incasso';feedback.textContent='Errore: '+err.message;}};
  cell.append(form);amount.focus();
 }
 async function rowAction(row){try{
