@@ -117,7 +117,7 @@ function createTenantInvoicesPaymentsRouter(pool) {
     } finally { client.release(); }
   });
 
-  router.post('/invoices/:id/issue', authorizeTenant('invoices', 'issue'), async (req, res, next) => {
+  router.patch('/invoices/:id/issue', authorizeTenant('invoices', 'issue'), async (req, res, next) => {
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return res.status(400).json({ error: 'Identificativo fattura non valido.' });
     try {
