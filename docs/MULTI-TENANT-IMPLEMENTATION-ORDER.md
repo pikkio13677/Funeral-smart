@@ -15,8 +15,9 @@ Branch di lavoro: `feat/multi-azienda-foundation`.
 | Magazzino e attività | Router isolato testato | `tenant-inventory-tasks-routes.js` |
 | Fatture e pagamenti | Router isolato testato | `tenant-invoices-payments-routes.js` |
 | Dashboard | Router isolato testato | `tenant-dashboard-routes.js` |
+| Profilo azienda e membership | Router isolato, ultimo admin protetto | `tenant-company-admin-routes.js` |
 
-CI sul commit `70c9a3f089e1425fa6dfa492c35d55e4fbc4aab5`: **55 test superati, 0 falliti**. I test usano mock; non equivalgono a test d'integrazione PostgreSQL.
+CI sul blocco dashboard, commit `70c9a3f089e1425fa6dfa492c35d55e4fbc4aab5`: **55 test superati, 0 falliti**. Il blocco profilo/membership è stato aggiunto dopo e la sua CI è in corso. I test usano mock; non equivalgono a test d'integrazione PostgreSQL.
 
 ## Decisione architetturale
 
