@@ -1,7 +1,22 @@
 # FUNERAL SMART — Piano di implementazione incrementale e contratto API
 
-Stato: progettazione eseguibile per fasi, non ancora implementazione.  
+Stato: piano in corso. Le factory backend tenant-aware per clienti/pratiche, personale/veicoli, magazzino/attività, fatture/pagamenti e dashboard sono state implementate e testate in isolamento; non sono ancora montate né abilitate in produzione.  
 Branch di lavoro: `feat/multi-azienda-foundation`.
+
+
+## Avanzamento effettivo (12 novembre 2026)
+
+| Area | Stato | Evidenza |
+|---|---|---|
+| Contesto tenant e membership | Implementato in isolamento | `tenant-context.js`, `company-context-routes.js` |
+| Matrice permessi | Implementata e testata | `tenant-permissions.js` |
+| Clienti e pratiche | Router isolato testato | `tenant-customers-cases-routes.js` |
+| Personale e veicoli | Router isolato testato | `tenant-staff-vehicles-routes.js` |
+| Magazzino e attività | Router isolato testato | `tenant-inventory-tasks-routes.js` |
+| Fatture e pagamenti | Router isolato testato | `tenant-invoices-payments-routes.js` |
+| Dashboard | Router isolato testato | `tenant-dashboard-routes.js` |
+
+CI sul commit `70c9a3f089e1425fa6dfa492c35d55e4fbc4aab5`: **55 test superati, 0 falliti**. I test usano mock; non equivalgono a test d'integrazione PostgreSQL.
 
 ## Decisione architetturale
 
