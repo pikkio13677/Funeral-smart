@@ -32,12 +32,21 @@ BEGIN
       ADD CONSTRAINT fk_audit_log_tenant_membership
       FOREIGN KEY (membership_id, company_id, user_id)
       REFERENCES company_memberships(id, company_id, user_id)
-      ON DELETE RESTRICT,
-  CHECK (
-    (company_id IS NULL AND membership_id IS NULL)
-    OR
-    (company_id IS NOT NULL AND membership_id IS NOT NULL AND user_id IS NOT NULL)
-  );
+      ON DELETE RESTRICT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'ck_audit_log_tenant_context_consistent'
+      AND conrelid = 'public.audit_log'::regclass
+  ) THEN
+    ALTER TABLE audit_log
+      ADD CONSTRAINT ck_audit_log_tenant_context_consistent
+      CHECK (
+        (company_id IS NULL AND membership_id IS NULL)
+        OR
+        (company_id IS NOT NULL AND membership_id IS NOT NULL AND user_id IS NOT NULL)
+      );
   END IF;
 END $$;
 
