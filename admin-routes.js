@@ -6,6 +6,21 @@ module.exports = function createAdminRouter(pool, adminOnly) {
   const router = express.Router();
   router.use(adminOnly);
 
+  // Registra le operazioni di modifica riuscite senza salvare i dati personali inviati.
+  router.use((req, res, next) => {
+    if (!['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) return next();
+    res.on('finish', () => {
+      if (res.statusCode < 200 || res.statusCode >= 400) return;
+      const resource = (req.path.split('/').filter(Boolean)[0] || 'admin').slice(0, 80);
+      const resourceId = req.params?.id ? String(req.params.id).slice(0, 80) : null;
+      pool.query(
+        'INSERT INTO audit_log(user_id, username, action, resource, resource_id, ip_address) VALUES($1,$2,$3,$4,$5,$6)',
+        [req.user?.id || null, req.user?.username || null, 'admin.' + req.method.toLowerCase(), resource, resourceId, req.ip || null]
+      ).catch(() => console.error('Impossibile registrare un evento nel registro attività.'));
+    });
+    next();
+  });
+
   const text = (max, min = 0) => z.string().trim().min(min).max(max);
   const optionalText = max => z.string().trim().max(max).optional().nullable();
   const money = z.number().nonnegative().max(10000000);
@@ -60,6 +75,19 @@ module.exports = function createAdminRouter(pool, adminOnly) {
   const fail = (res, parsed) => res.status(400).json({
     error: 'Dati non validi',
     details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message }))
+  });
+
+  router.get('/audit', async (req, res, next) => {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Solo l’amministratore può consultare il registro attività.' });
+    const parsed = z.object({ limit: z.coerce.number().int().min(1).max(200).default(100) }).safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'Limite non valido.' });
+    try {
+      const result = await pool.query(
+        'SELECT id, username, action, resource, resource_id AS "resourceId", ip_address::text AS "ipAddress", created_at AS "createdAt" FROM audit_log ORDER BY created_at DESC LIMIT $1',
+        [parsed.data.limit]
+      );
+      res.json({ data: result.rows });
+    } catch (e) { next(e); }
   });
 
   router.get('/dashboard', async (_req, res, next) => {
