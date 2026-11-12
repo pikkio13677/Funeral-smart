@@ -24,6 +24,9 @@ test('invoice list scopes invoice and both linked records to the same tenant', a
   await handler(router, '/invoices', 'get')({ tenant }, res, e => { throw e; });
   assert.match(call.sql, /c\.id = i\.customer_id AND c\.company_id = i\.company_id/);
   assert.match(call.sql, /f\.id = i\.case_id AND f\.company_id = i\.company_id/);
+  assert.match(call.sql, /p\.company_id = i\.company_id/);
+  assert.match(call.sql, /paidAmount/);
+  assert.match(call.sql, /remainingAmount/);
   assert.match(call.sql, /WHERE i\.company_id = \$1/);
   assert.deepEqual(call.args, ['company-alpha']);
 });
@@ -66,7 +69,7 @@ test('invoice issue changes only a draft invoice in the active tenant', async ()
   let call;
   const router = createRouter({ query: async (sql, args) => { call = { sql, args }; return { rowCount: 0, rows: [] }; }, connect() {} });
   const res = response();
-  await handler(router, '/invoices/:id/issue', 'post')({ tenant, params: { id: invoiceId } }, res, e => { throw e; });
+  await handler(router, '/invoices/:id/issue', 'patch')({ tenant, params: { id: invoiceId } }, res, e => { throw e; });
   assert.match(call.sql, /WHERE id = \$1 AND company_id = \$2 AND status = 'draft'/);
   assert.deepEqual(call.args, [invoiceId, 'company-alpha']);
   assert.equal(res.statusCode, 404);
