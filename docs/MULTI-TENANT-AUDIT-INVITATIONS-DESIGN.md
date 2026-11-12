@@ -126,3 +126,14 @@ Tutto resta isolato nel branch di sviluppo fino a test su clone e approvazione e
 ## 7. Bozza schema predisposta
 
 È stata aggiunta `migrations/007_audit_invitations.draft.sql` come bozza non eseguita, dipendente dalla 005. Introduce i campi tenant per audit e la tabella inviti con token hashato, scadenza, stato e vincoli membership/azienda. Non implementa invio email, verifica destinatario, accettazione applicativa o trigger append-only. Rimane fuori da `migrate.js`.
+
+
+## 8. Avanzamento implementazione isolata
+
+- Aggiunto `tenant-audit-routes.js`: endpoint GET `/company/activity`, sola lettura, accesso subordinato a contesto tenant verificato e permesso `audit:read`.
+- La query filtra sempre per `req.tenant.companyId`, usa paginazione cursor-based su `created_at,id`, limite massimo 100 e non restituisce l'indirizzo IP.
+- Aggiunti test mock in `test/tenant-audit-routes.test.js` e controllo sintattico nel comando `npm run check`.
+- Il router resta isolato e NON è montato in `server.js`; dipende dalla futura attivazione delle migrazioni 005/006/007.
+- Corretta la bozza 007: la FK dell'invitante ora dispone dell'indice univoco richiesto su `company_memberships(id, company_id)`; il contesto tenant dell'audit ha un CHECK dedicato separato dalla FK. È stata aggiunta anche una coerenza minima tra stato pending e scadenza.
+- La migrazione resta una bozza non eseguita e non è stata validata su un server PostgreSQL reale. I test mock non provano sintassi SQL, vincoli, concorrenza o isolamento database.
+- Gli inviti NON sono ancora implementati come flusso operativo: manca una email verificata associata a `app_users`, un provider email configurato e il flusso sicuro di accettazione. Non viene creato alcun invito né dichiarata alcuna consegna.
