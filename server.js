@@ -14,10 +14,18 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process
 app.disable('x-powered-by');
 app.use(helmet());
 const allowedOrigins = (process.env.CORS_ORIGIN || 'https://pikkio13677.github.io').split(',').map(x => x.trim()).filter(Boolean);
-app.use(cors({ origin(origin, cb) {
-  if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return cb(null, true);
+app.use(cors({ credentials: true, origin(origin, cb) {
+  if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
   return cb(new Error('Origine non autorizzata'));
 } }));
+app.use((req, _res, next) => {
+  const raw = req.headers.cookie || '';
+  req.cookies = Object.fromEntries(raw.split(';').map(part => {
+    const index = part.indexOf('=');
+    return index < 0 ? ['', ''] : [part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim())];
+  }).filter(([key]) => key));
+  next();
+});
 app.use(express.json({ limit: '30kb' }));
 app.use('/api/v1/', rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-7', legacyHeaders: false }));
 
@@ -43,17 +51,8 @@ const inquirySchema = z.object({
   privacyConsent: z.literal(true)
 }).refine(v => Boolean(v.contactEmail || v.contactPhone), { message: 'Inserire almeno un recapito per poter essere ricontattati.' });
 
-function adminOnly(req, res, next) {
-  const key = req.get('x-admin-key');
-  const expected = process.env.ADMIN_API_KEY;
-  if (!expected || !key) return res.status(401).json({ error: 'Non autorizzato' });
-  const suppliedBuffer = Buffer.from(key, 'utf8');
-  const expectedBuffer = Buffer.from(expected, 'utf8');
-  if (suppliedBuffer.length !== expectedBuffer.length || !require('node:crypto').timingSafeEqual(suppliedBuffer, expectedBuffer)) {
-    return res.status(401).json({ error: 'Non autorizzato' });
-  }
-  next();
-}
+const auth = require('./auth')(pool);
+app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
 
 app.get('/api/health', async (_req, res) => {
   try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'funeral-smart-api', database: 'connected' }); }
@@ -129,18 +128,18 @@ app.post('/api/v1/provider-applications', async (req, res, next) => {
   } catch (e) { if (e.code === '23505') return res.status(409).json({ error: 'Partita IVA già presente in una candidatura.' }); next(e); }
 });
 
-app.get('/api/v1/admin/inquiries', adminOnly, async (_req, res, next) => {
+app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, async (_req, res, next) => {
   try { const { rows } = await pool.query('SELECT id, city, service_type AS "serviceType", destination_country AS "destinationCountry", budget_euro AS "budgetEuro", notes, contact_email AS "contactEmail", contact_phone AS "contactPhone", status, created_at AS "createdAt" FROM inquiries ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
   catch (e) { next(e); }
 });
 
-app.get('/api/v1/admin/provider-applications', adminOnly, async (_req, res, next) => {
+app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize, async (_req, res, next) => {
   try { const { rows } = await pool.query('SELECT id, business_name AS "businessName", vat_number AS "vatNumber", city, province, email, phone, website, status, created_at AS "createdAt" FROM provider_applications ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
   catch (e) { next(e); }
 });
 
 // Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
-app.use('/api/v1/admin', require('./admin-routes')(pool, adminOnly));
+app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
 
 // Area gestionale web: disponibile sullo stesso servizio Render all'indirizzo /admin.
 app.get('/admin', (_req, res) => {
