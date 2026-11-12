@@ -8,7 +8,8 @@ const { Client } = require('pg');
 
 const migrations = [
   { id: '001_base_schema', file: 'schema.sql' },
-  { id: '002_gestionale_v1', file: 'gestionale.sql' }
+  { id: '002_gestionale_v1', file: 'gestionale.sql' },
+  { id: '003_user_accounts', file: 'users.sql' }
 ];
 
 async function runMigrations() {
