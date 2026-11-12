@@ -11,12 +11,25 @@
 <header><div class="wrap"><h1>FUNERAL SMART · AREA GESTIONALE</h1><div class="sub">Amministrazione e organizzazione interna</div></div></header>
 <main class="wrap">
 <section class="panel" id="connection">
-<h2>Collegamento protetto</h2>
-<p class="hint">Inserisci l'indirizzo HTTPS del servizio Render e la chiave amministratore configurata nelle variabili d'ambiente Render. La chiave resta solo nella sessione di questo browser e non è salvata nel repository.</p>
+<h2>Accesso personale protetto</h2>
+<p class="hint">Accedi con username e password personali. Al primo avvio crea l'amministratore con il token iniziale configurato su Render.</p>
 <div class="grid">
-<div class="field"><label for="api">URL API Render</label><input id="api" type="url" placeholder="https://nome-servizio.onrender.com"></div>
-<div class="field"><label for="key">Chiave amministratore</label><input id="key" type="password" autocomplete="off" placeholder="ADMIN_API_KEY"></div>
-</div><div class="row form-actions"><button class="btn gold" id="connect">Collega area gestionale</button><button class="btn alt" id="disconnect">Scollega</button></div><div id="message" class="msg hidden" role="status"></div>
+<div class="field"><label for="api">URL API Render</label><input id="api" type="url" value="https://funeral-smart-api.onrender.com"></div>
+<div class="field"><label for="login-user">Username</label><input id="login-user" autocomplete="username"></div>
+<div class="field"><label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password"></div>
+</div>
+<div class="row form-actions"><button class="btn gold" id="login">Accedi</button><button class="btn alt" id="show-bootstrap" type="button">Primo accesso amministratore</button></div>
+<div id="bootstrap-panel" class="panel hidden">
+<h2>Crea il primo amministratore</h2>
+<div class="grid">
+<div class="field"><label for="bootstrap-token">Token iniziale Render</label><input id="bootstrap-token" type="password"></div>
+<div class="field"><label for="bootstrap-name">Nome e cognome</label><input id="bootstrap-name"></div>
+<div class="field"><label for="bootstrap-user">Username</label><input id="bootstrap-user"></div>
+<div class="field"><label for="bootstrap-password">Password (almeno 12 caratteri)</label><input id="bootstrap-password" type="password" minlength="12"></div>
+</div>
+<div class="row form-actions"><button class="btn gold" id="bootstrap-create" type="button">Crea amministratore</button><button class="btn alt" id="hide-bootstrap" type="button">Chiudi</button></div>
+</div>
+<div id="message" class="msg hidden" role="status"></div>
 </section>
 <section id="app" class="hidden">
 <div class="stats" id="stats"></div>
@@ -45,10 +58,11 @@ const bilingualLabels={
  Sepoltura:'Sepoltura / Burial',Cremazione:'Cremazione / Cremation','Rimpatrio internazionale':'Rimpatrio internazionale / International repatriation',Altro:'Altro / Other'
 };
 function displayValue(value){const v=safe(value);return bilingualLabels[v]||v;}
-let active='cases',api='',key='';
+let active='cases',api='https://funeral-smart-api.onrender.com',currentUser=null;
 function showMessage(t,ok=false){$('message').textContent=t;$('message').className='msg'+(ok?' ok':'');}
-function headers(){return {'Content-Type':'application/json','x-admin-key':key};}
-async function request(path,options={}){const r=await fetch(api+'/api/v1/admin'+path,{...options,headers:{...headers(),...(options.headers||{})}});const data=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(data.error||'Errore API');return data;}
+function headers(){return {'Content-Type':'application/json'};}
+async function request(path,options={}){const r=await fetch(api+'/api/v1/admin'+path,{credentials:'include',...options,headers:{...headers(),...(options.headers||{})}});const data=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(data.error||'Errore API');return data;}
+async function authRequest(path,options={}){const r=await fetch(api+'/api/v1/auth'+path,{credentials:'include',...options,headers:{...headers(),...(options.headers||{})}});const data=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(data.error||'Errore API');return data;}
 function safe(v){return v===null||v===undefined?'':String(v);}
 function renderTabs(){const nav=$('tabs');nav.replaceChildren();Object.entries(definitions).forEach(([id,d])=>{const b=document.createElement('button');b.className='tab'+(id===active?' active':'');b.textContent=d.label;b.onclick=()=>{active=id;renderTabs();renderModule();};nav.append(b);});}
 function fieldNode(f){const [name,label,type,extra]=f;const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent=label;const isSelect=type==='select'||type==='reference';const el=type==='textarea'?document.createElement('textarea'):isSelect?document.createElement('select'):document.createElement('input');if(type==='select'){(extra||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=displayValue(v);el.append(o);});}else if(type==='reference'){const o=document.createElement('option');o.value='';o.textContent='Nessuna selezione / None';el.append(o);el.dataset.reference=JSON.stringify(extra);}else el.type=type==='datetime-local'?'datetime-local':type;el.name=name;if(extra===true)el.required=true;if(type==='number'){el.step='0.01';el.min='0';}l.htmlFor='f-'+name;el.id='f-'+name;wrap.append(l,el);return wrap;}
@@ -121,8 +135,11 @@ async function rowAction(row){try{
  await loadModule();await loadDashboard();showMessage('Operazione completata.',true);
  }catch(e){showMessage(e.message);}}
 async function loadDashboard(){const [r,casesResult,tasksResult]=await Promise.all([request('/dashboard'),request('/cases'),request('/tasks')]);const d=r.data;const items=[['Pratiche totali',d.cases.total],['Pratiche attive',d.cases.active],['Famiglie/clienti',d.customers.total],['Personale attivo',d.activeStaff],['Veicoli disponibili',d.vehicles.available],['Articoli sotto scorta',d.lowStock],['Attività aperte',d.openTasks],['Da incassare',new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(d.outstandingEuro||0))]];$('stats').replaceChildren();items.forEach(([label,value])=>{const card=document.createElement('div');card.className='stat';const strong=document.createElement('strong');strong.textContent=safe(value);const span=document.createElement('span');span.textContent=label;card.append(strong,span);$('stats').append(card);});const overview=$('overview');overview.replaceChildren();const today=new Date();today.setHours(0,0,0,0);const services=(casesResult.data||[]).filter(x=>x.serviceDate&&new Date(x.serviceDate)>=today&&!['completed','cancelled'].includes(x.status)).sort((a,b)=>new Date(a.serviceDate)-new Date(b.serviceDate)).slice(0,6);const tasks=(tasksResult.data||[]).filter(x=>x.dueDate&&!['done','cancelled'].includes(x.status)).sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)).slice(0,6);const addPanel=(title,rows,format,empty)=>{const panel=document.createElement('section');panel.className='overview-panel';const heading=document.createElement('h2');heading.textContent=title;const list=document.createElement('div');list.className='overview-list';if(!rows.length){const note=document.createElement('div');note.className='hint';note.textContent=empty;list.append(note);}rows.forEach(row=>{const item=document.createElement('div');item.className='overview-item';const strong=document.createElement('strong');const detail=document.createElement('span');const parts=format(row);strong.textContent=parts[0];detail.textContent=parts[1];item.append(strong,detail);list.append(item);});panel.append(heading,list);overview.append(panel);};const dateFmt=v=>new Intl.DateTimeFormat('it-IT',{dateStyle:'medium',timeStyle:v&&v.includes('T')?'short':undefined}).format(new Date(v));addPanel('Prossimi servizi',services,row=>[safe(row.caseCode)+' · '+safe(row.deceasedFirstName)+' '+safe(row.deceasedLastName),dateFmt(row.serviceDate)+' · '+safe(row.serviceType)],'Nessun servizio programmato.');addPanel('Attività in scadenza',tasks,row=>[safe(row.title),dateFmt(row.dueDate)+' · '+safe(row.priority)+' · '+(safe(row.staffFirstName)+' '+safe(row.staffLastName)).trim()],'Nessuna attività con scadenza aperta.');}
-$('connect').onclick=async()=>{api=$('api').value.trim().replace(/\/+$/,'');key=$('key').value.trim();if(!/^https:\/\//i.test(api)||!key){showMessage('Inserisci URL HTTPS e chiave amministratore.');return;}try{await request('/dashboard');sessionStorage.setItem('fs_api',api);sessionStorage.setItem('fs_key',key);$('app').classList.remove('hidden');$('connection').classList.add('hidden');renderTabs();renderModule();await loadDashboard();showMessage('Collegamento riuscito.',true);}catch(e){showMessage('Collegamento non riuscito: '+e.message);}};
-$('disconnect').onclick=()=>{sessionStorage.removeItem('fs_api');sessionStorage.removeItem('fs_key');api='';key='';$('key').value='';$('app').classList.add('hidden');$('connection').classList.remove('hidden');showMessage('Sessione scollegata.',true);};
-api=sessionStorage.getItem('fs_api')||'';key=sessionStorage.getItem('fs_key')||'';$('api').value=api;if(api&&key){$('key').value=key;$('connect').click();}
+async function enterApp(){ $('connection').classList.add('hidden');$('app').classList.remove('hidden');renderTabs();renderModule();if(['admin','manager'].includes(currentUser.role))await loadDashboard();}
+$('login').onclick=async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/login',{method:'POST',body:JSON.stringify({username:$('login-user').value,password:$('login-password').value})});currentUser=r.data;await enterApp();}catch(e){showMessage('Accesso non riuscito: '+e.message);}};
+$('show-bootstrap').onclick=()=> $('bootstrap-panel').classList.remove('hidden');
+$('hide-bootstrap').onclick=()=> $('bootstrap-panel').classList.add('hidden');
+$('bootstrap-create').onclick=async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/bootstrap',{method:'POST',body:JSON.stringify({token:$('bootstrap-token').value,username:$('bootstrap-user').value,displayName:$('bootstrap-name').value,password:$('bootstrap-password').value})});showMessage(r.message,true);$('login-user').value=$('bootstrap-user').value;$('login-password').value=$('bootstrap-password').value;$('bootstrap-panel').classList.add('hidden');$('bootstrap-token').value='';$('bootstrap-password').value='';}catch(e){showMessage('Creazione non riuscita: '+e.message);}};
+(async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/me');currentUser=r.data;await enterApp();}catch(_e){}})();
 </script>
 </body></html>
