@@ -1,74 +1,81 @@
-# FUNERAL SMART — Piattaforma gestionale (prima versione)
+# FUNERAL SMART
 
-FUNERAL SMART è in sviluppo come piattaforma web per imprese funebri. Il repository contiene un frontend pubblico dimostrativo, un'API Node.js/Express e un database PostgreSQL. Le nuove funzioni gestionali sono una prima base operativa: non sostituiscono ancora un gestionale certificato né una verifica legale, fiscale o privacy.
+Piattaforma web in sviluppo per imprese funebri, con area pubblica e area gestionale protetta. Il progetto comprende frontend HTML/JavaScript, API Node.js/Express e database PostgreSQL.
 
-## File principali
-- `index.html`: area pubblica dimostrativa per famiglie.
-- `admin.html`: prima area gestionale responsive, protetta da chiave amministratore.
-- `server.js`: API REST, validazione input, rate limit, CORS e intestazioni di sicurezza.
-- `admin-routes.js`: API gestionali protette.
-- `schema.sql`: schema iniziale per imprese, servizi, listini, candidature e richieste.
-- `gestionale.sql`: migrazione additiva per pratiche funebri, clienti, personale, veicoli, magazzino, attività, fatture e pagamenti.
-- `api-config.js`: URL del backend per il frontend pubblico (da configurare).
-- `render.yaml`: Blueprint Render per servizio web e database PostgreSQL.
+## Reparti gestionali
 
-## Moduli gestionali inclusi nella prima versione
-- Dashboard: pratiche attive, clienti, personale, mezzi disponibili, scorte basse, attività aperte e importi da incassare.
-- Pratiche/funerali: apertura pratica, dati essenziali, stato e importo preventivato.
-- Clienti e famiglie: anagrafiche e recapiti.
-- Personale: collaboratori e ruoli.
-- Veicoli: mezzi, disponibilità e manutenzioni.
-- Magazzino: articoli, giacenze, soglie minime e movimenti di carico/scarico.
-- Attività: incarichi, priorità, scadenze e stato.
-- Fatture e pagamenti: registrazione documenti e incassi con controllo del residuo.
-- Area pubblica: richieste informative e consultazione di eventuali listini verificati.
+- Dashboard operativa.
+- Pratiche funebri e servizi.
+- Clienti e famiglie.
+- Personale e ruoli.
+- Veicoli e manutenzioni.
+- Magazzino e movimenti.
+- Attività, incarichi e scadenze.
+- Fatture/documenti interni e pagamenti.
+- Profilo azienda, membri, inviti e permessi multi-azienda (branch di sviluppo).
 
-## Configurazione database
-Richiede Node.js 20+ e PostgreSQL. Eseguire le migrazioni sul database corretto, una volta sola per ogni ambiente (gli script sono ripetibili):
+L'area pubblica consente richieste informative e candidature delle imprese. Le richieste non vengono inoltrate automaticamente a un'impresa; operatori e listini non devono essere considerati verificati finché non lo sono realmente.
+
+## Architettura
+
+- `index.html`: area pubblica.
+- `admin.html`: area gestionale responsive.
+- `server.js`: API REST, health check, CORS, rate limit e route.
+- `auth.js`: login nominativo, sessioni, password, MFA/TOTP e recupero.
+- `admin-routes.js`: reparti gestionali legacy/single-company.
+- `tenant-*.js` e `company-context-routes.js`: contesto azienda, autorizzazioni e route multi-tenant in sviluppo.
+- `schema.sql`, `gestionale.sql`, `users.sql`, `mfa.sql`: schema e migrazioni iniziali.
+- `migrations/005...009.*.draft.sql`: migrazioni multi-tenant in bozza, non applicate automaticamente.
+- `docs/RELEASE-CHECKLIST.md`: stato e attività necessarie prima del rilascio.
+
+## Avvio locale
+
+Richiede Node.js 20+ e PostgreSQL. Configurare `DATABASE_URL` in un ambiente locale di sviluppo e poi:
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f schema.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f gestionale.sql
 npm install
 npm run check
+npm test
 npm start
 ```
 
-Su Render, usare il valore privato di `DATABASE_URL` del database associato. Non inserire mai credenziali o chiavi nel repository. La migrazione `gestionale.sql` non è eseguita automaticamente dal Blueprint: va applicata al database prima di usare i nuovi moduli.
+`npm start` esegue `migrate.js` prima di avviare il server. Attualmente il runner applica soltanto le migrazioni 001–004. Le migrazioni draft 005–009 non sono incluse nel runner e non devono essere applicate a produzione senza backup, test su clone e approvazione.
 
-## Configurazione Render
-Impostare nelle Environment Variables del servizio:
-- `DATABASE_URL`: collegamento privato al database Render.
-- `ADMIN_API_KEY`: chiave casuale lunga e non riutilizzata.
-- `CORS_ORIGIN`: origine HTTPS autorizzata del frontend, senza slash finale.
+## Variabili d'ambiente Render
+
+Il Blueprint dichiara i nomi delle variabili, ma i valori devono essere configurati manualmente nel servizio Render. I segreti non devono mai essere inseriti nel repository, nel frontend o in chat.
+
+- `DATABASE_URL`: connessione privata al database Render.
 - `NODE_ENV=production`.
+- `CORS_ORIGIN`: origini HTTPS autorizzate, separate da virgola.
+- `BOOTSTRAP_ADMIN_TOKEN`: token iniziale per creare il primo amministratore.
+- `TOTP_ENCRYPTION_KEY`: chiave casuale dedicata per cifrare i segreti MFA.
+- `EMAIL_VERIFICATION_PEPPER`: segreto casuale dedicato di almeno 32 byte per HMAC dei codici email.
+- `PUBLIC_APP_URL`: URL pubblico usato nei link di invito/verifica.
+- `RESEND_API_KEY`: chiave API Resend con permesso Sending.
+- `RESEND_FROM_EMAIL`: mittente appartenente a un dominio verificato.
+- `ENABLE_MULTI_TENANT=false`: mantenere disattivato finché il rollout multi-azienda non è approvato.
+- `ADMIN_API_KEY`: variabile legacy; non usarla come sostituto del login nominativo.
 
-La chiave `ADMIN_API_KEY` non va mai inserita in `index.html`, `api-config.js`, file pubblici o messaggi. Per la prima area gestionale viene digitata dall'amministratore nel browser e resta solo in `sessionStorage fino alla chiusura della sessione. È una protezione provvisoria: prima dell'uso con dati reali sostituirla con login nominativi, ruoli, MFA, sessioni server-side e audit log.
+Per inviare email reali occorre verificare un dominio in Resend e completare i record DNS richiesti. I test automatici dell'adattatore email usano mock e non dimostrano l'invio reale.
 
-## API gestionali
-Tutte le rotte seguenti richiedono l'header `x-admin-key`:
-- `GET /api/v1/admin/dashboard`
-- `GET|POST /api/v1/admin/customers`
-- `GET|POST /api/v1/admin/cases`, `PATCH /api/v1/admin/cases/:id/status`
-- `GET|POST /api/v1/admin/staff`
-- `GET|POST /api/v1/admin/vehicles`
-- `GET|POST /api/v1/admin/inventory`, `POST /api/v1/admin/inventory/:id/movements`
-- `GET|POST /api/v1/admin/tasks`, `PATCH /api/v1/admin/tasks/:id/status`
-- `GET|POST /api/v1/admin/invoices`, `POST /api/v1/admin/invoices/:id/payments`
+## Test e sicurezza
 
-API pubbliche:
-- `GET /api/health` — stato API e database.
-- `GET /api/v1/services` — servizi attivi.
-- `GET /api/v1/providers` e `GET /api/v1/price-lists` — sole imprese verificate/listini pubblicati.
-- `POST /api/v1/inquiries` — richiesta informativa con consenso e recapito.
-- `POST /api/v1/provider-applications` — candidatura impresa non pubblicata.
+```bash
+npm run check
+npm test
+npm run test:migrations
+npm run test:initial-company-bootstrap
+npm run test:tenant-isolation
+npm run test:mfa-break-glass
+```
 
-## Verifiche indispensabili prima dei dati reali
-1. Eseguire la migrazione e verificare `/api/health` e tutte le rotte con dati di prova.
-2. Configurare CORS con il dominio reale del frontend.
-3. Implementare autenticazione nominativa e permessi per ruolo; la chiave amministratore è solo un ponte per test controllati.
-4. Aggiungere audit log, backup automatici e test di ripristino, retention e procedure di cancellazione.
-5. Definire informativa privacy, titolare, base giuridica, tempi di conservazione e contratti con i fornitori. I dati relativi al decesso e alle famiglie richiedono particolare cautela.
-6. Verificare con professionisti competenti gli aspetti fiscali, documentali e normativi. Non usare i dati demo come prezzi o preventivi reali.
+Le suite PostgreSQL di CI usano database temporanei. Non equivalgono a una migrazione o a un collaudo sul database Render di produzione.
 
-Le richieste pubbliche non vengono inoltrate automaticamente alle imprese. Non sono precaricati operatori o listini reali.
+La procedura di emergenza MFA è una CLI offline, non un endpoint pubblico. Non eseguirla in produzione senza verifica indipendente dell'identità, backup verificato, prova su database temporaneo e autorizzazione formale.
+
+## Stato del rilascio
+
+Il repository contiene una pila di pull request ancora in bozza. Il superamento dei test su un branch non significa che le modifiche siano già integrate nel branch `main` o distribuite su Render. Il multi-tenant resta disabilitato in produzione. Prima di usare dati reali sono necessari revisione e merge controllati, configurazione segreti/email, backup e restore verificati, test end-to-end, collaudo dei reparti e revisione privacy/legale.
+
+Consultare `docs/RELEASE-CHECKLIST.md` prima di qualsiasi rilascio. Il gestionale non va presentato come sistema certificato di fatturazione elettronica o come sostituto di una verifica legale, fiscale e privacy.

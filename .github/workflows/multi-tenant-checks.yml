@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - "security/**"
   push:
     branches:
       - feat/multi-azienda-foundation
