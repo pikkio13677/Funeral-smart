@@ -24,3 +24,8 @@ test('tenant UI permissions hide create forms and row actions for read-only role
   assert.match(html, /if\(resource==='invoices'\)return tenantCan\('invoices','issue'\)\|\|tenantCan\('invoices','pay'\)/);
   assert.match(html, /if\(hasTenantRowActions\(active\)\)/);
 });
+
+test('additional company form enforces the API field length limits', () => {
+  const html = fs.readFileSync(require.resolve('../admin.html'), 'utf8');
+  assert.match(html, /vatNumber:20,address:500,city:100,province:80,email:254,phone:40/);
+});
