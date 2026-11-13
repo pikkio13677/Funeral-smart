@@ -233,8 +233,27 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
         await pool.query('UPDATE app_mfa_challenges SET attempts=attempts+1 WHERE token_hash=$1', [tokenHash(challenge)]);
         return res.status(401).json({ error: 'Codice non valido. Riprova.' });
       }
-      if (usedRecoveryHash) await pool.query('UPDATE app_users SET recovery_codes_hashes=array_remove(recovery_codes_hashes,$1) WHERE id=$2', [usedRecoveryHash, row.user_id]);
-      await pool.query('DELETE FROM app_mfa_challenges WHERE token_hash=$1', [tokenHash(challenge)]);
+      // Claim the short-lived challenge atomically. Without this conditional
+      // DELETE, two concurrent requests could both pass the SELECT above and
+      // mint separate sessions from the same MFA challenge.
+      const claimed = await pool.query(
+        'DELETE FROM app_mfa_challenges WHERE token_hash=$1 AND expires_at>NOW() AND attempts<5 RETURNING user_id',
+        [tokenHash(challenge)]
+      );
+      if (!claimed.rowCount) {
+        return res.status(401).json({ error: 'Verifica già utilizzata o scaduta. Ripeti il login.' });
+      }
+      if (usedRecoveryHash) {
+        // Recovery codes are single-use even if two different login challenges
+        // are verified concurrently.
+        const consumed = await pool.query(
+          'UPDATE app_users SET recovery_codes_hashes=array_remove(recovery_codes_hashes,$1) WHERE id=$2 AND $1=ANY(recovery_codes_hashes) RETURNING id',
+          [usedRecoveryHash, row.user_id]
+        );
+        if (!consumed.rowCount) {
+          return res.status(401).json({ error: 'Codice di recupero già utilizzato. Ripeti il login.' });
+        }
+      }
       const session = crypto.randomBytes(32).toString('base64url');
       await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+($3 || \' days\')::interval)', [row.user_id, tokenHash(session), String(SESSION_DAYS)]);
       await pool.query('UPDATE app_users SET last_login_at=NOW() WHERE id=$1', [row.user_id]);
