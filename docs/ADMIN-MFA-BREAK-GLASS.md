@@ -2,7 +2,7 @@
 
 ## Stato
 
-Questa è una procedura operativa proposta, non un endpoint automatico. Non abilita un bypass self-service e non deve essere eseguita finché non è stata approvata, provata su un database temporaneo e assegnata a un operatore autorizzato.
+Questa procedura è supportata da una CLI offline, non da un endpoint automatico. Non abilita un bypass self-service e non deve essere eseguita in produzione finché non è stata approvata, provata su un database temporaneo e assegnata a un operatore autorizzato.
 
 Il sistema può avere un solo account amministratore applicativo. In questo scenario non esiste una seconda persona interna che possa approvare il reset: la verifica deve quindi avvenire fuori dall'applicazione, tramite il titolare dell'account infrastrutturale e un canale di verifica indipendente già registrato.
 
@@ -41,7 +41,25 @@ Se una qualsiasi verifica fallisce, interrompere l'operazione e ripristinare il 
 ## Limiti e stato di implementazione
 
 - Non è presente alcun endpoint pubblico o self-service per resettare MFA.
+- È stato aggiunto `scripts/reset-admin-mfa.js`: utility CLI offline che apre una transazione, blocca l'account selezionato, accetta soltanto un amministratore attivo, revoca sessioni e challenge, azzera TOTP e codici di recupero e registra l'evento nell'audit log. Se l'audit fallisce, l'intera transazione viene annullata.
+- La CLI richiede identificativo UUID, operatore, ticket, riferimento del backup e nome esatto del database; verifica `current_database()` e richiede una conferma digitata esattamente. Per produzione richiede anche `--production` e `MFA_BREAK_GLASS_PRODUCTION_APPROVED=YES`.
+- Il tool non viene eseguito automaticamente dal server e non espone alcuna route HTTP. Il test PostgreSQL usa uno schema temporaneo dedicato e verifica reset, isolamento di un altro account e rollback forzato.
 - Non esiste una seconda approvazione interna perché al momento è previsto un solo amministratore.
-- Questa documentazione non contiene una query SQL pronta per la produzione: la transazione dovrà essere realizzata, revisionata e testata in un'attività separata prima che il recupero possa essere dichiarato operativo.
+- La transazione è ora implementata come CLI offline e coperta da test automatici. Resta non autorizzata l'esecuzione in produzione: prima servono revisione della PR, backup verificato, autorizzazione formale, prova in ambiente temporaneo e conferma esplicita del titolare.
 - Fino a quel momento, la perdita di tutti i fattori richiede assistenza manuale autorizzata e non deve essere risolta con modifiche improvvisate al database.
 - La procedura non autorizza merge, deploy, migrazioni o modifiche al database di produzione.
+
+## Uso della CLI (solo operatore autorizzato)
+
+La CLI va eseguita da un ambiente controllato con `DATABASE_URL` impostata fuori dalla chat e mai stampata nei log. Prima dell'uso verificare identità, ticket e backup secondo le condizioni sopra. Esempio per un database temporaneo:
+
+```bash
+node scripts/reset-admin-mfa.js \
+  --target-user-id UUID_AMMINISTRATORE \
+  --operator IDENTITA_OPERATORE \
+  --ticket RIFERIMENTO_TICKET \
+  --backup-reference RIFERIMENTO_BACKUP_VERIFICATO \
+  --database-name NOME_DATABASE
+```
+
+Per produzione aggiungere `--production` e impostare `MFA_BREAK_GLASS_PRODUCTION_APPROVED=YES` soltanto dopo l'autorizzazione formale. La CLI chiede una frase di conferma che include ambiente, UUID e database. Il riferimento del backup deve corrispondere a un backup realmente verificato: la CLI non può verificarlo autonomamente.
