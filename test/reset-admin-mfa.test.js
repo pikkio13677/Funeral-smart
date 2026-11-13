@@ -39,6 +39,6 @@ test('rejects inactive admins and malformed operator identity',async()=>{
 });
 test('CLI arguments require target, operator, ticket, backup and database',()=>{
  assert.throws(()=>parseArgs([]),/Opzione obbligatoria mancante/);
- const a=parseArgs(['--target-user-id',id,'--operator','verified-owner','--ticket','INC-123','--backup-reference','backup-2026-11-13','--database-name','funeral_smart_test']);
- assert.equal(a['target-user-id'],id); assert.equal(a.production,undefined);
+ const a=parseArgs(['--target-user-id',id,'--operator','verified-owner','--ticket','INC-123','--backup-reference','backup-2026-11-13','--database-name','funeral_smart_test','--environment','test']);
+ assert.equal(a['target-user-id'],id); assert.equal(a.production,undefined); assert.equal(a.environment,'test');
 });
