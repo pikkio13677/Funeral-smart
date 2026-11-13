@@ -71,8 +71,8 @@ test('invitation registration creates an unverified operator identity and a sess
     assert.equal(lookup.args[0], digest(rawToken));
     const insert = calls.find(call => call.sql.includes('INSERT INTO app_users'));
     assert.equal(insert.args[0], 'mario');
-    assert.equal(insert.args[3], 'operator');
-    assert.equal(insert.args[4], email);
+    assert.match(insert.sql, /'operator'/);
+    assert.equal(insert.args[3], email);
     assert.match(insert.args[2], /^scrypt\$/);
     assert.ok(calls.some(call => call.sql.includes('pg_advisory_xact_lock')));
     assert.ok(calls.some(call => call.sql === 'COMMIT'));
