@@ -74,7 +74,7 @@ async function main() {
         .find(x=>x.startsWith('fs_session='));
       if (!raw || raw.slice('fs_session='.length) !== token) return res.status(401).json({error:'Unauthenticated'});
       req.cookies = { fs_session: token };
-      req.user = { id:userId, username:'bootstrap-test', role:'admin' };
+      req.user = { id:userId, username:'bootstrap-test', role:'admin', mfaEnabled:true };
       return next();
     }
 

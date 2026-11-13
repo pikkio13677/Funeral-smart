@@ -22,6 +22,7 @@ module.exports = function createCompanyContextRouter(pool, authenticate, tokenHa
   router.post('/companies/bootstrap', async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Autenticazione richiesta.' });
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Solo l’amministratore iniziale può configurare la prima azienda.' });
+    if (!req.user.mfaEnabled) return res.status(403).json({ error: 'Attiva la verifica in due passaggi prima di configurare la prima azienda.' });
 
     const parsed = z.object({
       legalName: z.string().trim().min(2).max(180),
