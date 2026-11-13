@@ -112,7 +112,7 @@ function cookieOptions() {
   return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000 };
 }
 
-module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl } = {}) {
+module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl, emailVerificationEnabled = process.env.ENABLE_MULTI_TENANT === 'true' } = {}) {
   const router = express.Router();
 
   async function audit(user, req, action, resource = null, resourceId = null) {
@@ -127,7 +127,9 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
       const token = req.cookies?.[SESSION_COOKIE] || null;
       if (token) {
         const found = await pool.query(
-          `SELECT u.id,u.username,u.display_name AS "displayName",u.role,u.active,u.email,u.email_verified_at AS "emailVerifiedAt",(u.totp_enabled_at IS NOT NULL) AS "mfaEnabled"
+          `SELECT u.id,u.username,u.display_name AS "displayName",u.role,u.active,
+                  ${emailVerificationEnabled ? 'u.email,u.email_verified_at AS "emailVerifiedAt"' : 'NULL::varchar AS email,NULL::timestamptz AS "emailVerifiedAt"'},
+                  (u.totp_enabled_at IS NOT NULL) AS "mfaEnabled"
            FROM app_sessions s JOIN app_users u ON u.id=s.user_id
            WHERE s.token_hash=$1 AND s.expires_at>NOW() AND u.active=TRUE`,
           [tokenHash(token)]
@@ -303,6 +305,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
   });
 
   router.post('/email/verification/request', authenticate, async (req, res, next) => {
+    if (!emailVerificationEnabled) return res.status(404).json({ error: 'Verifica email non ancora attiva.' });
     if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account personale.' });
     if (typeof sendVerificationEmail !== 'function') {
       return res.status(503).json({ error: 'Verifica email non disponibile: servizio email non configurato.' });
@@ -374,6 +377,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
   });
 
   router.post('/email/verification/confirm', authenticate, async (req, res, next) => {
+    if (!emailVerificationEnabled) return res.status(404).json({ error: 'Verifica email non ancora attiva.' });
     if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account personale.' });
     const parsed = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Inserisci il codice a 6 cifre ricevuto via email.' });
