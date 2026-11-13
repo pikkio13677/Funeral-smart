@@ -1,7 +1,7 @@
 # FUNERAL SMART — Piano test multi-tenant
 
 ## Stato attuale
-Il package usa Node.js >=20 e non dichiara attualmente un framework di test. È possibile iniziare con il modulo nativo `node:test` e `node:assert/strict`, senza introdurre dipendenze di produzione. I test d'integrazione richiederanno un database PostgreSQL isolato e variabili d'ambiente di test dedicate.
+Il package usa Node.js >=20 e i test unitari usano il modulo nativo `node:test` e `node:assert/strict`. La CI esegue test d'integrazione su PostgreSQL 16 usa-e-getta: schema base, migrazioni draft 005–009, bootstrap/backfill, isolamento tra due aziende, tentativi IDOR via API e violazioni FK cross-tenant via SQL. È stato aggiunto anche un passaggio di backup custom-format e ripristino su un secondo database temporaneo, seguito da nuovi test di bootstrap e isolamento. Questi controlli non toccano Render o il database live.
 
 ## Ambienti
 - Unit test: nessuna connessione al database di produzione.
