@@ -3,12 +3,13 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {resetAdminMfa,parseArgs}=require('../scripts/reset-admin-mfa');
 const id='11111111-1111-4111-8111-111111111111';
-function pool({role='admin',active=true,failAudit=false}={}) {
+function pool({role='admin',active=true,failAudit=false,adminCount=1}={}) {
  const calls=[];
  const client={async query(sql,args=[]) {
   calls.push({sql,args});
   if (['BEGIN','COMMIT','ROLLBACK'].includes(sql)) return {rowCount:0,rows:[]};
   if (sql.includes('FROM app_users WHERE id=$1 FOR UPDATE')) return {rowCount:1,rows:[{id,username:'admin-test',role,active}]};
+  if (sql.includes("COUNT(*)::int AS total FROM app_users WHERE role='admin'")) return {rowCount:1,rows:[{total:adminCount}]};
   if (sql.startsWith('DELETE FROM app_sessions')) return {rowCount:2,rows:[]};
   if (sql.startsWith('DELETE FROM app_mfa_challenges')) return {rowCount:3,rows:[]};
   if (sql.startsWith('UPDATE app_users SET')) return {rowCount:1,rows:[{id}]};
@@ -41,4 +42,11 @@ test('CLI arguments require target, operator, ticket, backup and database',()=>{
  assert.throws(()=>parseArgs([]),/Opzione obbligatoria mancante/);
  const a=parseArgs(['--target-user-id',id,'--operator','verified-owner','--ticket','INC-123','--backup-reference','backup-2026-11-13','--database-name','funeral_smart_test','--environment','test']);
  assert.equal(a['target-user-id'],id); assert.equal(a.production,undefined); assert.equal(a.environment,'test');
+});
+
+test('reset MFA refuses installations with multiple active admins',async()=>{
+ const p=pool({adminCount:2});
+ await assert.rejects(resetAdminMfa(p,{userId:id,operator:'verified-owner',ticket:'INC-123'}),/un solo amministratore attivo/);
+ assert.ok(p.calls.some(x=>x.sql==='ROLLBACK'));
+ assert.equal(p.calls.some(x=>x.sql.startsWith('DELETE FROM app_sessions')),false);
 });
