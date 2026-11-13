@@ -33,6 +33,7 @@ function makePool(account) {
     async query(sql, args = []) {
       calls.push({ sql, args });
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+      if (sql.includes('FROM app_sessions WHERE token_hash=$1')) return { rowCount: 1, rows: [{ id: 'session-1' }] };
       if (sql.includes('FROM app_users WHERE id=$1 FOR UPDATE')) return { rowCount: 1, rows: [account] };
       if (sql.startsWith('UPDATE app_users SET password_hash=')) return { rowCount: 1, rows: [] };
       if (sql.startsWith('DELETE FROM app_sessions')) return { rowCount: 2, rows: [] };
