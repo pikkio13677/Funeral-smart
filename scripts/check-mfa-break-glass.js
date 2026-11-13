@@ -29,6 +29,12 @@ async function main() {
   if(a.totp_secret_enc!==null||a.totp_pending_secret_enc!==null||a.totp_enabled_at!==null||a.recovery_codes_hashes.length!==0||sessions!==0||challenges!==0) throw Error('Reset MFA incompleto.');
   if(o.totp_secret_enc!=='manager-secret'||o.recovery_codes_hashes.length!==1) throw Error('Account non destinatario modificato.');
   if(!audit||audit.action!=='security.mfa.emergency_reset'||audit.username!=='break-glass:verified-owner'||audit.resource_id!==admin+':INC-TEST-01') throw Error('Audit log non corretto.');
+  const secondAdmin='44444444-4444-4444-8444-444444444444';
+  await client.query("INSERT INTO app_users(id,username,role,active) VALUES($1,'second-admin','admin',TRUE)",[secondAdmin]);
+  let multipleAdminsBlocked=false;
+  try { await resetAdminMfa(pool,{userId:admin,operator:'verified-owner',ticket:'INC-TEST-MULTI'}); } catch(e) { multipleAdminsBlocked=/un solo amministratore attivo/.test(e.message); }
+  if(!multipleAdminsBlocked) throw Error('Il reset doveva essere bloccato con più amministratori attivi.');
+  await client.query('DELETE FROM app_users WHERE id=$1',[secondAdmin]);
   const rollbackId='33333333-3333-4333-8333-333333333333';
   await client.query("INSERT INTO app_users(id,username,role,active,totp_secret_enc,totp_pending_secret_enc,totp_enabled_at,recovery_codes_hashes) VALUES($1,'rollback-admin','admin',TRUE,'keep-secret','keep-pending',NOW(),ARRAY['keep-hash'])",[rollbackId]);
   await client.query("INSERT INTO app_sessions(id,user_id) VALUES('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',$1)",[rollbackId]);
