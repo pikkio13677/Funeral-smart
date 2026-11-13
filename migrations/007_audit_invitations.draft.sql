@@ -20,7 +20,7 @@ ALTER TABLE app_users
   ADD COLUMN IF NOT EXISTS email VARCHAR(254),
   ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
 
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -40,7 +40,7 @@ BEGIN
       ADD CONSTRAINT ck_app_users_email_verification_requires_email
       CHECK (email_verified_at IS NULL OR email IS NOT NULL);
   END IF;
-END $;
+END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_app_users_verified_email
   ON app_users(email)
