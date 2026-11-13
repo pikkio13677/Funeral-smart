@@ -59,7 +59,8 @@ node scripts/reset-admin-mfa.js \
   --operator IDENTITA_OPERATORE \
   --ticket RIFERIMENTO_TICKET \
   --backup-reference RIFERIMENTO_BACKUP_VERIFICATO \
-  --database-name NOME_DATABASE
+  --database-name NOME_DATABASE \
+  --environment test
 ```
 
 Per produzione sostituire `--environment test` con `--environment production`, aggiungere `--production` e impostare `MFA_BREAK_GLASS_PRODUCTION_APPROVED=YES` soltanto dopo l'autorizzazione formale. La CLI chiede una frase di conferma che include ambiente, UUID e database. Il riferimento del backup deve corrispondere a un backup realmente verificato: la CLI non può verificarlo autonomamente.
