@@ -122,7 +122,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
       const token = req.cookies?.[SESSION_COOKIE] || null;
       if (token) {
         const found = await pool.query(
-          `SELECT u.id,u.username,u.display_name AS "displayName",u.role,u.active,(u.totp_enabled_at IS NOT NULL) AS "mfaEnabled"
+          `SELECT u.id,u.username,u.display_name AS "displayName",u.role,u.active,u.email,u.email_verified_at AS "emailVerifiedAt",(u.totp_enabled_at IS NOT NULL) AS "mfaEnabled"
            FROM app_sessions s JOIN app_users u ON u.id=s.user_id
            WHERE s.token_hash=$1 AND s.expires_at>NOW() AND u.active=TRUE`,
           [tokenHash(token)]
@@ -443,7 +443,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
   });
 
   router.get('/me', authenticate, (req, res) => {
-    res.json({ data: { id: req.user.id, username: req.user.username, displayName: req.user.displayName, role: req.user.role, roleLabel: ROLE_LABELS[req.user.role] || 'Accesso temporaneo', mfaEnabled: Boolean(req.user.mfaEnabled) } });
+    res.json({ data: { id: req.user.id, username: req.user.username, displayName: req.user.displayName, role: req.user.role, roleLabel: ROLE_LABELS[req.user.role] || 'Accesso temporaneo', email: req.user.email || null, emailVerifiedAt: req.user.emailVerifiedAt || null, mfaEnabled: Boolean(req.user.mfaEnabled) } });
   });
 
   router.get('/users', authenticate, async (req, res, next) => {
