@@ -111,6 +111,78 @@ module.exports = function createCompanyContextRouter(pool, authenticate, tokenHa
     }
   });
 
+  router.post('/companies', async (req, res, next) => {
+    if (!req.user?.id) return res.status(401).json({ error: 'Autenticazione richiesta.' });
+    if (!req.user.mfaEnabled) return res.status(403).json({ error: 'Attiva la verifica in due passaggi prima di creare un’altra azienda.' });
+    const parsed = z.object({
+      legalName: z.string().trim().min(2).max(180),
+      vatNumber: z.string().trim().max(20).optional().default(''),
+      address: z.string().trim().max(500).optional().default(''),
+      city: z.string().trim().max(100).optional().default(''),
+      province: z.string().trim().max(80).optional().default(''),
+      email: z.string().trim().email().max(254).optional().or(z.literal('')).default(''),
+      phone: z.string().trim().max(40).optional().default('')
+    }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Dati della nuova azienda non validi.' });
+
+    const token = req.cookies?.[cookieName];
+    if (typeof token !== 'string' || token.length < 32) {
+      return res.status(401).json({ error: 'Sessione non valida.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const active = await client.query(
+        `SELECT s.id AS "sessionId", m.role, m.id AS "membershipId"
+         FROM app_sessions s
+         JOIN company_memberships m ON m.id = s.active_membership_id AND m.user_id = s.user_id
+         JOIN companies c ON c.id = m.company_id
+         WHERE s.token_hash = $1 AND s.user_id = $2 AND s.expires_at > NOW()
+           AND m.status = 'active' AND c.status = 'active'
+         FOR UPDATE OF s, m`,
+        [tokenHash(token), req.user.id]
+      );
+      if (!active.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Seleziona prima un’azienda attiva con accesso amministratore.' });
+      }
+      if (active.rows[0].role !== 'admin') {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'Solo un amministratore aziendale può creare un’altra azienda.' });
+      }
+
+      const value = parsed.data;
+      const created = await client.query(
+        `INSERT INTO companies(legal_name, vat_number, address, city, province, email, phone)
+         VALUES($1,$2,$3,$4,$5,$6,$7)
+         RETURNING id, legal_name AS "legalName", city, province`,
+        [value.legalName, value.vatNumber || null, value.address || null, value.city || null,
+          value.province || null, value.email || null, value.phone || null]
+      );
+      const company = created.rows[0];
+      const membership = await client.query(
+        "INSERT INTO company_memberships(company_id, user_id, role, status) VALUES($1,$2,'admin','active') RETURNING id",
+        [company.id, req.user.id]
+      );
+      await client.query(
+        `INSERT INTO audit_log(user_id, username, action, resource, resource_id, company_id, membership_id)
+         VALUES($1,$2,'company.created','company',$3,$3,$4)`,
+        [req.user.id, req.user.username, company.id, membership.rows[0].id]
+      );
+      await client.query('COMMIT');
+      return res.status(201).json({
+        data: { ...company, membershipId: membership.rows[0].id, role: 'admin' },
+        message: 'Nuova azienda creata. I suoi reparti sono vuoti e separati dagli altri.'
+      });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      return next(error);
+    } finally {
+      client.release();
+    }
+  });
+
   router.get('/companies', async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Autenticazione richiesta.' });
     try {
