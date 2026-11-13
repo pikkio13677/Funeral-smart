@@ -74,7 +74,7 @@ async function main() {
       )).rows[0].id;
       const funeralCase = (await pool.query(
         'INSERT INTO funeral_cases(company_id,case_code,customer_id,deceased_first_name,deceased_last_name,service_type) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',
-        [companyId,'CASE-SHARED',customer,'Defunto'+suffix,'Cognome'+suffix,'Sepoltura']
+        [companyId,'CASE-'+suffix+'-SHARED',customer,'Defunto'+suffix,'Cognome'+suffix,'Sepoltura']
       )).rows[0].id;
       const staff = (await pool.query(
         'INSERT INTO staff(company_id,first_name,last_name,role) VALUES($1,$2,$3,$4) RETURNING id',
@@ -86,7 +86,7 @@ async function main() {
       )).rows[0].id;
       const item = (await pool.query(
         'INSERT INTO inventory_items(company_id,sku,name,category,quantity,min_quantity,unit,unit_cost) VALUES($1,$2,$3,$4,5,1,\'pz\',10) RETURNING id',
-        [companyId,'SKU-SHARED','Articolo '+suffix,'Materiale']
+        [companyId,'SKU-'+suffix+'-SHARED','Articolo '+suffix,'Materiale']
       )).rows[0].id;
       const task = (await pool.query(
         'INSERT INTO tasks(company_id,title,case_id,assigned_to) VALUES($1,$2,$3,$4) RETURNING id',
@@ -94,7 +94,7 @@ async function main() {
       )).rows[0].id;
       const invoice = (await pool.query(
         'INSERT INTO invoices(company_id,invoice_number,case_id,customer_id,amount,status) VALUES($1,$2,$3,$4,100,\'issued\') RETURNING id',
-        [companyId,'FATT-SHARED',funeralCase,customer]
+        [companyId,'FATT-'+suffix+'-SHARED',funeralCase,customer]
       )).rows[0].id;
       await pool.query(
         'INSERT INTO payments(company_id,invoice_id,amount,method) VALUES($1,$2,20,\'bonifico\')',
@@ -105,6 +105,34 @@ async function main() {
 
     const dataA = await seedTenant(companyA,'A');
     const dataB = await seedTenant(companyB,'B');
+
+    // During the legacy transition, global UNIQUE constraints intentionally
+    // remain in place until every row has a company_id and the later cutover
+    // migration is approved. Verify that the transition has not weakened them.
+    await assert.rejects(
+      pool.query(
+        'INSERT INTO funeral_cases(company_id,case_code,customer_id,deceased_first_name,deceased_last_name,service_type) VALUES($1,$2,$3,$4,$5,$6)',
+        [companyB,'CASE-A-SHARED',dataB.customer,'Duplicate','Case','Sepoltura']
+      ),
+      error => error && error.code === '23505',
+      'legacy global case-code uniqueness must remain active during backfill'
+    );
+    await assert.rejects(
+      pool.query(
+        'INSERT INTO inventory_items(company_id,sku,name,category) VALUES($1,$2,$3,$4)',
+        [companyB,'SKU-A-SHARED','Duplicate SKU','Materiale']
+      ),
+      error => error && error.code === '23505',
+      'legacy global SKU uniqueness must remain active during backfill'
+    );
+    await assert.rejects(
+      pool.query(
+        "INSERT INTO invoices(company_id,invoice_number,case_id,customer_id,amount,status) VALUES($1,$2,$3,$4,1,'draft')",
+        [companyB,'FATT-A-SHARED',dataB.funeralCase,dataB.customer]
+      ),
+      error => error && error.code === '23505',
+      'legacy global invoice-number uniqueness must remain active during backfill'
+    );
     for (const [companyId,userId,membershipId,suffix] of [[companyA,userA,memberA,'A'],[companyB,userB,memberB,'B']]) {
       await pool.query(
         "INSERT INTO audit_log(user_id,username,action,resource,resource_id,company_id,membership_id) VALUES($1,$2,$3,'test','isolation',$4,$5)",
