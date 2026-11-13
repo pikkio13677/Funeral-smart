@@ -1,9 +1,9 @@
 name: Funeral Smart checks
 on:
   push:
-    branches: [main, "feature/**", "fix/**"]
+    branches: [main, "feature/**", "fix/**", "security/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "fix/**"]
 jobs:
   syntax:
     runs-on: ubuntu-latest
