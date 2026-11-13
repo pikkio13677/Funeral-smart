@@ -17,9 +17,9 @@ L'aggiornamento della password, il consumo dell'eventuale codice di recupero, la
 
 Non esiste un bypass self-service e non si deve disattivare MFA tramite una route non verificata. Poiché l'installazione può avere un solo amministratore applicativo, non si presume l'esistenza di un secondo approvatore interno.
 
-La procedura di emergenza proposta è documentata in [ADMIN-MFA-BREAK-GLASS.md](./ADMIN-MFA-BREAK-GLASS.md). Richiede verifica indipendente dell'identità, controllo dell'account proprietario Render, backup verificato, transazione limitata al singolo account, revoca delle sessioni e challenge, reset dei fattori MFA e audit dell'intervento.
+La procedura di emergenza è documentata e supportata dalla CLI offline `scripts/reset-admin-mfa.js` in [ADMIN-MFA-BREAK-GLASS.md](./ADMIN-MFA-BREAK-GLASS.md). Richiede verifica indipendente dell'identità, controllo dell'account proprietario Render, backup verificato, transazione limitata al singolo account, revoca delle sessioni e challenge, reset dei fattori MFA e audit dell'intervento.
 
-**Stato:** la procedura è documentata ma non ancora operativa. La transazione deve essere implementata, revisionata e provata su un database temporaneo, compreso il rollback, prima di qualsiasi uso in produzione. Non eseguire query improvvisate, non creare un amministratore temporaneo e non modificare il database live per aggirare MFA.
+**Stato:** la CLI e i test automatici sono implementati. L'esecuzione in produzione non è autorizzata: prima servono revisione, backup verificato, prova su database temporaneo, autorizzazione formale e conferma esplicita del titolare. Non eseguire query improvvisate, non creare un amministratore temporaneo e non modificare il database live per aggirare MFA.
 
 ## Segreti di verifica email
 
