@@ -71,6 +71,7 @@ if (tenantFeaturesEnabled) {
   app.use('/api/v1/tenant', auth.authenticate, tenantInvitations);
 
   app.use('/api/v1/tenant', auth.authenticate, tenantContext,
+    require('./tenant-audit-writer')(pool),
     require('./tenant-customers-cases-routes')(pool),
     require('./tenant-staff-vehicles-routes')(pool),
     require('./tenant-inventory-tasks-routes')(pool),
