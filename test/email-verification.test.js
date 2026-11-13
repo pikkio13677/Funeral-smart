@@ -45,14 +45,14 @@ test('email verification request sends a short-lived code and stores only its di
   );
   assert.equal(res.statusCode, 202);
   assert.equal(sent.to, 'collega@example.com');
-  assert.match(sent.code, /^\\d{6}$/);
+  assert.match(sent.code, /^\d{6}$/);
   assert.equal(sent.expiresInMinutes, 15);
   const insert = calls.find(call => call.sql.includes('INSERT INTO email_verification_challenges'));
   assert.equal(insert.args[1], 'collega@example.com');
   assert.equal(insert.args[2], digest(sent.code));
   assert.notEqual(insert.args[2], sent.code);
   assert.ok(calls.some(call => call.sql === 'COMMIT'));
-  assert.doesNotMatch(JSON.stringify(res.body), /\\d{6}/);
+  assert.doesNotMatch(JSON.stringify(res.body), /\d{6}/);
 });
 
 test('email verification request refuses unconfigured delivery without creating a challenge', async () => {
