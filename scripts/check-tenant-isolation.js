@@ -116,7 +116,7 @@ async function main() {
       );
     }
 
-    const tokenUsers = new Map([[tokenA,{id:userA,username:'tenant-a'}],[tokenB,{id:userB,username:'tenant-b'}]]);
+    const tokenUsers = new Map([[tokenA,{id:userA,username:'tenant-a',mfaEnabled:true}],[tokenB,{id:userB,username:'tenant-b',mfaEnabled:true}]]);
     function authenticate(req,res,next) {
       const token = (req.headers.cookie || '').split(';').map(x=>x.trim()).find(x=>x.startsWith('fs_session='));
       const raw = token ? token.slice('fs_session='.length) : '';
