@@ -25,7 +25,7 @@ function createInvitationUrl(baseUrl, token) {
   return url.toString();
 }
 
-function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl } = {}) {
+function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl, tenantContext } = {}) {
   if (!pool || typeof pool.query !== 'function' || typeof pool.connect !== 'function') {
     throw new TypeError('A PostgreSQL pool with query() and connect() is required.');
   }
@@ -126,6 +126,8 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
       client.release();
     }
   });
+
+  if (typeof tenantContext === 'function') router.use(tenantContext);
 
   router.use((req, res, next) => {
     if (!req.tenant?.companyId || !req.tenant?.membershipId || !req.tenant?.role) {

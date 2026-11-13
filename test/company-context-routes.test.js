@@ -144,3 +144,98 @@ test('rejects an invalid configured cookie name', () => {
     'bad cookie name'
   ), TypeError);
 });
+
+
+test('initial company bootstrap requires a verified admin session and explicit legacy ownership confirmation', async () => {
+  let connected = false;
+  const router = createCompanyContextRouter({
+    connect: async () => { connected = true; return {}; }
+  }, (_req, _res, next) => next(), token => token);
+  const handler = routeHandler(router, '/companies/bootstrap', 'post');
+  const forbidden = response();
+  await handler({
+    user: { id: 'user-1', role: 'operator' },
+    cookies: { fs_session: 's'.repeat(40) },
+    body: { legalName: 'Impresa Alfa', confirmLegacyDataOwnership: true }
+  }, forbidden, () => {});
+  assert.equal(forbidden.statusCode, 403);
+
+  const missingConfirmation = response();
+  await handler({
+    user: { id: 'user-1', role: 'admin' },
+    cookies: { fs_session: 's'.repeat(40) },
+    body: { legalName: 'Impresa Alfa' }
+  }, missingConfirmation, () => {});
+  assert.equal(missingConfirmation.statusCode, 400);
+  assert.equal(connected, false);
+});
+
+test('initial company bootstrap creates first membership, backfills legacy rows, and activates the current session atomically', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, args = []) {
+      calls.push({ sql, args });
+      if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+      if (sql.includes('FROM app_sessions')) return { rowCount: 1, rows: [{ id: 'session-1' }] };
+      if (sql.startsWith('LOCK TABLE')) return { rowCount: null, rows: [] };
+      if (sql === 'SELECT id FROM companies LIMIT 1') return { rowCount: 0, rows: [] };
+      if (sql.includes('INSERT INTO companies')) return { rowCount: 1, rows: [{
+        id: 'company-1', legalName: 'Impresa Alfa', city: 'Torino', province: 'TO'
+      }] };
+      if (sql.includes('INSERT INTO company_memberships')) return { rowCount: 1, rows: [{ id: 'membership-1' }] };
+      if (sql.startsWith('UPDATE ') && sql.includes('SET company_id = $1 WHERE company_id IS NULL')) return { rowCount: 2, rows: [] };
+      if (sql.includes('UPDATE app_sessions SET active_membership_id')) return { rowCount: 1, rows: [] };
+      if (sql.includes('INSERT INTO audit_log')) return { rowCount: 1, rows: [] };
+      throw new Error('Unexpected SQL: ' + sql);
+    },
+    release() { calls.push({ released: true }); }
+  };
+  const router = createCompanyContextRouter({ connect: async () => client }, (_req, _res, next) => next(), token => 'digest:' + token);
+  const res = response();
+  await routeHandler(router, '/companies/bootstrap', 'post')({
+    user: { id: 'user-1', username: 'admin', role: 'admin' },
+    cookies: { fs_session: 's'.repeat(40) },
+    body: {
+      legalName: 'Impresa Alfa', city: 'Torino', province: 'TO',
+      confirmLegacyDataOwnership: true
+    }
+  }, res, error => { throw error; });
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.body.data.id, 'company-1');
+  assert.equal(res.body.data.membershipId, 'membership-1');
+  assert.equal(res.body.data.role, 'admin');
+  assert.equal(Object.keys(res.body.backfilled).length, 9);
+  assert.ok(calls.some(call => call.sql.startsWith('LOCK TABLE')));
+  assert.ok(calls.some(call => call.sql.includes('UPDATE customers SET company_id')));
+  assert.ok(calls.some(call => call.sql.includes('UPDATE payments SET company_id')));
+  assert.ok(calls.some(call => call.sql.includes('UPDATE app_sessions SET active_membership_id')));
+  assert.ok(calls.some(call => call.sql.includes('INSERT INTO audit_log')));
+  assert.ok(calls.some(call => call.sql === 'COMMIT'));
+  assert.ok(calls.some(call => call.released));
+});
+
+test('initial company bootstrap refuses to overwrite an existing tenant and rolls back', async () => {
+  const calls = [];
+  const client = {
+    async query(sql) {
+      calls.push(sql);
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+      if (sql.includes('FROM app_sessions')) return { rowCount: 1, rows: [{ id: 'session-1' }] };
+      if (sql.startsWith('LOCK TABLE')) return { rowCount: 0, rows: [] };
+      if (sql === 'SELECT id FROM companies LIMIT 1') return { rowCount: 1, rows: [{ id: 'existing-company' }] };
+      throw new Error('Unexpected SQL: ' + sql);
+    },
+    release() {}
+  };
+  const router = createCompanyContextRouter({ connect: async () => client }, (_req, _res, next) => next(), token => token);
+  const res = response();
+  await routeHandler(router, '/companies/bootstrap', 'post')({
+    user: { id: 'user-1', role: 'admin' },
+    cookies: { fs_session: 's'.repeat(40) },
+    body: { legalName: 'Impresa Beta', confirmLegacyDataOwnership: true }
+  }, res, () => {});
+  assert.equal(res.statusCode, 409);
+  assert.ok(calls.includes('ROLLBACK'));
+  assert.ok(!calls.some(sql => sql.includes('INSERT INTO companies')));
+});

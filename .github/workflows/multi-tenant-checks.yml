@@ -49,3 +49,7 @@ jobs:
         run: node migrate.js
       - name: Apply and verify draft tenant migrations on disposable PostgreSQL
         run: npm run test:migrations
+      - name: Verify initial company bootstrap and legacy backfill on disposable PostgreSQL
+        run: npm run test:initial-company-bootstrap
+      - name: Verify two-company data isolation on disposable PostgreSQL
+        run: npm run test:tenant-isolation
