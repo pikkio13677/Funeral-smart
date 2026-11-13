@@ -13,4 +13,4 @@ jobs:
         with:
           node-version: 20
       - run: npm install
-      - run: npm run check
+      - run: npm run check\n      - run: npm test
