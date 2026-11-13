@@ -160,9 +160,18 @@ test('initial company bootstrap requires a verified admin session and explicit l
   }, forbidden, () => {});
   assert.equal(forbidden.statusCode, 403);
 
+  const noMfa = response();
+  await handler({
+    user: { id: 'user-1', role: 'admin', mfaEnabled: false },
+    cookies: { fs_session: 's'.repeat(40) },
+    body: { legalName: 'Impresa Alfa', confirmLegacyDataOwnership: true }
+  }, noMfa, () => {});
+  assert.equal(noMfa.statusCode, 403);
+  assert.match(noMfa.body.error, /due passaggi/i);
+
   const missingConfirmation = response();
   await handler({
-    user: { id: 'user-1', role: 'admin' },
+    user: { id: 'user-1', role: 'admin', mfaEnabled: true },
     cookies: { fs_session: 's'.repeat(40) },
     body: { legalName: 'Impresa Alfa' }
   }, missingConfirmation, () => {});
@@ -193,7 +202,7 @@ test('initial company bootstrap creates first membership, backfills legacy rows,
   const router = createCompanyContextRouter({ connect: async () => client }, (_req, _res, next) => next(), token => 'digest:' + token);
   const res = response();
   await routeHandler(router, '/companies/bootstrap', 'post')({
-    user: { id: 'user-1', username: 'admin', role: 'admin' },
+    user: { id: 'user-1', username: 'admin', role: 'admin', mfaEnabled: true },
     cookies: { fs_session: 's'.repeat(40) },
     body: {
       legalName: 'Impresa Alfa', city: 'Torino', province: 'TO',
