@@ -168,7 +168,7 @@ async function renderSecurityModule(host){
   }catch(err){showMessage(err.message);}finally{confirmCode.disabled=false;}};
   emailPanel.append(emailHeading,emailStatus,emailForm,codeForm);
  }
- section.append(heading,intro,panel);host.append(section);
+ section.append(heading,intro,panel,emailPanel);host.append(section);
 }
 
 function renderAuditModule(host){
