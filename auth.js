@@ -348,7 +348,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
 
   router.post('/email/verification/confirm', authenticate, async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account personale.' });
-    const parsed = z.object({ code: z.string().trim().regex(/^\\d{6}$/) }).strict().safeParse(req.body);
+    const parsed = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Inserisci il codice a 6 cifre ricevuto via email.' });
     const client = await pool.connect();
     try {
