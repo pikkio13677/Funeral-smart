@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node migrate.js && node server.js",
     "dev": "node --watch server.js",
-    "check": "node --check server.js && node --check auth.js && node --check admin-routes.js && node --check migrate.js"
+    "check": "node --check server.js && node --check auth.js && node --check admin-routes.js && node --check migrate.js && node --check tenant-context.js && node --check company-context-routes.js && node --check tenant-permissions.js && node --check tenant-customers-cases-routes.js && node --check tenant-staff-vehicles-routes.js && node --check tenant-inventory-tasks-routes.js && node --check tenant-invoices-payments-routes.js && node --check tenant-dashboard-routes.js && node --check tenant-company-admin-routes.js && node --check tenant-audit-routes.js && node --check tenant-invitation-routes.js && node --check scripts/check-draft-migrations.js",
+    "test": "node --test",
+    "test:migrations": "node scripts/check-draft-migrations.js"
   },
   "engines": {
     "node": ">=20"
