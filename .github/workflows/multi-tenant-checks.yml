@@ -14,6 +14,22 @@ permissions:
 jobs:
   node-checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: funeral_smart_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d funeral_smart_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/funeral_smart_test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,3 +43,7 @@ jobs:
         run: npm run check
       - name: Run isolated unit tests
         run: npm test
+      - name: Build baseline schema on disposable PostgreSQL
+        run: node migrate.js
+      - name: Apply and verify draft tenant migrations on disposable PostgreSQL
+        run: npm run test:migrations
