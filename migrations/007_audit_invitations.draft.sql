@@ -4,8 +4,6 @@
 -- NON registrare in migrate.js e NON applicare a Render/produzione.
 -- Richiede backup verificato, restore-test e revisione del rollout.
 
-BEGIN;
-
 -- Le FK composte rendono impossibile associare un evento/invito a una membership
 -- appartenente a un'altra azienda o a un altro utente.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_company_memberships_id_company_user
@@ -130,7 +128,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_company_invitations_pending_email
   ON company_invitations(company_id, email)
   WHERE status = 'pending';
 
-COMMIT;
 
 -- BLOCCO / DIPENDENZE:
 -- 1. Questa migrazione presuppone che 005 abbia creato companies e company_memberships.
