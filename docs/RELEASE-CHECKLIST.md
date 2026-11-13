@@ -21,6 +21,11 @@ Stato: preparazione al rilascio, non ancora autorizzato per dati reali.
 ## Registro verifiche — 13 novembre 2026 (aggiornamento PIKKIO20)
 
 - CI GitHub Actions sul commit `22acf60b05600474fd0d70006c780e5bdbb3f247`: workflow `Funeral Smart checks` run [43506544309](https://github.com/pikkio13677/Funeral-smart/actions/runs/43506544309) completato con esito `success` (syntax, unit tests, PostgreSQL baseline, migrazioni draft, bootstrap/backfill, isolamento due aziende, MFA recovery/rollback, backup e restore, test su database ripristinato); workflow `Multi-tenant branch checks` run [43506544714](https://github.com/pikkio13677/Funeral-smart/actions/runs/43506544714) completato con esito `success`. Questi esiti riguardano esattamente il commit indicato, non eventuali commit successivi.
+- Ultima verifica CI aggiornata sul commit `192e5c0336ed597abf8c1d5d81d7845f26d2a418`: `Funeral Smart checks` run [43506735799](https://github.com/pikkio13677/Funeral-smart/actions/runs/43506735799) concluso `success` con job `syntax` e `multi-tenant-postgres` verdi; `Multi-tenant branch checks` run [43506735456](https://github.com/pikkio13677/Funeral-smart/actions/runs/43506735456) concluso `success` con job `node-checks` verde.
+- Flusso frontend invito verificato staticamente in `admin.html`: registrazione tramite invito crea account, pannello sicurezza permette richiesta/conferma codice email, `enterApp()` tenta l'accettazione solo dopo autenticazione e il server richiede email verificata con corrispondenza esatta. La route di accettazione scrive audit event nella stessa transazione. Non è un collaudo end-to-end su Render.
+- Collaudo email reale ancora bloccato dalla necessità di verificare in Render `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `PUBLIC_APP_URL`, `ENABLE_MULTI_TENANT` e la disponibilità del dominio mittente verificato; non chiedere né registrare valori segreti in chat. Nessun invio reale è stato effettuato.
+- Render non è collegato a questa sessione: per verificare le variabili e inviare una email di prova occorre collegare l'integrazione Render o eseguire la verifica dalla dashboard del proprietario. Nessuna modifica di variabili o deploy eseguiti.
+
 
 - Branch esaminato: `release/funeral-smart-preflight`.
 - Ultimo commit noto dopo le correzioni di compatibilità email e workflow: `deea693d1f65f043703f6646fe8c57095c2af432`.
