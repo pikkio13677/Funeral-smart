@@ -3,7 +3,7 @@ on:
   push:
     branches: [main, "feature/**", "fix/**", "security/**"]
   pull_request:
-    branches: [main, "fix/**"]
+    branches: [main, "fix/**", "security/**"]
 jobs:
   syntax:
     runs-on: ubuntu-latest
