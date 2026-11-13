@@ -51,7 +51,8 @@ const inquirySchema = z.object({
   privacyConsent: z.literal(true)
 }).refine(v => Boolean(v.contactEmail || v.contactPhone), { message: 'Inserire almeno un recapito per poter essere ricontattati.' });
 
-const auth = require('./auth')(pool);
+const { createResendVerificationSender } = require('./resend-email');
+const auth = require('./auth')(pool, { sendVerificationEmail: createResendVerificationSender() });
 app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
 
 app.get('/api/health', async (_req, res) => {

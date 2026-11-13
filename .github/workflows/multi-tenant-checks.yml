@@ -8,6 +8,7 @@ on:
     branches:
       - feat/multi-azienda-foundation
       - "fix/**"
+      - "feature/**"
 
 permissions:
   contents: read
