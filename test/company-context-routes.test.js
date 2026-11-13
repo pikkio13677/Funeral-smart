@@ -240,7 +240,7 @@ test('initial company bootstrap refuses to overwrite an existing tenant and roll
   const router = createCompanyContextRouter({ connect: async () => client }, (_req, _res, next) => next(), token => token);
   const res = response();
   await routeHandler(router, '/companies/bootstrap', 'post')({
-    user: { id: 'user-1', role: 'admin' },
+    user: { id: 'user-1', role: 'admin', mfaEnabled: true },
     cookies: { fs_session: 's'.repeat(40) },
     body: { legalName: 'Impresa Beta', confirmLegacyDataOwnership: true }
   }, res, () => {});
