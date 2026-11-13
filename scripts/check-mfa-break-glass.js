@@ -8,7 +8,7 @@ async function main() {
  const client=new Client({connectionString:process.env.DATABASE_URL,ssl:process.env.NODE_ENV==='production'?{rejectUnauthorized:false}:undefined});
  await client.connect();
  const schema='mfa_break_glass_test_'+crypto.randomBytes(6).toString('hex');
- const pool={connect:async()=>client};
+ const pool={connect:async()=>({query:client.query.bind(client),release(){}})};
  try {
   await client.query('CREATE SCHEMA '+schema); await client.query('SET search_path TO '+schema);
   await client.query("CREATE TABLE app_users(id UUID PRIMARY KEY,username VARCHAR(60),role VARCHAR(24),active BOOLEAN,totp_secret_enc TEXT,totp_pending_secret_enc TEXT,totp_enabled_at TIMESTAMPTZ,recovery_codes_hashes TEXT[] NOT NULL DEFAULT '{}',updated_at TIMESTAMPTZ DEFAULT NOW())");
