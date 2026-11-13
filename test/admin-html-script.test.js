@@ -16,3 +16,11 @@ test('tenant invoice form omits server-managed invoice status', () => {
   const html = fs.readFileSync(require.resolve('../admin.html'), 'utf8');
   assert.match(html, /if\(tenantActive&&active==='invoices'\)delete data\.status;/);
 });
+
+test('tenant UI permissions hide create forms and row actions for read-only roles', () => {
+  const html = fs.readFileSync(require.resolve('../admin.html'), 'utf8');
+  assert.match(html, /tenantActive&&!tenantCan\(active,'create'\)/);
+  assert.match(html, /function hasTenantRowActions\(resource\)/);
+  assert.match(html, /if\(resource==='invoices'\)return tenantCan\('invoices','issue'\)\|\|tenantCan\('invoices','pay'\)/);
+  assert.match(html, /if\(hasTenantRowActions\(active\)\)/);
+});
