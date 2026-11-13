@@ -552,6 +552,14 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const activeSession = await client.query(
+        'SELECT id FROM app_sessions WHERE token_hash=$1 AND user_id=$2 AND expires_at>NOW() FOR UPDATE',
+        [tokenHash(sessionToken), req.user.id]
+      );
+      if (!activeSession.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Sessione non valida o scaduta. Accedi di nuovo.' });
+      }
       const account = await client.query(
         'SELECT id, username, password_hash, active, totp_enabled_at, totp_secret_enc, recovery_codes_hashes FROM app_users WHERE id=$1 FOR UPDATE',
         [req.user.id]
@@ -564,6 +572,10 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
       if (!(await verifyPassword(parsed.data.currentPassword, user.password_hash))) {
         await client.query('ROLLBACK');
         return res.status(401).json({ error: 'Password attuale non corretta.' });
+      }
+      if (await verifyPassword(parsed.data.newPassword, user.password_hash)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'La nuova password deve essere diversa da quella attuale.' });
       }
       let usedRecoveryHash = null;
       if (user.totp_enabled_at) {
