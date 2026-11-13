@@ -13,6 +13,8 @@ async function resetAdminMfa(pool, { userId, operator, ticket }) {
     if (!found.rowCount) throw new Error('Account indicato non trovato.');
     const account = found.rows[0];
     if (account.role !== 'admin' || account.active !== true) throw new Error('Il recupero è consentito soltanto a un account amministratore attivo.');
+    const admins = await client.query("SELECT COUNT(*)::int AS total FROM app_users WHERE role='admin' AND active=TRUE");
+    if (admins.rows[0]?.total !== 1) throw new Error('Recupero bloccato: la procedura è riservata a installazioni con un solo amministratore attivo.');
     const sessions = await client.query('DELETE FROM app_sessions WHERE user_id=$1', [userId]);
     const challenges = await client.query('DELETE FROM app_mfa_challenges WHERE user_id=$1', [userId]);
     const updated = await client.query(
