@@ -46,7 +46,7 @@ function createTenantInventoryTasksRouter(pool) {
   router.get('/inventory', authorizeTenant('inventory', 'read'), async (req, res, next) => {
     try {
       const result = await pool.query(
-        `SELECT id, sku, name, category, quantity, min_quantity AS "minQuantity",
+        `SELECT id, sku, name, category, quantity, min_quantity AS "minQuantity", (quantity <= min_quantity) AS "lowStock",
                 unit, unit_cost AS "unitCost", created_at AS "createdAt",
                 updated_at AS "updatedAt"
          FROM inventory_items WHERE company_id = $1 ORDER BY name`,
@@ -150,7 +150,7 @@ function createTenantInventoryTasksRouter(pool) {
         `SELECT t.id, t.title, t.description, t.due_date AS "dueDate",
                 t.priority, t.status, t.case_id AS "caseId",
                 t.assigned_to AS "assignedTo", t.created_at AS "createdAt",
-                s.first_name AS "assigneeFirstName", s.last_name AS "assigneeLastName"
+                s.first_name AS "staffFirstName", s.last_name AS "staffLastName"
          FROM tasks t
          LEFT JOIN staff s ON s.id = t.assigned_to AND s.company_id = t.company_id
          WHERE t.company_id = $1 ORDER BY t.due_date NULLS LAST, t.created_at DESC`,

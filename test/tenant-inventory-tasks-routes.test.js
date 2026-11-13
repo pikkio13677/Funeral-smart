@@ -74,3 +74,21 @@ test('task update includes tenant id in WHERE clause',async()=>{
  const res=response(); await handler(router,'/tasks/:id','patch')({tenant,params:{id:'33333333-3333-4333-8333-333333333333'},body:{status:'done'}},res,e=>{throw e;});
  assert.equal(res.statusCode,200); assert.match(call.sql,/WHERE id = \$2 AND company_id = \$3/); assert.equal(call.args.at(-1),'company-alpha');
 });
+
+test('tenant inventory rows include the low-stock field consumed by the UI', async () => {
+  let sqlText = '';
+  const router = createRouter(poolWith(async sql => { sqlText = sql; return { rows: [] }; }, () => {}));
+  const res = response();
+  await handler(router, '/inventory', 'get')({ tenant }, res, error => { throw error; });
+  assert.match(sqlText, /quantity <= min_quantity/);
+  assert.match(sqlText, /AS "lowStock"/);
+});
+
+test('tenant task rows expose staff name fields consumed by the UI', async () => {
+  let sqlText = '';
+  const router = createRouter(poolWith(async sql => { sqlText = sql; return { rows: [] }; }, () => {}));
+  const res = response();
+  await handler(router, '/tasks', 'get')({ tenant }, res, error => { throw error; });
+  assert.match(sqlText, /AS "staffFirstName"/);
+  assert.match(sqlText, /AS "staffLastName"/);
+});
