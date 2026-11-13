@@ -19,6 +19,17 @@
 <div class="field"><label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password"></div>
 </div>
 <div class="row form-actions"><button class="btn gold" id="login">Accedi</button><button class="btn alt" id="show-bootstrap" type="button">Primo accesso amministratore</button></div>
+<button class="btn alt hidden" id="show-invite-register" type="button">Non hai un account? Registrati con invito</button>
+<div id="invite-register-panel" class="panel hidden">
+<h2>Crea il tuo account aziendale</h2>
+<p class="hint">La registrazione usa l’indirizzo email al quale hai ricevuto questo invito. Dopo la creazione dovrai verificarlo prima di entrare nell’azienda.</p>
+<div class="grid">
+<div class="field"><label for="invite-register-name">Nome e cognome</label><input id="invite-register-name" required maxlength="160"></div>
+<div class="field"><label for="invite-register-user">Username</label><input id="invite-register-user" required minlength="3" maxlength="60" autocomplete="username"></div>
+<div class="field"><label for="invite-register-password">Password (almeno 12 caratteri)</label><input id="invite-register-password" type="password" required minlength="12" maxlength="200" autocomplete="new-password"></div>
+</div>
+<button class="btn gold" id="invite-register-create" type="button">Crea account e continua</button>
+</div>
 <div id="bootstrap-panel" class="panel hidden">
 <h2>Crea il primo amministratore</h2>
 <div class="grid">
@@ -32,7 +43,8 @@
 <div id="mfa-login-panel" class="panel hidden"><h2>Verifica in due passaggi</h2><p class="hint">Apri la tua app Authenticator e inserisci il codice a 6 cifre. Puoi usare anche un codice di recupero.</p><div class="field"><label for="mfa-login-code">Codice di verifica</label><input id="mfa-login-code" inputmode="numeric" autocomplete="one-time-code"></div><div class="form-actions"><button class="btn gold" id="mfa-login-verify" type="button">Verifica e accedi</button></div></div>
 <div id="message" class="msg hidden" role="status"></div>
 </section>
-<section id="app" class="hidden">\n<div id="tenant-context-panel" class="company-context hidden"></div>
+<section id="app" class="hidden">
+<div id="tenant-context-panel" class="company-context hidden"></div>
 <div class="stats" id="stats"></div>
 <div class="overview" id="overview"></div>
 <nav class="tabs" id="tabs"></nav>
@@ -344,6 +356,9 @@ async function acceptPendingInvitation(){
 async function enterApp(){ try{const identity=await authRequest('/me');currentUser={...currentUser,...identity.data};}catch(_e){} $('connection').classList.add('hidden');$('app').classList.remove('hidden');if(currentUser.role==='admin'&&!currentUser.mfaEnabled){showLegacyApp();active='security';renderTabs();renderModule();return;}if(invitationTokenPending&&!(await acceptPendingInvitation()))return;if(await initializeTenantExperience())return;showLegacyApp();renderTabs();renderModule();if(['admin','manager'].includes(currentUser.role))await loadDashboard();}
 $('login').onclick=async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/login',{method:'POST',body:JSON.stringify({username:$('login-user').value,password:$('login-password').value})});if(r.mfaRequired){$('mfa-login-panel').classList.remove('hidden');$('mfa-login-code').focus();return;}currentUser=r.data;await enterApp();}catch(e){showMessage('Accesso non riuscito: '+e.message);}};
 $('mfa-login-verify').onclick=async()=>{try{const r=await authRequest('/mfa/verify-login',{method:'POST',body:JSON.stringify({code:$('mfa-login-code').value.trim()})});currentUser=r.data;$('mfa-login-panel').classList.add('hidden');$('mfa-login-code').value='';await enterApp();}catch(e){showMessage('Verifica non riuscita: '+e.message);}};
+if(invitationTokenPending)$('show-invite-register').classList.remove('hidden');
+$('show-invite-register').onclick=()=> $('invite-register-panel').classList.remove('hidden');
+$('invite-register-create').onclick=async()=>{const b=$('invite-register-create');b.disabled=true;try{const result=await authRequest('/invitation/register',{method:'POST',body:JSON.stringify({token:invitationTokenPending,displayName:$('invite-register-name').value.trim(),username:$('invite-register-user').value.trim(),password:$('invite-register-password').value})});currentUser=result.data;$('invite-register-panel').classList.add('hidden');$('invite-register-password').value='';showMessage(result.message||'Account creato. Verifica la tua email.',true);await enterApp();}catch(err){showMessage('Registrazione non riuscita: '+err.message);}finally{b.disabled=false;}};
 $('show-bootstrap').onclick=()=> $('bootstrap-panel').classList.remove('hidden');
 $('hide-bootstrap').onclick=()=> $('bootstrap-panel').classList.add('hidden');
 $('bootstrap-create').onclick=async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/bootstrap',{method:'POST',body:JSON.stringify({token:$('bootstrap-token').value,username:$('bootstrap-user').value,displayName:$('bootstrap-name').value,password:$('bootstrap-password').value})});showMessage(r.message,true);$('login-user').value=$('bootstrap-user').value;$('login-password').value=$('bootstrap-password').value;$('bootstrap-panel').classList.add('hidden');$('bootstrap-token').value='';$('bootstrap-password').value='';}catch(e){showMessage('Creazione non riuscita: '+e.message);}};
