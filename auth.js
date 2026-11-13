@@ -528,6 +528,73 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
     } catch (e) { next(e); }
   });
 
+  router.post('/password/change', authenticate, async (req, res, next) => {
+    if (!req.user?.id) return res.status(403).json({ error: 'Account nominativo richiesto.' });
+    const parsed = z.object({
+      currentPassword: z.string().min(1).max(200),
+      newPassword: z.string().min(12).max(200),
+      mfaCode: z.string().trim().min(6).max(32).optional()
+    }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Dati non validi. La nuova password deve avere almeno 12 caratteri.' });
+    const sessionToken = req.cookies?.[SESSION_COOKIE];
+    if (typeof sessionToken !== 'string' || sessionToken.length < 32) return res.status(401).json({ error: 'Sessione non valida. Accedi di nuovo.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const account = await client.query(
+        'SELECT id, username, password_hash, active, totp_enabled_at, totp_secret_enc, recovery_codes_hashes FROM app_users WHERE id=$1 FOR UPDATE',
+        [req.user.id]
+      );
+      if (!account.rowCount || !account.rows[0].active) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Account non attivo.' });
+      }
+      const user = account.rows[0];
+      if (!(await verifyPassword(parsed.data.currentPassword, user.password_hash))) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Password attuale non corretta.' });
+      }
+      let usedRecoveryHash = null;
+      if (user.totp_enabled_at) {
+        if (!parsed.data.mfaCode) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'Conferma anche con il codice Authenticator o un codice di recupero.' });
+        }
+        let validMfa = false;
+        try { validMfa = verifyTotp(decryptTotpSecret(user.totp_secret_enc), parsed.data.mfaCode); } catch (_e) {}
+        if (!validMfa) {
+          const candidate = parsed.data.mfaCode.replace(/\\s/g, '').toUpperCase();
+          const candidateHash = tokenHash(candidate);
+          if ((user.recovery_codes_hashes || []).includes(candidateHash)) { validMfa = true; usedRecoveryHash = candidateHash; }
+        }
+        if (!validMfa) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'Codice Authenticator o di recupero non valido.' });
+        }
+      }
+      const newHash = await hashPassword(parsed.data.newPassword);
+      if (usedRecoveryHash) {
+        const consumed = await client.query(
+          'UPDATE app_users SET recovery_codes_hashes=array_remove(recovery_codes_hashes,$1) WHERE id=$2 AND $1=ANY(recovery_codes_hashes) RETURNING id',
+          [usedRecoveryHash, req.user.id]
+        );
+        if (!consumed.rowCount) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'Codice di recupero già utilizzato. Riprova con Authenticator.' });
+        }
+      }
+      await client.query('UPDATE app_users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [newHash, req.user.id]);
+      await client.query('DELETE FROM app_sessions WHERE user_id=$1 AND token_hash<>$2', [req.user.id, tokenHash(sessionToken)]);
+      await client.query('DELETE FROM app_mfa_challenges WHERE user_id=$1', [req.user.id]);
+      await client.query('COMMIT');
+      await audit(req.user, req, 'auth.password.changed', 'user', req.user.id);
+      return res.json({ message: 'Password aggiornata. Le altre sessioni sono state chiuse.' });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_e) {}
+      return next(error);
+    } finally { client.release(); }
+  });
+
   router.post('/logout', authenticate, async (req, res, next) => {
     try {
       const token = req.cookies?.[SESSION_COOKIE];
