@@ -48,6 +48,12 @@ module.exports = function createTenantContext(pool, tokenHash, cookieName = 'fs_
         });
       }
 
+      // Company administrators must have MFA enabled even when their global
+      // account role is not admin. Tenant privileges are independently scoped.
+      if (result.rows[0].role === 'admin' && !req.user.mfaEnabled) {
+        return res.status(403).json({ error: 'Per proteggere l’azienda, attiva la verifica in due passaggi prima di operare come amministratore.' });
+      }
+
       // Tenant identity and role are sourced exclusively from verified DB rows.
       req.tenant = Object.freeze({
         membershipId: result.rows[0].membershipId,
