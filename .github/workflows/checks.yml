@@ -1,9 +1,9 @@
 name: Funeral Smart checks
 on:
   push:
-    branches: [main, "feature/**", "fix/**"]
+    branches: [main, "feature/**", "fix/**", "security/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "fix/**"]
 jobs:
   syntax:
     runs-on: ubuntu-latest
@@ -15,3 +15,60 @@ jobs:
       - run: npm install
       - run: npm run check
       - run: npm test
+
+  multi-tenant-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: funeral_smart_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d funeral_smart_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/funeral_smart_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies without creating a lockfile
+        run: npm install --no-package-lock --ignore-scripts
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Run unit tests
+        run: npm test
+      - name: Build baseline schema on disposable PostgreSQL
+        run: node migrate.js
+      - name: Apply and verify draft tenant migrations
+        run: npm run test:migrations
+      - name: Verify initial company bootstrap and legacy backfill
+        run: npm run test:initial-company-bootstrap
+      - name: Verify two-company data isolation
+        run: npm run test:tenant-isolation
+      - name: Create and restore a custom-format PostgreSQL backup
+        env:
+          PGPASSWORD: postgres
+        run: |
+          docker run --rm --network host --user "$(id -u):$(id -g)" -e PGPASSWORD=postgres -v "$RUNNER_TEMP:/backup" postgres:16 pg_dump --host=127.0.0.1 --port=5432 --username=postgres --dbname=funeral_smart_test --format=custom --no-owner --no-acl --file=/backup/funeral-smart-ci.dump
+          docker run --rm --network host --user "$(id -u):$(id -g)" -v "$RUNNER_TEMP:/backup" postgres:16 pg_restore --list /backup/funeral-smart-ci.dump > "$RUNNER_TEMP/funeral-smart-ci.toc"
+          test -s "$RUNNER_TEMP/funeral-smart-ci.toc"
+          docker run --rm --network host -e PGPASSWORD=postgres postgres:16 createdb --host=127.0.0.1 --port=5432 --username=postgres funeral_smart_restore_test
+          docker run --rm --network host --user "$(id -u):$(id -g)" -e PGPASSWORD=postgres -v "$RUNNER_TEMP:/backup" postgres:16 pg_restore --exit-on-error --no-owner --no-acl --host=127.0.0.1 --port=5432 --username=postgres --dbname=funeral_smart_restore_test /backup/funeral-smart-ci.dump
+          constraint_count="$(docker run --rm --network host -e PGPASSWORD=postgres postgres:16 psql --host=127.0.0.1 --port=5432 --username=postgres --dbname=funeral_smart_restore_test --tuples-only --no-align --command="SELECT COUNT(*) FROM pg_constraint WHERE conname IN ('fk_funeral_cases_company_customer','fk_stock_movements_company_item','fk_stock_movements_company_case','fk_tasks_company_case','fk_tasks_company_staff','fk_invoices_company_case','fk_invoices_company_customer','fk_payments_company_invoice')")"
+          test "$constraint_count" -eq 8
+      - name: Verify bootstrap against restored database
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/funeral_smart_restore_test
+        run: npm run test:initial-company-bootstrap
+      - name: Verify tenant isolation against restored database
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/funeral_smart_restore_test
+        run: npm run test:tenant-isolation

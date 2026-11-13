@@ -26,6 +26,11 @@ function safeEqual(a, b) {
 function tokenHash(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
+function verificationCodeHash(code) {
+  const pepper = process.env.EMAIL_VERIFICATION_PEPPER || '';
+  if (Buffer.byteLength(pepper, 'utf8') < 32) throw new Error('EMAIL_VERIFICATION_PEPPER deve contenere almeno 32 byte.');
+  return crypto.createHmac('sha256', pepper).update(code, 'utf8').digest('hex');
+}
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16);
   const derived = await scrypt(password, salt, 64);
@@ -302,6 +307,9 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
     if (typeof sendVerificationEmail !== 'function') {
       return res.status(503).json({ error: 'Verifica email non disponibile: servizio email non configurato.' });
     }
+    if (Buffer.byteLength(process.env.EMAIL_VERIFICATION_PEPPER || '', 'utf8') < 32) {
+      return res.status(503).json({ error: 'Verifica email non disponibile: configurazione di sicurezza incompleta.' });
+    }
     const parsed = z.object({ email: z.string().trim().email().max(254) }).strict().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Inserisci un indirizzo email valido.' });
     const email = parsed.data.email.toLowerCase();
@@ -339,7 +347,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
       code = String(crypto.randomInt(100000, 1000000));
       const inserted = await client.query(
         'INSERT INTO email_verification_challenges(user_id,email,code_hash,expires_at) VALUES($1,$2,$3,NOW()+INTERVAL \'15 minutes\') RETURNING id',
-        [req.user.id, email, tokenHash(code)]
+        [req.user.id, email, verificationCodeHash(code)]
       );
       challengeId = inserted.rows[0].id;
       await client.query('COMMIT');
@@ -369,6 +377,9 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
     if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account personale.' });
     const parsed = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Inserisci il codice a 6 cifre ricevuto via email.' });
+    if (Buffer.byteLength(process.env.EMAIL_VERIFICATION_PEPPER || '', 'utf8') < 32) {
+      return res.status(503).json({ error: 'Verifica email non disponibile: configurazione di sicurezza incompleta.' });
+    }
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -392,7 +403,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
         await client.query('COMMIT');
         return res.status(429).json({ error: 'Troppi tentativi. Richiedi un nuovo codice.' });
       }
-      if (!safeEqual(challenge.code_hash, tokenHash(parsed.data.code))) {
+      if (!safeEqual(challenge.code_hash, verificationCodeHash(parsed.data.code))) {
         await client.query(
           'UPDATE email_verification_challenges SET attempts=attempts+1 WHERE id=$1',
           [challenge.id]
@@ -526,6 +537,85 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
       res.cookie(SESSION_COOKIE, token, cookieOptions());
       res.json({ data: { id: user.id, username: user.username, displayName: user.displayName, role: user.role, roleLabel: ROLE_LABELS[user.role], mfaEnabled: false } });
     } catch (e) { next(e); }
+  });
+
+  router.post('/password/change', authenticate, async (req, res, next) => {
+    if (!req.user?.id) return res.status(403).json({ error: 'Account nominativo richiesto.' });
+    const parsed = z.object({
+      currentPassword: z.string().min(1).max(200),
+      newPassword: z.string().min(12).max(200),
+      mfaCode: z.string().trim().min(6).max(32).optional()
+    }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Dati non validi. La nuova password deve avere almeno 12 caratteri.' });
+    const sessionToken = req.cookies?.[SESSION_COOKIE];
+    if (typeof sessionToken !== 'string' || sessionToken.length < 32) return res.status(401).json({ error: 'Sessione non valida. Accedi di nuovo.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const activeSession = await client.query(
+        'SELECT id FROM app_sessions WHERE token_hash=$1 AND user_id=$2 AND expires_at>NOW() FOR UPDATE',
+        [tokenHash(sessionToken), req.user.id]
+      );
+      if (!activeSession.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Sessione non valida o scaduta. Accedi di nuovo.' });
+      }
+      const account = await client.query(
+        'SELECT id, username, password_hash, active, totp_enabled_at, totp_secret_enc, recovery_codes_hashes FROM app_users WHERE id=$1 FOR UPDATE',
+        [req.user.id]
+      );
+      if (!account.rowCount || !account.rows[0].active) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Account non attivo.' });
+      }
+      const user = account.rows[0];
+      if (!(await verifyPassword(parsed.data.currentPassword, user.password_hash))) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Password attuale non corretta.' });
+      }
+      if (await verifyPassword(parsed.data.newPassword, user.password_hash)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'La nuova password deve essere diversa da quella attuale.' });
+      }
+      let usedRecoveryHash = null;
+      if (user.totp_enabled_at) {
+        if (!parsed.data.mfaCode) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'Conferma anche con il codice Authenticator o un codice di recupero.' });
+        }
+        let validMfa = false;
+        try { validMfa = verifyTotp(decryptTotpSecret(user.totp_secret_enc), parsed.data.mfaCode); } catch (_e) {}
+        if (!validMfa) {
+          const candidate = parsed.data.mfaCode.replace(/\s/g, '').toUpperCase();
+          const candidateHash = tokenHash(candidate);
+          if ((user.recovery_codes_hashes || []).includes(candidateHash)) { validMfa = true; usedRecoveryHash = candidateHash; }
+        }
+        if (!validMfa) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'Codice Authenticator o di recupero non valido.' });
+        }
+      }
+      const newHash = await hashPassword(parsed.data.newPassword);
+      if (usedRecoveryHash) {
+        const consumed = await client.query(
+          'UPDATE app_users SET recovery_codes_hashes=array_remove(recovery_codes_hashes,$1) WHERE id=$2 AND $1=ANY(recovery_codes_hashes) RETURNING id',
+          [usedRecoveryHash, req.user.id]
+        );
+        if (!consumed.rowCount) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'Codice di recupero già utilizzato. Riprova con Authenticator.' });
+        }
+      }
+      await client.query('UPDATE app_users SET password_hash=$1, updated_at=NOW() WHERE id=$2', [newHash, req.user.id]);
+      await client.query('DELETE FROM app_sessions WHERE user_id=$1 AND token_hash<>$2', [req.user.id, tokenHash(sessionToken)]);
+      await client.query('DELETE FROM app_mfa_challenges WHERE user_id=$1', [req.user.id]);
+      await client.query('COMMIT');
+      await audit(req.user, req, 'auth.password.changed', 'user', req.user.id);
+      return res.json({ message: 'Password aggiornata. Le altre sessioni sono state chiuse.' });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_e) {}
+      return next(error);
+    } finally { client.release(); }
   });
 
   router.post('/logout', authenticate, async (req, res, next) => {

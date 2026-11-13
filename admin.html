@@ -194,7 +194,22 @@ async function renderSecurityModule(host){
   }catch(err){showMessage(err.message);}finally{confirmCode.disabled=false;}};
   emailPanel.append(emailHeading,emailStatus,emailForm,codeForm);
  }
- section.append(heading,intro,panel,emailPanel);host.append(section);
+
+ const passwordPanel=document.createElement('div');passwordPanel.className='panel';
+ const passwordHeading=document.createElement('h2');passwordHeading.textContent='Cambia password';
+ const passwordHint=document.createElement('p');passwordHint.className='hint';passwordHint.textContent=currentUser.mfaEnabled?'Inserisci la password attuale, una nuova password di almeno 12 caratteri e il codice Authenticator o un codice di recupero. Le altre sessioni verranno chiuse.':'Inserisci la password attuale e una nuova password di almeno 12 caratteri. Le altre sessioni verranno chiuse.';
+ const passwordForm=document.createElement('form');passwordForm.className='form-actions';
+ const passwordGrid=document.createElement('div');passwordGrid.className='grid';
+ const passwordFields={};
+ [['currentPassword','Password attuale'],['newPassword','Nuova password'],['confirmPassword','Conferma nuova password']].forEach(([name,label])=>{const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent=label;const input=document.createElement('input');input.type='password';input.required=true;input.maxLength=200;input.autocomplete=name==='currentPassword'?'current-password':'new-password';if(name!=='currentPassword')input.minLength=12;passwordFields[name]=input;l.append(input);wrap.append(l);passwordGrid.append(wrap);});
+ let mfaInput=null;
+ if(currentUser.mfaEnabled){const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent='Codice Authenticator o codice di recupero';mfaInput=document.createElement('input');mfaInput.required=true;mfaInput.maxLength=32;mfaInput.autocomplete='one-time-code';mfaInput.placeholder='Codice a 6 cifre o codice di recupero';l.append(mfaInput);wrap.append(l);passwordGrid.append(wrap);}
+ const changePassword=document.createElement('button');changePassword.className='btn gold';changePassword.type='submit';changePassword.textContent='Aggiorna password';
+ passwordForm.append(passwordGrid,changePassword);
+ passwordForm.onsubmit=async e=>{e.preventDefault();if(passwordFields.newPassword.value!==passwordFields.confirmPassword.value){showMessage('Le due nuove password non coincidono.');return;}changePassword.disabled=true;try{const body={currentPassword:passwordFields.currentPassword.value,newPassword:passwordFields.newPassword.value};if(mfaInput)body.mfaCode=mfaInput.value.trim();const result=await authRequest('/password/change',{method:'POST',body:JSON.stringify(body)});passwordForm.reset();showMessage(result.message||'Password aggiornata.',true);}catch(err){showMessage(err.message);}finally{changePassword.disabled=false;}};
+ passwordPanel.append(passwordHeading,passwordHint,passwordForm);
+
+ section.append(heading,intro,panel,emailPanel,passwordPanel);host.append(section);
 }
 
 async function renderCompanyModule(host){
