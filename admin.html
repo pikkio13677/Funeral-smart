@@ -59,13 +59,13 @@ const bilingualLabels={
  Sepoltura:'Sepoltura / Burial',Cremazione:'Cremazione / Cremation','Rimpatrio internazionale':'Rimpatrio internazionale / International repatriation',Altro:'Altro / Other'
 };
 function displayValue(value){const v=safe(value);return bilingualLabels[v]||v;}
-let active='cases',api='https://funeral-smart-api.onrender.com',currentUser=null,tenantMode=false,tenantActive=false,tenantRole=null,tenantCompany=null;
+let active='cases',api='https://funeral-smart-api.onrender.com',currentUser=null,tenantMode=false,tenantActive=false,tenantRole=null,tenantCompany=null,invitationTokenPending=new URLSearchParams(window.location.search).get('token'),invitationRestricted=false;
 function showMessage(t,ok=false){$('message').textContent=t;$('message').className='msg'+(ok?' ok':'');}
 function headers(){return {'Content-Type':'application/json'};}
 async function request(path,options={}){if(tenantActive){let tenantPath=path;if(tenantPath.startsWith('/audit'))tenantPath=tenantPath.replace('/audit','/company/activity');tenantPath=tenantPath.replace(/^(\/tasks\/[^/?]+)\/status(?=\?|$)/,'$1');return tenantRequest(tenantPath,options);}const r=await fetch(api+'/api/v1/admin'+path,{credentials:'include',...options,headers:{...headers(),...(options.headers||{})}});const data=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(data.error||'Errore API');return data;}
 async function authRequest(path,options={}){const r=await fetch(api+'/api/v1/auth'+path,{credentials:'include',...options,headers:{...headers(),...(options.headers||{})}});const data=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(data.error||'Errore API');return data;}
 function safe(v){return v===null||v===undefined?'':String(v);}
-function allowedTabs(){const r=tenantActive?tenantRole:currentUser?.role;if(r==='admin'&&!currentUser.mfaEnabled)return ['security'];if(r==='admin'||r==='manager')return Object.keys(definitions).concat(r==='admin'?['users','security','audit']:['security']);if(r==='operator')return ['cases','customers','tasks','security'];if(r==='warehouse')return ['inventory','security'];if(r==='accounting')return ['invoices','security'];return[];}
+function allowedTabs(){const r=tenantActive?tenantRole:currentUser?.role;if(invitationRestricted)return ['security'];if(r==='admin'&&!currentUser.mfaEnabled)return ['security'];if(r==='admin'||r==='manager')return Object.keys(definitions).concat(r==='admin'?['users','security','audit']:['security']);if(r==='operator')return ['cases','customers','tasks','security'];if(r==='warehouse')return ['inventory','security'];if(r==='accounting')return ['invoices','security'];return[];}
 function renderTabs(){const nav=$('tabs');nav.replaceChildren();const ids=allowedTabs();if(!ids.includes(active))active=ids[0]||'cases';ids.forEach(id=>{const b=document.createElement('button');b.className='tab'+(id===active?' active':'');b.textContent=id==='users'?'Utenti':id==='security'?'Sicurezza MFA':id==='audit'?'Registro attività':definitions[id].label;b.onclick=()=>{active=id;renderTabs();renderModule();};nav.append(b);});}
 function fieldNode(f){const [name,label,type,extra]=f;const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent=label;const isSelect=type==='select'||type==='reference';const el=type==='textarea'?document.createElement('textarea'):isSelect?document.createElement('select'):document.createElement('input');if(type==='select'){(extra||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=displayValue(v);el.append(o);});}else if(type==='reference'){const o=document.createElement('option');o.value='';o.textContent='Nessuna selezione / None';el.append(o);el.dataset.reference=JSON.stringify(extra);}else el.type=type==='datetime-local'?'datetime-local':type;el.name=name;if(extra===true)el.required=true;if(type==='number'){el.step='0.01';el.min='0';}l.htmlFor='f-'+name;el.id='f-'+name;wrap.append(l,el);return wrap;}
 async function populateReferences(form,fields){for(const f of fields.filter(x=>x[2]==='reference')){const el=form.elements.namedItem(f[0]);if(!el)continue;try{const cfg=f[3],result=await request('/'+cfg.endpoint);(result.data||[]).forEach(item=>{const o=document.createElement('option');o.value=item.id;o.textContent=cfg.label.map(k=>safe(item[k])).filter(Boolean).join(' · ');el.append(o);});}catch(e){const o=document.createElement('option');o.value='';o.textContent='Elenco non disponibile / List unavailable';el.append(o);}}}
@@ -164,7 +164,7 @@ async function renderSecurityModule(host){
   codeForm.onsubmit=async e=>{e.preventDefault();confirmCode.disabled=true;try{
     const result=await authRequest('/email/verification/confirm',{method:'POST',body:JSON.stringify({code:codeInput.value.trim()})});
     currentUser.email=result.data.email;currentUser.emailVerifiedAt=result.data.emailVerifiedAt;
-    showMessage(result.message||'Email verificata.',true);renderSecurityModule(host);
+    showMessage(result.message||'Email verificata.',true);if(invitationTokenPending){await enterApp();}else renderSecurityModule(host);
   }catch(err){showMessage(err.message);}finally{confirmCode.disabled=false;}};
   emailPanel.append(emailHeading,emailStatus,emailForm,codeForm);
  }
@@ -322,7 +322,26 @@ async function refreshTenantMembers(membersBox,invitesBox){
   invitesBox.replaceChildren();const ih=document.createElement('h3');ih.textContent='Inviti inviati';invitesBox.append(ih);const ir=invites.data||[];if(!ir.length){invitesBox.append(document.createTextNode('Nessun invito registrato.'));}else{const table=document.createElement('table'),head=document.createElement('tr');['Email','Ruolo','Stato','Scadenza','Azione'].forEach(x=>{const th=document.createElement('th');th.textContent=x;head.append(th);});const thead=document.createElement('thead');thead.append(head);table.append(thead);const body=document.createElement('tbody');ir.forEach(inv=>{const tr=document.createElement('tr');[inv.email,inv.role,inv.status,inv.expiresAt?new Date(inv.expiresAt).toLocaleString('it-IT'):''].forEach(v=>{const td=document.createElement('td');td.textContent=safe(v);tr.append(td);});const td=document.createElement('td');if(inv.status==='pending'){const revoke=document.createElement('button');revoke.className='btn alt';revoke.textContent='Revoca';revoke.onclick=async()=>{try{await tenantRequest('/company/invitations/'+encodeURIComponent(inv.id)+'/revoke',{method:'POST'});await refreshTenantMembers(membersBox,invitesBox);}catch(err){showMessage(err.message);}};td.append(revoke);}tr.append(td);body.append(tr);});table.append(body);invitesBox.append(table);}
  }catch(err){membersBox.textContent='Errore caricamento membri: '+err.message;invitesBox.textContent='Errore caricamento inviti: '+err.message;}
 }
-async function enterApp(){ try{const identity=await authRequest('/me');currentUser={...currentUser,...identity.data};}catch(_e){} $('connection').classList.add('hidden');$('app').classList.remove('hidden');if(currentUser.role==='admin'&&!currentUser.mfaEnabled){showLegacyApp();active='security';renderTabs();renderModule();return;}if(await initializeTenantExperience())return;showLegacyApp();renderTabs();renderModule();if(['admin','manager'].includes(currentUser.role))await loadDashboard();}
+async function acceptPendingInvitation(){
+ if(!invitationTokenPending)return true;
+ try{
+  const result=await tenantRequest('/company/invitations/accept',{method:'POST',body:JSON.stringify({token:invitationTokenPending})});
+  invitationTokenPending=null;invitationRestricted=false;
+  window.history.replaceState({},document.title,'/admin');
+  showMessage(result.message||'Invito accettato. Seleziona l’azienda per continuare.',true);
+  return true;
+ }catch(error){
+  if(error.status===403&&/email/i.test(error.message)){
+   invitationRestricted=true;showLegacyApp();active='security';renderTabs();renderModule();
+   showMessage('Prima di accettare l’invito, verifica l’indirizzo email esatto al quale è stato inviato.',false);
+   return false;
+  }
+  showTenantPanel('<h2>Invito non accettato</h2><p id="invitation-error" class="hint"></p><p>Controlla che il link sia valido e non scaduto. Se necessario chiedi un nuovo invito all’amministratore.</p>');
+  $('invitation-error').textContent=error.message;
+  return false;
+ }
+}
+async function enterApp(){ try{const identity=await authRequest('/me');currentUser={...currentUser,...identity.data};}catch(_e){} $('connection').classList.add('hidden');$('app').classList.remove('hidden');if(currentUser.role==='admin'&&!currentUser.mfaEnabled){showLegacyApp();active='security';renderTabs();renderModule();return;}if(invitationTokenPending&&!(await acceptPendingInvitation()))return;if(await initializeTenantExperience())return;showLegacyApp();renderTabs();renderModule();if(['admin','manager'].includes(currentUser.role))await loadDashboard();}
 $('login').onclick=async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/login',{method:'POST',body:JSON.stringify({username:$('login-user').value,password:$('login-password').value})});if(r.mfaRequired){$('mfa-login-panel').classList.remove('hidden');$('mfa-login-code').focus();return;}currentUser=r.data;await enterApp();}catch(e){showMessage('Accesso non riuscito: '+e.message);}};
 $('mfa-login-verify').onclick=async()=>{try{const r=await authRequest('/mfa/verify-login',{method:'POST',body:JSON.stringify({code:$('mfa-login-code').value.trim()})});currentUser=r.data;$('mfa-login-panel').classList.add('hidden');$('mfa-login-code').value='';await enterApp();}catch(e){showMessage('Verifica non riuscita: '+e.message);}};
 $('show-bootstrap').onclick=()=> $('bootstrap-panel').classList.remove('hidden');

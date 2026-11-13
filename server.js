@@ -175,6 +175,12 @@ if (tenantFeaturesEnabled) {
 }
 
 // Area gestionale web: disponibile sullo stesso servizio Render all'indirizzo /admin.
+app.get('/invito/accetta', (_req, res) => {
+  // The invitation token is read by the authenticated admin page and submitted
+  // to the server-side acceptance endpoint; it is never accepted from the URL alone.
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  res.sendFile(require('path').join(__dirname, 'admin.html'));
+});
 app.get('/admin', (_req, res) => {
   // La pagina gestionale usa script e stili inline: abilitarli solo su questa pagina.
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
