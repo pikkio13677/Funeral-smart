@@ -53,6 +53,8 @@ jobs:
         run: npm run test:initial-company-bootstrap
       - name: Verify two-company data isolation
         run: npm run test:tenant-isolation
+      - name: Verify offline administrator MFA recovery and rollback
+        run: npm run test:mfa-break-glass
       - name: Create and restore a custom-format PostgreSQL backup
         env:
           PGPASSWORD: postgres
