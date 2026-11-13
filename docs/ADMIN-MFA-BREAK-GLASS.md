@@ -42,7 +42,7 @@ Se una qualsiasi verifica fallisce, interrompere l'operazione e ripristinare il 
 
 - Non è presente alcun endpoint pubblico o self-service per resettare MFA.
 - È stato aggiunto `scripts/reset-admin-mfa.js`: utility CLI offline che apre una transazione, blocca l'account selezionato, accetta soltanto un amministratore attivo, revoca sessioni e challenge, azzera TOTP e codici di recupero e registra l'evento nell'audit log. Se l'audit fallisce, l'intera transazione viene annullata.
-- La CLI richiede identificativo UUID, operatore, ticket, riferimento del backup e nome esatto del database; verifica `current_database()` e richiede una conferma digitata esattamente. Per produzione richiede anche `--production` e `MFA_BREAK_GLASS_PRODUCTION_APPROVED=YES`.
+- La CLI richiede identificativo UUID, operatore, ticket, riferimento del backup e nome esatto del database e ambiente (`test`, `staging` o `production`); verifica `current_database()` e richiede una conferma digitata esattamente. Per produzione richiede anche `--production` e `MFA_BREAK_GLASS_PRODUCTION_APPROVED=YES`.
 - Il tool non viene eseguito automaticamente dal server e non espone alcuna route HTTP. Il test PostgreSQL usa uno schema temporaneo dedicato e verifica reset, isolamento di un altro account e rollback forzato.
 - Non esiste una seconda approvazione interna perché al momento è previsto un solo amministratore.
 - La transazione è ora implementata come CLI offline e coperta da test automatici. Resta non autorizzata l'esecuzione in produzione: prima servono revisione della PR, backup verificato, autorizzazione formale, prova in ambiente temporaneo e conferma esplicita del titolare.
@@ -62,4 +62,4 @@ node scripts/reset-admin-mfa.js \
   --database-name NOME_DATABASE
 ```
 
-Per produzione aggiungere `--production` e impostare `MFA_BREAK_GLASS_PRODUCTION_APPROVED=YES` soltanto dopo l'autorizzazione formale. La CLI chiede una frase di conferma che include ambiente, UUID e database. Il riferimento del backup deve corrispondere a un backup realmente verificato: la CLI non può verificarlo autonomamente.
+Per produzione sostituire `--environment test` con `--environment production`, aggiungere `--production` e impostare `MFA_BREAK_GLASS_PRODUCTION_APPROVED=YES` soltanto dopo l'autorizzazione formale. La CLI chiede una frase di conferma che include ambiente, UUID e database. Il riferimento del backup deve corrispondere a un backup realmente verificato: la CLI non può verificarlo autonomamente.
