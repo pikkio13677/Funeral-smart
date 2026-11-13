@@ -107,7 +107,7 @@ function cookieOptions() {
   return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000 };
 }
 
-module.exports = function createAuth(pool) {
+module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl } = {}) {
   const router = express.Router();
 
   async function audit(user, req, action, resource = null, resourceId = null) {
@@ -276,6 +276,135 @@ module.exports = function createAuth(pool) {
       await audit(req.user, req, 'auth.mfa.enabled');
       res.json({ message: 'Verifica in due passaggi attivata. Conserva i codici di recupero: saranno mostrati una sola volta.', recoveryCodes });
     } catch (e) { next(e); }
+  });
+
+  router.post('/email/verification/request', authenticate, async (req, res, next) => {
+    if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account personale.' });
+    if (typeof sendVerificationEmail !== 'function') {
+      return res.status(503).json({ error: 'Verifica email non disponibile: servizio email non configurato.' });
+    }
+    const parsed = z.object({ email: z.string().trim().email().max(254) }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Inserisci un indirizzo email valido.' });
+    const email = parsed.data.email.toLowerCase();
+    const client = await pool.connect();
+    let challengeId;
+    let code;
+    try {
+      await client.query('BEGIN');
+      const userResult = await client.query(
+        'SELECT id, email, email_verified_at AS "emailVerifiedAt" FROM app_users WHERE id=$1 AND active=TRUE FOR UPDATE',
+        [req.user.id]
+      );
+      if (!userResult.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Account non attivo.' });
+      }
+      const user = userResult.rows[0];
+      if (user.emailVerifiedAt) {
+        await client.query('ROLLBACK');
+        if (user.email === email) return res.json({ message: 'Questo indirizzo email è già verificato.' });
+        return res.status(409).json({ error: 'L’account ha già un indirizzo email verificato. Per modificarlo serve una procedura di recupero.' });
+      }
+      const rate = await client.query(
+        'SELECT COUNT(*)::int AS total FROM email_verification_challenges WHERE user_id=$1 AND created_at>NOW()-INTERVAL \'1 hour\'',
+        [req.user.id]
+      );
+      if (rate.rows[0].total >= 5) {
+        await client.query('ROLLBACK');
+        return res.status(429).json({ error: 'Hai richiesto troppi codici. Riprova più tardi.' });
+      }
+      await client.query(
+        'DELETE FROM email_verification_challenges WHERE user_id=$1 AND consumed_at IS NULL',
+        [req.user.id]
+      );
+      code = String(crypto.randomInt(100000, 1000000));
+      const inserted = await client.query(
+        'INSERT INTO email_verification_challenges(user_id,email,code_hash,expires_at) VALUES($1,$2,$3,NOW()+INTERVAL \'15 minutes\') RETURNING id',
+        [req.user.id, email, tokenHash(code)]
+      );
+      challengeId = inserted.rows[0].id;
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      if (error.code === '23505') return res.status(409).json({ error: 'Indirizzo email già verificato su un altro account.' });
+      return next(error);
+    } finally {
+      client.release();
+    }
+
+    try {
+      await sendVerificationEmail({ to: email, code, expiresInMinutes: 15 });
+      return res.status(202).json({ message: 'Codice inviato. Controlla la posta e inseriscilo entro 15 minuti.' });
+    } catch (_error) {
+      try {
+        await pool.query(
+          'DELETE FROM email_verification_challenges WHERE id=$1 AND consumed_at IS NULL',
+          [challengeId]
+        );
+      } catch (_) {}
+      return res.status(503).json({ error: 'Invio del codice non riuscito. Riprova più tardi.' });
+    }
+  });
+
+  router.post('/email/verification/confirm', authenticate, async (req, res, next) => {
+    if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account personale.' });
+    const parsed = z.object({ code: z.string().trim().regex(/^\\d{6}$/) }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Inserisci il codice a 6 cifre ricevuto via email.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const challengeResult = await client.query(
+        `SELECT id, email, code_hash, attempts
+         FROM email_verification_challenges
+         WHERE user_id=$1 AND consumed_at IS NULL AND expires_at>NOW()
+         ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+        [req.user.id]
+      );
+      if (!challengeResult.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(410).json({ error: 'Codice scaduto o non disponibile. Richiedine uno nuovo.' });
+      }
+      const challenge = challengeResult.rows[0];
+      if (challenge.attempts >= 5) {
+        await client.query(
+          'UPDATE email_verification_challenges SET consumed_at=NOW() WHERE id=$1',
+          [challenge.id]
+        );
+        await client.query('COMMIT');
+        return res.status(429).json({ error: 'Troppi tentativi. Richiedi un nuovo codice.' });
+      }
+      if (!safeEqual(challenge.code_hash, tokenHash(parsed.data.code))) {
+        await client.query(
+          'UPDATE email_verification_challenges SET attempts=attempts+1 WHERE id=$1',
+          [challenge.id]
+        );
+        await client.query('COMMIT');
+        return res.status(400).json({ error: 'Codice non corretto.' });
+      }
+      const updated = await client.query(
+        `UPDATE app_users
+         SET email=$1, email_verified_at=NOW(), updated_at=NOW()
+         WHERE id=$2 AND active=TRUE AND email_verified_at IS NULL
+         RETURNING id, email, email_verified_at AS "emailVerifiedAt"`,
+        [challenge.email, req.user.id]
+      );
+      if (!updated.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Indirizzo email già verificato o account non attivo.' });
+      }
+      await client.query(
+        'UPDATE email_verification_challenges SET consumed_at=NOW() WHERE id=$1',
+        [challenge.id]
+      );
+      await client.query('COMMIT');
+      return res.json({ data: updated.rows[0], message: 'Indirizzo email verificato correttamente.' });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      if (error.code === '23505') return res.status(409).json({ error: 'Questo indirizzo email è già verificato su un altro account.' });
+      return next(error);
+    } finally {
+      client.release();
+    }
   });
 
   router.post('/login', async (req, res, next) => {
