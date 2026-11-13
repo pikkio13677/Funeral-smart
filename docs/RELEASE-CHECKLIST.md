@@ -10,11 +10,27 @@ Stato: preparazione al rilascio, non ancora autorizzato per dati reali.
 - Login nominativo, password, MFA/TOTP, codici di recupero e sessioni sono implementati nei branch di lavoro.
 - I reparti gestionali previsti sono: dashboard, pratiche/funerali, clienti e famiglie, personale, veicoli, magazzino, attività, fatture e pagamenti.
 - Le route tenant-aware, inviti, verifica email e profilo azienda sono implementate nei branch di lavoro e coperte da test automatici.
-- Sulla PR #30 i controlli CI Node e PostgreSQL, inclusi test MFA break-glass, isolamento, backup e restore temporanei, risultano superati.
-- La PR #30 e le PR della catena precedente sono ancora draft/open: i test superati sui branch non significano che il codice sia già in produzione.
+- In una precedente esecuzione della PR #30 erano risultati verdi alcuni controlli CI Node/PostgreSQL; questo non copre le modifiche successive.
+- Sul commit candidato più recente non è ancora disponibile un nuovo run CI verificato; i controlli non sono quindi dichiarati superati.
+- Le PR della catena precedente sono ancora draft/open: nessuna di queste modifiche è in produzione.
 - Le migrazioni multi-tenant 005–009 sono ancora file `.draft.sql` e non fanno parte delle migrazioni automatiche 001–004.
 - `ENABLE_MULTI_TENANT` deve restare disattivato in produzione finché non sono approvati rollout, backup/restore e test end-to-end.
 - I test Resend sono simulati: non dimostrano l'invio di email reali.
+
+
+## Registro verifiche — 13 novembre 2026 (aggiornamento PIKKIO20)
+
+- Branch esaminato: `release/funeral-smart-preflight`.
+- Ultimo commit noto dopo le correzioni di compatibilità email e workflow: `deea693d1f65f043703f6646fe8c57095c2af432`.
+- Correzione `auth.js`: il lookup sessione non seleziona colonne email finché la verifica email non è abilitata; gli endpoint di richiesta/conferma codice restano indisponibili finché il flag non è attivo.
+- Test email aggiornati per coprire invio, conferma, tentativi errati, disabilitazione pre-migrazione e compatibilità dell'autenticazione legacy. I test sono presenti nel repository, ma non è ancora stato confermato un run CI sul commit corrente.
+- Workflow `checks.yml` e `multi-tenant-checks.yml` aggiornati sul branch release per includere il push su `release/funeral-smart-preflight`. Verificata la configurazione nei file; GitHub non ha ancora restituito un run associato al commit.
+- Verificata la presenza di middleware `authorizeTenant` sulle route dei reparti: dashboard, clienti, pratiche, personale, veicoli, magazzino, attività, fatture/pagamenti, profilo azienda, membri, inviti e audit.
+- Verificati i cinque ruoli aziendali ammessi: `admin`, `manager`, `operator`, `warehouse`, `accounting`. `platform_admin` non è un ruolo tenant.
+- Accettazione invito: richiede account autenticato e attivo, token hashato valido/non scaduto, email già verificata e corrispondente, azienda attiva; membership e audit event sono creati nella stessa transazione.
+- Bootstrap iniziale: lock transazionale, richiede admin iniziale con MFA e conferma esplicita della titolarità dei dati legacy; backfill previsto per customers, funeral_cases, staff, vehicles, inventory_items, stock_movements, tasks, invoices e payments.
+- Punto da chiudere: le tabelle `service_types`, `providers`, `provider_services`, `price_lists`, `provider_applications` e `inquiries` non hanno `company_id) né sono nel backfill 005. Prima del rollout va documentato se sono cataloghi globali/lead pubblici o dati aziendali; se aziendali, servono migrazione, backfill e test di isolamento.
+- Migrazioni 005–009 restano bozze e non vanno eseguite su Render. Non sono stati eseguiti merge, deploy o interventi sul database di produzione.
 
 ## Bloccanti prima del rilascio
 
