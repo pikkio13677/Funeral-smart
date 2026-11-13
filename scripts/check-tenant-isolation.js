@@ -190,12 +190,12 @@ async function main() {
     for (const [token,companyId,suffix,data] of [[tokenA,companyA,'A',dataA],[tokenB,companyB,'B',dataB]]) {
       const endpoints = [
         ['/customers',row=>row.firstName==='Cliente'+suffix],
-        ['/cases',row=>row.caseCode==='CASE-SHARED'],
+        ['/cases',row=>row.caseCode==='CASE-'+suffix+'-SHARED'],
         ['/staff',row=>row.firstName==='Operatore'+suffix],
         ['/vehicles',row=>row.makeModel==='Mezzo '+suffix],
         ['/inventory',row=>row.name==='Articolo '+suffix],
         ['/tasks',row=>row.title==='Attività '+suffix],
-        ['/invoices',row=>row.invoiceNumber==='FATT-SHARED']
+        ['/invoices',row=>row.invoiceNumber==='FATT-'+suffix+'-SHARED']
       ];
       for (const [path,match] of endpoints) {
         const result = await call(token,'/tenant'+path);
