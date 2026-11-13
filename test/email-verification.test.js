@@ -112,7 +112,7 @@ test('wrong email verification code increments attempts and never changes the ac
     },
     release() {}
   };
-  const router = createAuth({ connect: async () => client, query: async () => ({ rowCount: 1, rows: [] }) }).router;
+  const router = createAuth({ connect: async () => client, query: async () => ({ rowCount: 1, rows: [] }) }, { emailVerificationEnabled: true }).router;
   const res = response();
   await postHandler(router, '/email/verification/confirm')(
     { user: { id: 'user-1' }, body: { code: '222222' } }, res, error => { throw error; }
@@ -148,4 +148,40 @@ test('Resend verification email sends code and never exposes provider secrets in
     assert.doesNotMatch(error.message, /private detail|test-verification-secret/);
     return true;
   });
+});
+
+test('email verification endpoints stay unavailable until their database migration is enabled', async () => {
+  let connected = false;
+  const router = createAuth({ query: async () => ({}), connect: async () => { connected = true; } }, { emailVerificationEnabled: false }).router;
+  for (const path of ['/email/verification/request', '/email/verification/confirm']) {
+    const res = response();
+    await postHandler(router, path)(
+      { user: { id: 'user-1' }, body: { email: 'user@example.com', code: '123456' } }, res, error => { throw error; }
+    );
+    assert.equal(res.statusCode, 404);
+  }
+  assert.equal(connected, false);
+});
+
+test('legacy authentication query does not require email columns before the staged migration', async () => {
+  const calls = [];
+  const pool = {
+    async query(sql) {
+      calls.push(sql);
+      if (sql.includes('FROM app_sessions s JOIN app_users')) {
+        return { rowCount: 1, rows: [{ id: 'user-1', username: 'admin', displayName: 'Admin', role: 'admin', active: true, email: null, emailVerifiedAt: null, mfaEnabled: true }] };
+      }
+      return { rowCount: 1, rows: [] };
+    }
+  };
+  const auth = createAuth(pool, { emailVerificationEnabled: false });
+  const req = { cookies: { fs_session: 'x'.repeat(40) }, path: '/me' };
+  const res = response();
+  let nextCalled = false;
+  await auth.authenticate(req, res, error => { if (error) throw error; nextCalled = true; });
+  assert.equal(nextCalled, true);
+  assert.equal(req.user.email, null);
+  const lookup = calls.find(sql => sql.includes('FROM app_sessions s JOIN app_users'));
+  assert.match(lookup, /NULL::varchar AS email/);
+  assert.doesNotMatch(lookup, /u\.email|email_verified_at/);
 });
