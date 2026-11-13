@@ -2,7 +2,7 @@
 
 ## Stato e limiti
 
-Audit statico del branch `feat/multi-azienda-foundation`. Nessuna rotta viene montata o modificata in questo documento. Il backend live continua a usare il comportamento precedente. Le migrazioni 005/006 restano bozze e il middleware tenant resta scollegato.
+Le rotte tenant-aware sono state implementate nei router dedicati e `server.js` le monta esclusivamente quando `ENABLE_MULTI_TENANT=true`. Il flag resta disattivato nell'ambiente live; le migrazioni 005–009 sono bozze e non vengono eseguite da `migrate.js`. Il middleware ricava l'azienda dalla membership attiva della sessione. I test CI usano PostgreSQL usa-e-getta e non costituiscono ancora autorizzazione al rilascio: resta obbligatorio un backup/restore verificato su clone e un'approvazione esplicita del rollout.
 
 ## Confini applicativi osservati
 

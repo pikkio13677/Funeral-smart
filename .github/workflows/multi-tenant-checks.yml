@@ -53,3 +53,22 @@ jobs:
         run: npm run test:initial-company-bootstrap
       - name: Verify two-company data isolation on disposable PostgreSQL
         run: npm run test:tenant-isolation
+      - name: Create and restore a custom-format PostgreSQL backup
+        env:
+          PGPASSWORD: postgres
+        run: |
+          docker run --rm --network host --user "$(id -u):$(id -g)" -e PGPASSWORD=postgres -v "$RUNNER_TEMP:/backup" postgres:16 pg_dump --host=127.0.0.1 --port=5432 --username=postgres --dbname=funeral_smart_test --format=custom --no-owner --no-acl --file=/backup/funeral-smart-ci.dump
+          docker run --rm --network host --user "$(id -u):$(id -g)" -v "$RUNNER_TEMP:/backup" postgres:16 pg_restore --list /backup/funeral-smart-ci.dump > "$RUNNER_TEMP/funeral-smart-ci.toc"
+          test -s "$RUNNER_TEMP/funeral-smart-ci.toc"
+          docker run --rm --network host -e PGPASSWORD=postgres postgres:16 createdb --host=127.0.0.1 --port=5432 --username=postgres funeral_smart_restore_test
+          docker run --rm --network host --user "$(id -u):$(id -g)" -e PGPASSWORD=postgres -v "$RUNNER_TEMP:/backup" postgres:16 pg_restore --exit-on-error --no-owner --no-acl --host=127.0.0.1 --port=5432 --username=postgres --dbname=funeral_smart_restore_test /backup/funeral-smart-ci.dump
+          constraint_count="$(docker run --rm --network host -e PGPASSWORD=postgres postgres:16 psql --host=127.0.0.1 --port=5432 --username=postgres --dbname=funeral_smart_restore_test --tuples-only --no-align --command="SELECT COUNT(*) FROM pg_constraint WHERE conname IN ('fk_funeral_cases_company_customer','fk_stock_movements_company_item','fk_stock_movements_company_case','fk_tasks_company_case','fk_tasks_company_staff','fk_invoices_company_case','fk_invoices_company_customer','fk_payments_company_invoice')")"
+          test "$constraint_count" -eq 8
+      - name: Verify bootstrap against restored PostgreSQL database
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/funeral_smart_restore_test
+        run: npm run test:initial-company-bootstrap
+      - name: Verify tenant isolation against restored PostgreSQL database
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/funeral_smart_restore_test
+        run: npm run test:tenant-isolation

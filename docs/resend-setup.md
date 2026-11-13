@@ -7,7 +7,7 @@ Il modulo `resend-email.js` invia email transazionali dal backend tramite l'API 
 Configurare esclusivamente nel servizio backend:
 
 - `RESEND_API_KEY`: chiave API Resend con permesso Sending.
-- `RESEND_FROM_EMAIL`: mittente autorizzato. Per il solo test iniziale può essere `FUNERAL SMART <onboarding@resend.dev>`; in produzione usare un indirizzo appartenente a un dominio verificato in Resend.
+- `RESEND_FROM_EMAIL`: mittente autorizzato. Per il solo test iniziale può essere `FUNERAL SMART <onboarding@resend.dev>`; in produzione è obbligatorio un indirizzo appartenente a un dominio verificato in Resend. Se manca, il backend rifiuta l'invio invece di ricadere sul mittente di prova.
 
 Non inserire mai la chiave in GitHub, nel frontend o in chat.
 
@@ -17,7 +17,7 @@ Il mittente `onboarding@resend.dev` è destinato ai test e può inviare soltanto
 
 ## Stato dell'integrazione
 
-Questo modulo è un adattatore server-side pronto per essere iniettato in `tenant-invitation-routes.js`. La route multi-azienda e le relative migrazioni sono ancora in una pull request separata e in stato draft; il backend di produzione non viene modificato da questa PR. Prima dell'attivazione completa occorre integrare e testare il contesto aziendale, le migrazioni e l'endpoint di accettazione inviti su un database di prova.
+Il backend costruisce gli adattatori Resend e li passa alle route di verifica email e invito. Le route multi-azienda vengono montate soltanto con `ENABLE_MULTI_TENANT=true`, che resta disattivato in produzione finché non sono approvati migrazioni, backup/restore, test di isolamento e piano di rollback. La chiave API resta esclusivamente nelle variabili d'ambiente del servizio backend.
 
 ## Test
 

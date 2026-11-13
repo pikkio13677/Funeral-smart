@@ -8,7 +8,8 @@ const migrationFiles = [
   '005_multi_tenant_foundation.draft.sql',
   '006_session_active_membership.draft.sql',
   '007_audit_invitations.draft.sql',
-  '008_email_verification.draft.sql'
+  '008_email_verification.draft.sql',
+  '009_tenant_composite_foreign_keys.draft.sql'
 ];
 
 async function main() {
@@ -73,6 +74,25 @@ async function main() {
             ['public', table]
           );
       if (!result.rowCount) throw new Error('Expected database object missing: ' + label);
+    }
+
+    const tenantForeignKeys = [
+      ['funeral_cases', 'fk_funeral_cases_company_customer'],
+      ['stock_movements', 'fk_stock_movements_company_item'],
+      ['stock_movements', 'fk_stock_movements_company_case'],
+      ['tasks', 'fk_tasks_company_case'],
+      ['tasks', 'fk_tasks_company_staff'],
+      ['invoices', 'fk_invoices_company_case'],
+      ['invoices', 'fk_invoices_company_customer'],
+      ['payments', 'fk_payments_company_invoice']
+    ];
+    for (const [table, constraint] of tenantForeignKeys) {
+      const result = await client.query(
+        'SELECT convalidated FROM pg_constraint WHERE conrelid = $1::regclass AND conname = $2',
+        [table, constraint]
+      );
+      if (!result.rowCount) throw new Error('Expected tenant foreign key missing: ' + constraint);
+      if (result.rows[0].convalidated) throw new Error('Draft tenant foreign key should remain NOT VALID until backfill review: ' + constraint);
     }
 
     process.stdout.write('All draft tenant migrations applied and expected objects verified on disposable PostgreSQL.\n');

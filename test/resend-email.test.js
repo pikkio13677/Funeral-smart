@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createResendInvitationSender, escapeHtml, validateInvitationUrl } = require('../resend-email');
+const { createResendInvitationSender, createResendVerificationSender, escapeHtml, validateInvitationUrl } = require('../resend-email');
 
 const input = {
   to: 'COLLEGA@example.com',
@@ -64,4 +64,19 @@ test('rejects invalid recipients, links, and expiry dates', async () => {
   await assert.rejects(send({ ...input, to: 'not-an-email' }), /Destinatario/);
   await assert.rejects(send({ ...input, invitationUrl: 'javascript:alert(1)' }), /HTTPS/);
   await assert.rejects(send({ ...input, expiresAt: 'not-a-date' }), /Scadenza/);
+});
+
+test('production requires an explicit verified sender for invitations and verification emails', async () => {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'production';
+  try {
+    const shouldNotFetch = async () => { throw new Error('fetch must not run without a production sender'); };
+    const invitation = createResendInvitationSender({ apiKey: 'test-secret', fetchImpl: shouldNotFetch });
+    const verification = createResendVerificationSender({ apiKey: 'test-secret', fetchImpl: shouldNotFetch });
+    await assert.rejects(invitation(input), /RESEND_FROM_EMAIL/);
+    await assert.rejects(verification({ to: 'user@example.com', code: '123456' }), /RESEND_FROM_EMAIL/);
+  } finally {
+    if (previous === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous;
+  }
 });

@@ -216,6 +216,72 @@ async function main() {
     });
     assert.equal(crossTenantCase.status,400,'tenant A must not create a case linked to tenant B customer');
 
+    // Cross-company IDOR probes: a valid ID from tenant B must not allow
+    // tenant A to mutate records, read payment history, or administer members.
+    const foreignMutations = [
+      ['/tenant/cases/'+dataB.funeralCase+'/status',{method:'PATCH',body:JSON.stringify({status:'completed'})},404],
+      ['/tenant/staff/'+dataB.staff+'/active',{method:'PATCH',body:JSON.stringify({active:false})},404],
+      ['/tenant/vehicles/'+dataB.vehicle+'/status',{method:'PATCH',body:JSON.stringify({status:'maintenance'})},404],
+      ['/tenant/tasks/'+dataB.task,{method:'PATCH',body:JSON.stringify({status:'done'})},404],
+      ['/tenant/inventory/'+dataB.item+'/movements',{method:'POST',body:JSON.stringify({movementType:'out',quantity:1,reason:'IDOR probe'})},404],
+      ['/tenant/invoices/'+dataB.invoice+'/issue',{method:'PATCH'},404],
+      ['/tenant/invoices/'+dataB.invoice+'/payments',{method:'POST',body:JSON.stringify({amount:1,method:'bonifico'})},404],
+      ['/tenant/company/members/'+memberB,{method:'PATCH',body:JSON.stringify({status:'suspended'})},404]
+    ];
+    for (const [path,options,expected] of foreignMutations) {
+      const result = await call(tokenA,path,options);
+      assert.equal(result.status,expected,'tenant A must not mutate tenant B resource: '+path);
+    }
+
+    const foreignPayments = await call(tokenA,'/tenant/invoices/'+dataB.invoice+'/payments');
+    assert.equal(foreignPayments.status,200);
+    assert.equal(foreignPayments.body.data.length,0,'tenant A must not read tenant B payment history');
+
+    const foreignMovements = await call(tokenA,'/tenant/inventory/'+dataB.item+'/movements');
+    assert.equal(foreignMovements.status,200);
+    assert.equal(foreignMovements.body.data.length,0,'tenant A must not read tenant B stock movements');
+
+    const tenantBAfterProbes = await call(tokenB,'/tenant/invoices');
+    assert.equal(tenantBAfterProbes.status,200);
+    assert.equal(tenantBAfterProbes.body.data.length,1);
+    assert.equal(tenantBAfterProbes.body.data[0].status,'issued','failed IDOR probes must leave tenant B invoice unchanged');
+
+    // Defense in depth: composite PostgreSQL foreign keys must reject
+    // cross-company relationships even if a future route forgets its guard.
+    const crossTenantSqlWrites = [
+      ['case -> foreign customer',
+        'INSERT INTO funeral_cases(company_id,case_code,customer_id,deceased_first_name,deceased_last_name,service_type) VALUES($1,$2,$3,$4,$5,$6)',
+        [companyA,'X'+crypto.randomUUID().slice(0,30),dataB.customer,'Test','Cross','Sepoltura']],
+      ['stock movement -> foreign item',
+        "INSERT INTO stock_movements(company_id,item_id,movement_type,quantity) VALUES($1,$2,'out',1)",
+        [companyA,dataB.item]],
+      ['stock movement -> foreign case',
+        "INSERT INTO stock_movements(company_id,item_id,movement_type,quantity,case_id) VALUES($1,$2,'out',1,$3)",
+        [companyA,dataA.item,dataB.funeralCase]],
+      ['task -> foreign case',
+        'INSERT INTO tasks(company_id,title,case_id) VALUES($1,$2,$3)',
+        [companyA,'TASK-CROSS-CASE-'+crypto.randomUUID(),dataB.funeralCase]],
+      ['task -> foreign staff',
+        'INSERT INTO tasks(company_id,title,assigned_to) VALUES($1,$2,$3)',
+        [companyA,'TASK-CROSS-STAFF-'+crypto.randomUUID(),dataB.staff]],
+      ['invoice -> foreign case',
+        "INSERT INTO invoices(company_id,invoice_number,case_id,customer_id,amount,status) VALUES($1,$2,$3,$4,1,'draft')",
+        [companyA,'INV-CROSS-CASE-'+crypto.randomUUID(),dataB.funeralCase,dataA.customer]],
+      ['invoice -> foreign customer',
+        "INSERT INTO invoices(company_id,invoice_number,case_id,customer_id,amount,status) VALUES($1,$2,$3,$4,1,'draft')",
+        [companyA,'INV-CROSS-CUSTOMER-'+crypto.randomUUID(),dataA.funeralCase,dataB.customer]],
+      ['payment -> foreign invoice',
+        "INSERT INTO payments(company_id,invoice_id,amount,method) VALUES($1,$2,1,'bonifico')",
+        [companyA,dataB.invoice]]
+    ];
+    for (const [label,sql,args] of crossTenantSqlWrites) {
+      await assert.rejects(
+        pool.query(sql,args),
+        error => error && error.code === '23503',
+        'PostgreSQL must reject cross-tenant relation: '+label
+      );
+    }
+
     const switchToOtherCompany = await call(tokenA,'/tenant/active-company',{
       method:'POST',
       body:JSON.stringify({companyId:companyB})
