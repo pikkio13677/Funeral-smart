@@ -91,6 +91,7 @@ async function refreshUsersTable(box){
 }
 
 async function renderSecurityModule(host){
+ host.replaceChildren();
  const section=document.createElement('section');section.className='module active';
  const heading=document.createElement('h2');heading.textContent='Sicurezza · Verifica in due passaggi';
  const intro=document.createElement('p');intro.className='hint';intro.textContent='Proteggi l’account con un codice temporaneo generato da un’app Authenticator. Per l’amministratore questa verifica è obbligatoria prima di usare i reparti gestionali.';
