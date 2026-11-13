@@ -1,23 +1,30 @@
-# Email inviti — Resend
+# Email inviti e verifica — Resend
 
-Il modulo `resend-email.js` invia email transazionali dal backend tramite l'API HTTPS di Resend. Non richiede l'SDK e non espone mai la chiave al browser.
+Il backend invia email transazionali tramite l'API HTTPS di Resend. La chiave resta esclusivamente sul server e non viene mai esposta al browser.
 
-## Variabili Render
+## Variabili del servizio Render
 
-Configurare esclusivamente nel servizio backend:
+Il Blueprint dichiara queste variabili come valori da configurare manualmente nel servizio backend:
 
+- `PUBLIC_APP_URL`: URL HTTPS pubblico del servizio che ospita la pagina di accettazione inviti. Per l'attuale configurazione Render: `https://funeral-smart-api.onrender.com` (senza `/admin` o altri percorsi).
 - `RESEND_API_KEY`: chiave API Resend con permesso Sending.
-- `RESEND_FROM_EMAIL`: mittente autorizzato. Per il solo test iniziale può essere `FUNERAL SMART <onboarding@resend.dev>`; in produzione usare un indirizzo appartenente a un dominio verificato in Resend.
+- `RESEND_FROM_EMAIL`: mittente autorizzato in Resend, ad esempio `Funeral Smart <inviti@tuodominio.it>`.
 
-Non inserire mai la chiave in GitHub, nel frontend o in chat.
+Non inserire mai la chiave in GitHub, nel frontend o in chat. Inseriscila direttamente nelle variabili d'ambiente di Render.
 
-## Limite del mittente di prova
+## Dominio e invio reale
 
-Il mittente `onboarding@resend.dev` è destinato ai test e può inviare soltanto all'indirizzo email proprietario dell'account Resend. Non consente di invitare colleghi o clienti. Per invii reali a terzi occorre verificare in Resend un dominio che si possiede e usare un mittente di quel dominio.
+Per inviare inviti a colleghi e clienti, verifica in Resend un dominio che possiedi e completa i record DNS richiesti. Il mittente deve appartenere a quel dominio verificato.
 
-## Stato dell'integrazione
+Il mittente di prova `onboarding@resend.dev` è limitato ai test e non è adatto agli invii reali a terzi.
 
-Questo modulo è un adattatore server-side pronto per essere iniettato in `tenant-invitation-routes.js`. La route multi-azienda e le relative migrazioni sono ancora in una pull request separata e in stato draft; il backend di produzione non viene modificato da questa PR. Prima dell'attivazione completa occorre integrare e testare il contesto aziendale, le migrazioni e l'endpoint di accettazione inviti su un database di prova.
+## Stato e attivazione
+
+- L'adattatore Resend, la richiesta di verifica email e i flussi di invito sono coperti da test simulati.
+- Le nuove route multi-azienda sono protette dal flag `ENABLE_MULTI_TENANT`.
+- Non attivare quel flag finché le PR della catena multi-azienda non sono state approvate, le migrazioni draft non sono state applicate a un database ripristinato e i test end-to-end non sono conclusi.
+- L'aggiunta delle variabili al Blueprint non configura da sola le chiavi, non invia email e non abilita la modalità multi-azienda.
+- Prima dell'attivazione occorre verificare il dominio, impostare le tre variabili su Render e provare inviti e verifica email con destinatari di test autorizzati.
 
 ## Test
 
