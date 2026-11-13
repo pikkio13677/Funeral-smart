@@ -407,6 +407,83 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
     }
   });
 
+  router.post('/invitation/register', async (req, res, next) => {
+    if (process.env.ENABLE_MULTI_TENANT !== 'true') {
+      return res.status(404).json({ error: 'Registrazione tramite invito non disponibile.' });
+    }
+    const parsed = z.object({
+      token: z.string().min(32).max(200),
+      username: z.string().trim().min(3).max(60).regex(/^[a-zA-Z0-9._-]+$/),
+      displayName: z.string().trim().min(2).max(160),
+      password: z.string().min(12).max(200)
+    }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Inserisci username, nome e cognome e una password di almeno 12 caratteri.' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const invitation = await client.query(
+        `SELECT id, email, status, expires_at AS "expiresAt"
+         FROM company_invitations WHERE token_hash = $1 FOR UPDATE`,
+        [tokenHash(parsed.data.token)]
+      );
+      if (!invitation.rowCount || invitation.rows[0].status !== 'pending') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Invito non valido, revocato o già utilizzato.' });
+      }
+      const invite = invitation.rows[0];
+      if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+        await client.query(
+          "UPDATE company_invitations SET status = 'expired' WHERE id = $1 AND status = 'pending'",
+          [invite.id]
+        );
+        await client.query('COMMIT');
+        return res.status(410).json({ error: 'Invito scaduto. Chiedi all’amministratore di inviarne uno nuovo.' });
+      }
+
+      const email = String(invite.email).trim().toLowerCase();
+      // Serialize registrations by normalized email so two invitations cannot
+      // create parallel identities for the same address.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [email]);
+      const existing = await client.query(
+        'SELECT id FROM app_users WHERE lower(email) = $1 OR lower(username) = $2 LIMIT 1',
+        [email, parsed.data.username.toLowerCase()]
+      );
+      if (existing.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Esiste già un account con questa email o username. Accedi con l’account esistente.' });
+      }
+
+      const passwordHash = await hashPassword(parsed.data.password);
+      const created = await client.query(
+        "INSERT INTO app_users(username, display_name, password_hash, role, email) VALUES($1,$2,$3,'operator',$4) RETURNING id, username, display_name AS \"displayName\", role, email",
+        [parsed.data.username.toLowerCase(), parsed.data.displayName, passwordHash, email]
+      );
+      const user = created.rows[0];
+      const sessionToken = crypto.randomBytes(32).toString('base64url');
+      await client.query(
+        "INSERT INTO app_sessions(user_id, token_hash, expires_at) VALUES($1,$2,NOW()+($3 || ' days')::interval)",
+        [user.id, tokenHash(sessionToken), String(SESSION_DAYS)]
+      );
+      await client.query(
+        "INSERT INTO audit_log(user_id, username, action, resource, resource_id) VALUES($1,$2,'auth.invitation.registered','user',$3)",
+        [user.id, user.username, user.id]
+      );
+      await client.query('COMMIT');
+      res.cookie(SESSION_COOKIE, sessionToken, cookieOptions());
+      return res.status(201).json({
+        data: { id: user.id, username: user.username, displayName: user.displayName, role: user.role, email: user.email, mfaEnabled: false },
+        message: 'Account creato. Verifica ora l’indirizzo email indicato nell’invito.'
+      });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      if (error.code === '23505') return res.status(409).json({ error: 'Username o email già utilizzati. Accedi con l’account esistente.' });
+      return next(error);
+    } finally {
+      client.release();
+    }
+  });
+
   router.post('/login', async (req, res, next) => {
     const parsed = z.object({ username: z.string().trim().min(1).max(60), password: z.string().min(1).max(200) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Inserisci username e password.' });
