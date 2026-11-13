@@ -102,10 +102,10 @@ function createResendVerificationSender({
   return async function sendVerificationEmail({ to, code, expiresInMinutes = 15 } = {}) {
     if (!apiKey) throw new Error('RESEND_API_KEY non configurata.');
     if (typeof fetchImpl !== 'function') throw new Error('Fetch non disponibile nel runtime Node.');
-    if (typeof to !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)) {
+    if (typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
       throw new TypeError('Destinatario email non valido.');
     }
-    if (typeof code !== 'string' || !/^\\d{6}$/.test(code)) {
+    if (typeof code !== 'string' || !/^\d{6}$/.test(code)) {
       throw new TypeError('Codice di verifica non valido.');
     }
     if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 1 || expiresInMinutes > 30) {
@@ -118,7 +118,7 @@ function createResendVerificationSender({
       'Il tuo codice è: ' + code,
       'Il codice scade tra ' + expiresInMinutes + ' minuti.',
       'Se non hai richiesto tu questa operazione, ignora il messaggio.'
-    ].join('\\n');
+    ].join('\n');
     const html = '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#202820;max-width:560px;margin:auto">' +
       '<h2>Verifica indirizzo email</h2>' +
       '<p>Inserisci questo codice nell’area gestionale FUNERAL SMART:</p>' +
