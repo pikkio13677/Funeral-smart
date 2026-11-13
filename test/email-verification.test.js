@@ -40,7 +40,7 @@ test('email verification request sends a short-lived code and stores only its di
   };
   const pool = { connect: async () => client, query: async () => ({ rowCount: 1, rows: [] }) };
   let sent;
-  const router = createAuth(pool, { sendVerificationEmail: async value => { sent = value; } }).router;
+  const router = createAuth(pool, { sendVerificationEmail: async value => { sent = value; }, emailVerificationEnabled: true }).router;
   const res = response();
   await postHandler(router, '/email/verification/request')(
     { user: { id: 'user-1' }, body: { email: ' COLLEGA@Example.com ' } }, res, error => { throw error; }
@@ -59,7 +59,7 @@ test('email verification request sends a short-lived code and stores only its di
 
 test('email verification request refuses unconfigured delivery without creating a challenge', async () => {
   let connected = false;
-  const router = createAuth({ query: async () => ({}), connect: async () => { connected = true; } }).router;
+  const router = createAuth({ query: async () => ({}), connect: async () => { connected = true; } }, { emailVerificationEnabled: true }).router;
   const res = response();
   await postHandler(router, '/email/verification/request')(
     { user: { id: 'user-1' }, body: { email: 'user@example.com' } }, res, error => { throw error; }
@@ -86,7 +86,7 @@ test('email verification confirmation updates only the authenticated account and
     },
     release() {}
   };
-  const router = createAuth({ connect: async () => client, query: async () => ({ rowCount: 1, rows: [] }) }).router;
+  const router = createAuth({ connect: async () => client, query: async () => ({ rowCount: 1, rows: [] }) }, { emailVerificationEnabled: true }).router;
   const res = response();
   await postHandler(router, '/email/verification/confirm')(
     { user: { id: 'user-1' }, body: { code } }, res, error => { throw error; }
