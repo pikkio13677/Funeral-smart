@@ -74,7 +74,7 @@ async function main() {
       )).rows[0].id;
       const funeralCase = (await pool.query(
         'INSERT INTO funeral_cases(company_id,case_code,customer_id,deceased_first_name,deceased_last_name,service_type) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',
-        [companyId,'CASE-'+suffix,customer,'Defunto'+suffix,'Cognome'+suffix,'Sepoltura']
+        [companyId,'CASE-SHARED',customer,'Defunto'+suffix,'Cognome'+suffix,'Sepoltura']
       )).rows[0].id;
       const staff = (await pool.query(
         'INSERT INTO staff(company_id,first_name,last_name,role) VALUES($1,$2,$3,$4) RETURNING id',
@@ -86,7 +86,7 @@ async function main() {
       )).rows[0].id;
       const item = (await pool.query(
         'INSERT INTO inventory_items(company_id,sku,name,category,quantity,min_quantity,unit,unit_cost) VALUES($1,$2,$3,$4,5,1,\'pz\',10) RETURNING id',
-        [companyId,'SKU-'+suffix,'Articolo '+suffix,'Materiale']
+        [companyId,'SKU-SHARED','Articolo '+suffix,'Materiale']
       )).rows[0].id;
       const task = (await pool.query(
         'INSERT INTO tasks(company_id,title,case_id,assigned_to) VALUES($1,$2,$3,$4) RETURNING id',
@@ -94,7 +94,7 @@ async function main() {
       )).rows[0].id;
       const invoice = (await pool.query(
         'INSERT INTO invoices(company_id,invoice_number,case_id,customer_id,amount,status) VALUES($1,$2,$3,$4,100,\'issued\') RETURNING id',
-        [companyId,'FATT-'+suffix,funeralCase,customer]
+        [companyId,'FATT-SHARED',funeralCase,customer]
       )).rows[0].id;
       await pool.query(
         'INSERT INTO payments(company_id,invoice_id,amount,method) VALUES($1,$2,20,\'bonifico\')',
@@ -162,12 +162,12 @@ async function main() {
     for (const [token,companyId,suffix,data] of [[tokenA,companyA,'A',dataA],[tokenB,companyB,'B',dataB]]) {
       const endpoints = [
         ['/customers',row=>row.firstName==='Cliente'+suffix],
-        ['/cases',row=>row.caseCode==='CASE-'+suffix],
+        ['/cases',row=>row.caseCode==='CASE-SHARED'],
         ['/staff',row=>row.firstName==='Operatore'+suffix],
         ['/vehicles',row=>row.makeModel==='Mezzo '+suffix],
         ['/inventory',row=>row.name==='Articolo '+suffix],
         ['/tasks',row=>row.title==='Attività '+suffix],
-        ['/invoices',row=>row.invoiceNumber==='FATT-'+suffix]
+        ['/invoices',row=>row.invoiceNumber==='FATT-SHARED']
       ];
       for (const [path,match] of endpoints) {
         const result = await call(token,'/tenant'+path);
