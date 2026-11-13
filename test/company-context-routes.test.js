@@ -239,3 +239,75 @@ test('initial company bootstrap refuses to overwrite an existing tenant and roll
   assert.ok(calls.includes('ROLLBACK'));
   assert.ok(!calls.some(sql => sql.includes('INSERT INTO companies')));
 });
+
+
+test('additional company creation requires MFA before database access', async () => {
+  let connected = false;
+  const router = createCompanyContextRouter({
+    connect: async () => { connected = true; return {}; }
+  }, (_req, _res, next) => next(), token => token);
+  const res = response();
+  await routeHandler(router, '/companies', 'post')({
+    user: { id: 'user-1', mfaEnabled: false },
+    cookies: { fs_session: 'm'.repeat(40) },
+    body: { legalName: 'Impresa Nuova' }
+  }, res, () => {});
+  assert.equal(res.statusCode, 403);
+  assert.equal(connected, false);
+});
+
+test('additional company creation requires an active admin membership in the current session', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, args = []) {
+      calls.push({ sql, args });
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+      if (sql.includes('SELECT s.id AS "sessionId"')) return { rowCount: 1, rows: [{ sessionId: 'session-1', role: 'manager', membershipId: 'membership-1' }] };
+      throw new Error('Unexpected query: ' + sql);
+    },
+    release() {}
+  };
+  const router = createCompanyContextRouter({ connect: async () => client }, (_req, _res, next) => next(), token => 'hash:' + token);
+  const res = response();
+  await routeHandler(router, '/companies', 'post')({
+    user: { id: 'user-1', mfaEnabled: true },
+    cookies: { fs_session: 'n'.repeat(40) },
+    body: { legalName: 'Impresa Nuova' }
+  }, res, () => {});
+  assert.equal(res.statusCode, 403);
+  assert.ok(calls.some(call => call.sql === 'ROLLBACK'));
+  assert.ok(!calls.some(call => call.sql.includes('INSERT INTO companies')));
+});
+
+test('additional company creation creates an isolated company and admin membership without backfilling old records', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, args = []) {
+      calls.push({ sql, args });
+      if (sql === 'BEGIN' || sql === 'COMMIT') return { rowCount: 0, rows: [] };
+      if (sql.includes('SELECT s.id AS "sessionId"')) return { rowCount: 1, rows: [{ sessionId: 'session-1', role: 'admin', membershipId: 'membership-old' }] };
+      if (sql.includes('INSERT INTO companies')) return { rowCount: 1, rows: [{ id: 'company-new', legalName: 'Impresa Nuova', city: 'Torino', province: 'TO' }] };
+      if (sql.includes('INSERT INTO company_memberships')) return { rowCount: 1, rows: [{ id: 'membership-new' }] };
+      if (sql.includes('INSERT INTO audit_log')) return { rowCount: 1, rows: [] };
+      throw new Error('Unexpected query: ' + sql);
+    },
+    release() { calls.push({ released: true }); }
+  };
+  const router = createCompanyContextRouter({ connect: async () => client }, (_req, _res, next) => next(), token => 'hash:' + token);
+  const res = response();
+  await routeHandler(router, '/companies', 'post')({
+    user: { id: 'user-1', username: 'owner', mfaEnabled: true },
+    cookies: { fs_session: 'p'.repeat(40) },
+    body: { legalName: 'Impresa Nuova', city: 'Torino', province: 'TO' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.body.data.id, 'company-new');
+  assert.equal(res.body.data.role, 'admin');
+  assert.equal(res.body.data.membershipId, 'membership-new');
+  assert.match(calls.find(call => call.sql.includes('SELECT s.id AS "sessionId"')).sql, /m.role/);
+  assert.deepEqual(calls.find(call => call.sql.includes('INSERT INTO company_memberships')).args, ['company-new', 'user-1']);
+  assert.ok(calls.some(call => call.sql.includes('INSERT INTO audit_log')));
+  assert.ok(!calls.some(call => /UPDATE (customers|funeral_cases|staff|vehicles|inventory_items|tasks|invoices|payments)/.test(call.sql)));
+  assert.ok(calls.some(call => call.sql === 'COMMIT'));
+  assert.ok(calls.some(call => call.released));
+});
