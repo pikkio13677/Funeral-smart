@@ -18,8 +18,10 @@ function postHandler(router, path) {
   assert.ok(layer, 'missing POST ' + path);
   return layer.route.stack.at(-1).handle;
 }
+process.env.EMAIL_VERIFICATION_PEPPER = 'test-only-email-verification-pepper-32-bytes-minimum';
+
 function digest(value) {
-  return crypto.createHash('sha256').update(value).digest('hex');
+  return crypto.createHmac('sha256', process.env.EMAIL_VERIFICATION_PEPPER).update(value, 'utf8').digest('hex');
 }
 
 test('email verification request sends a short-lived code and stores only its digest', async () => {
