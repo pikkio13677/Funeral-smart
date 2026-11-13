@@ -20,6 +20,8 @@ Stato: preparazione al rilascio, non ancora autorizzato per dati reali.
 
 ## Registro verifiche — 13 novembre 2026 (aggiornamento PIKKIO20)
 
+- CI GitHub Actions sul commit `22acf60b05600474fd0d70006c780e5bdbb3f247`: workflow `Funeral Smart checks` run [43506544309](https://github.com/pikkio13677/Funeral-smart/actions/runs/43506544309) completato con esito `success` (syntax, unit tests, PostgreSQL baseline, migrazioni draft, bootstrap/backfill, isolamento due aziende, MFA recovery/rollback, backup e restore, test su database ripristinato); workflow `Multi-tenant branch checks` run [43506544714](https://github.com/pikkio13677/Funeral-smart/actions/runs/43506544714) completato con esito `success`. Questi esiti riguardano esattamente il commit indicato, non eventuali commit successivi.
+
 - Branch esaminato: `release/funeral-smart-preflight`.
 - Ultimo commit noto dopo le correzioni di compatibilità email e workflow: `deea693d1f65f043703f6646fe8c57095c2af432`.
 - Correzione `auth.js`: il lookup sessione non seleziona colonne email finché la verifica email non è abilitata; gli endpoint di richiesta/conferma codice restano indisponibili finché il flag non è attivo.
