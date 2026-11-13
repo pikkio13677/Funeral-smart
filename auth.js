@@ -586,7 +586,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
         let validMfa = false;
         try { validMfa = verifyTotp(decryptTotpSecret(user.totp_secret_enc), parsed.data.mfaCode); } catch (_e) {}
         if (!validMfa) {
-          const candidate = parsed.data.mfaCode.replace(/\\s/g, '').toUpperCase();
+          const candidate = parsed.data.mfaCode.replace(/\s/g, '').toUpperCase();
           const candidateHash = tokenHash(candidate);
           if ((user.recovery_codes_hashes || []).includes(candidateHash)) { validMfa = true; usedRecoveryHash = candidateHash; }
         }
