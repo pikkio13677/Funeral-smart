@@ -90,3 +90,35 @@ test('forwards database errors to Express error handling', async () => {
   );
   assert.equal(received, expected);
 });
+
+test('requires MFA for tenant administrators regardless of global account role', async () => {
+  const middleware = createTenantContext({
+    query: async () => ({
+      rowCount: 1,
+      rows: [{ membershipId: 'membership-admin', companyId: 'company-1', role: 'admin' }]
+    })
+  }, hashToken);
+  const req = { user: { id: 'user-admin', role: 'operator', mfaEnabled: false }, cookies: { fs_session: 'd'.repeat(40) } };
+  const res = response();
+  let nextCalled = false;
+  await middleware(req, res, () => { nextCalled = true; });
+  assert.equal(res.statusCode, 403);
+  assert.equal(nextCalled, false);
+  assert.equal(req.tenant, undefined);
+  assert.match(res.body.error, /verifica in due passaggi/i);
+});
+
+test('allows tenant administrators after MFA is enabled', async () => {
+  const middleware = createTenantContext({
+    query: async () => ({
+      rowCount: 1,
+      rows: [{ membershipId: 'membership-admin', companyId: 'company-1', role: 'admin' }]
+    })
+  }, hashToken);
+  const req = { user: { id: 'user-admin', role: 'operator', mfaEnabled: true }, cookies: { fs_session: 'e'.repeat(40) } };
+  const res = response();
+  let nextCalled = false;
+  await middleware(req, res, () => { nextCalled = true; });
+  assert.equal(nextCalled, true);
+  assert.equal(req.tenant.role, 'admin');
+});
