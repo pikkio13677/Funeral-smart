@@ -14,5 +14,5 @@ test('admin page inline JavaScript parses successfully', () => {
 
 test('tenant invoice form omits server-managed invoice status', () => {
   const html = fs.readFileSync(require.resolve('../admin.html'), 'utf8');
-  assert.match(html, /if\\(tenantActive&&active==='invoices'\\)delete data\\.status;/);
+  assert.match(html, /if\(tenantActive&&active==='invoices'\)delete data\.status;/);
 });
