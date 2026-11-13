@@ -301,7 +301,24 @@ function openTenantWorkspace(company){
  const label=document.createElement('strong');label.textContent='Azienda attiva: '+company.legalName;
  const change=document.createElement('button');change.className='btn alt';change.type='button';change.textContent='Cambia azienda';
  change.onclick=async()=>{tenantActive=false;await initializeTenantExperience();};
- line.append(label,change);panel.append(line);panel.classList.remove('hidden');
+ line.append(label,change);panel.append(line);
+ if(tenantRole==='admin'){
+  const createButton=document.createElement('button');createButton.className='btn gold';createButton.type='button';createButton.textContent='Crea un’altra azienda';
+  createButton.onclick=()=>{
+   if(panel.querySelector('#tenant-new-company-form'))return;
+   const form=document.createElement('form');form.id='tenant-new-company-form';form.className='panel';
+   const heading=document.createElement('h3');heading.textContent='Nuova azienda indipendente';
+   const grid=document.createElement('div');grid.className='grid';
+   const fields=[['legalName','Ragione sociale *','text',true],['vatNumber','Partita IVA','text'],['address','Indirizzo','text'],['city','Comune','text'],['province','Provincia','text'],['email','Email aziendale','email'],['phone','Telefono','tel']];
+   fields.forEach(([name,title,type,required])=>{const wrap=document.createElement('div');wrap.className='field';const lab=document.createElement('label');lab.textContent=title;const input=document.createElement('input');input.name=name;input.type=type;input.required=Boolean(required);input.maxLength=name==='legalName'?180:name==='address'?500:254;lab.append(input);wrap.append(lab);grid.append(wrap);});
+   const submit=document.createElement('button');submit.className='btn gold';submit.type='submit';submit.textContent='Crea e passa alla nuova azienda';
+   const cancel=document.createElement('button');cancel.className='btn alt';cancel.type='button';cancel.textContent='Annulla';cancel.onclick=()=>form.remove();
+   const actions=document.createElement('div');actions.className='row';actions.append(submit,cancel);form.append(heading,grid,actions);panel.append(form);
+   form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;const data={};new FormData(form).forEach((v,k)=>{data[k]=v.trim();});try{const created=await tenantRequest('/companies',{method:'POST',body:JSON.stringify(data)});const selected=await tenantRequest('/active-company',{method:'POST',body:JSON.stringify({companyId:created.data.id})});openTenantWorkspace(selected.data);showMessage(created.message||'Azienda creata.',true);}catch(err){showMessage('Creazione azienda non riuscita: '+err.message);}finally{submit.disabled=false;}};
+  };
+  panel.append(createButton);
+ }
+ panel.classList.remove('hidden');
  $('stats').classList.remove('hidden');$('overview').classList.remove('hidden');$('tabs').classList.remove('hidden');$('modules').classList.remove('hidden');
  active='cases';renderTabs();renderModule();
  if(tenantRole==='manager'||(tenantRole==='admin'&&currentUser.mfaEnabled))loadDashboard().catch(e=>showMessage('Dashboard non disponibile: '+e.message));
