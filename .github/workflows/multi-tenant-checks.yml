@@ -12,6 +12,7 @@ on:
       - "fix/**"
       - "feature/**"
       - "security/**"
+      - "release/funeral-smart-preflight"
 
 permissions:
   contents: read
