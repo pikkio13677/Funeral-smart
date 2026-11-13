@@ -128,6 +128,7 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl,
   });
 
   if (typeof tenantContext === 'function') router.use(tenantContext);
+  router.use(require('./tenant-audit-writer')(pool));
 
   router.use((req, res, next) => {
     if (!req.tenant?.companyId || !req.tenant?.membershipId || !req.tenant?.role) {
