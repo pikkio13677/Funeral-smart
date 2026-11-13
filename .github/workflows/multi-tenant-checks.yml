@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - feat/multi-azienda-foundation
+      - "fix/**"
 
 permissions:
   contents: read
