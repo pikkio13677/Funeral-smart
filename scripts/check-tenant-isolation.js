@@ -251,7 +251,7 @@ async function main() {
     const crossTenantSqlWrites = [
       ['case -> foreign customer',
         'INSERT INTO funeral_cases(company_id,case_code,customer_id,deceased_first_name,deceased_last_name,service_type) VALUES($1,$2,$3,$4,$5,$6)',
-        [companyA,'CASE-CROSS-CUSTOMER-'+crypto.randomUUID(),dataB.customer,'Test','Cross','Sepoltura']],
+        [companyA,'X'+crypto.randomUUID().slice(0,30),dataB.customer,'Test','Cross','Sepoltura']],
       ['stock movement -> foreign item',
         "INSERT INTO stock_movements(company_id,item_id,movement_type,quantity) VALUES($1,$2,'out',1)",
         [companyA,dataB.item]],
