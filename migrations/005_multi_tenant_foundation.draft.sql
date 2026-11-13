@@ -3,8 +3,6 @@
 -- Prima dell'esecuzione: backup PostgreSQL verificato, restore su copia e approvazione del piano di backfill.
 -- Questa bozza è volutamente additiva: crea tabelle e colonne nullable, senza assegnare dati esistenti.
 
-BEGIN;
-
 CREATE TABLE IF NOT EXISTS companies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   legal_name VARCHAR(180) NOT NULL,
@@ -64,7 +62,6 @@ CREATE INDEX IF NOT EXISTS idx_tasks_company ON tasks(company_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_company ON invoices(company_id);
 CREATE INDEX IF NOT EXISTS idx_payments_company ON payments(company_id);
 
-COMMIT;
 
 -- PASSI ANCORA NECESSARI PRIMA DI RENDERE company_id NOT NULL:
 -- 1. Creare/identificare l'azienda proprietaria dei dati già presenti.
