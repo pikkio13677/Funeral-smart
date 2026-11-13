@@ -26,6 +26,11 @@ function safeEqual(a, b) {
 function tokenHash(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
+function verificationCodeHash(code) {
+  const pepper = process.env.EMAIL_VERIFICATION_PEPPER || '';
+  if (Buffer.byteLength(pepper, 'utf8') < 32) throw new Error('EMAIL_VERIFICATION_PEPPER deve contenere almeno 32 byte.');
+  return crypto.createHmac('sha256', pepper).update(code, 'utf8').digest('hex');
+}
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16);
   const derived = await scrypt(password, salt, 64);
@@ -302,6 +307,9 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
     if (typeof sendVerificationEmail !== 'function') {
       return res.status(503).json({ error: 'Verifica email non disponibile: servizio email non configurato.' });
     }
+    if (Buffer.byteLength(process.env.EMAIL_VERIFICATION_PEPPER || '', 'utf8') < 32) {
+      return res.status(503).json({ error: 'Verifica email non disponibile: configurazione di sicurezza incompleta.' });
+    }
     const parsed = z.object({ email: z.string().trim().email().max(254) }).strict().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Inserisci un indirizzo email valido.' });
     const email = parsed.data.email.toLowerCase();
@@ -339,7 +347,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
       code = String(crypto.randomInt(100000, 1000000));
       const inserted = await client.query(
         'INSERT INTO email_verification_challenges(user_id,email,code_hash,expires_at) VALUES($1,$2,$3,NOW()+INTERVAL \'15 minutes\') RETURNING id',
-        [req.user.id, email, tokenHash(code)]
+        [req.user.id, email, verificationCodeHash(code)]
       );
       challengeId = inserted.rows[0].id;
       await client.query('COMMIT');
@@ -369,6 +377,9 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
     if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account personale.' });
     const parsed = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Inserisci il codice a 6 cifre ricevuto via email.' });
+    if (Buffer.byteLength(process.env.EMAIL_VERIFICATION_PEPPER || '', 'utf8') < 32) {
+      return res.status(503).json({ error: 'Verifica email non disponibile: configurazione di sicurezza incompleta.' });
+    }
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -392,7 +403,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, publicAppUrl
         await client.query('COMMIT');
         return res.status(429).json({ error: 'Troppi tentativi. Richiedi un nuovo codice.' });
       }
-      if (!safeEqual(challenge.code_hash, tokenHash(parsed.data.code))) {
+      if (!safeEqual(challenge.code_hash, verificationCodeHash(parsed.data.code))) {
         await client.query(
           'UPDATE email_verification_challenges SET attempts=attempts+1 WHERE id=$1',
           [challenge.id]
