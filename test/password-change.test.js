@@ -35,7 +35,13 @@ function makePool(account) {
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
       if (sql.includes('FROM app_sessions WHERE token_hash=$1')) return { rowCount: 1, rows: [{ id: 'session-1' }] };
       if (sql.includes('FROM app_users WHERE id=$1 FOR UPDATE')) return { rowCount: 1, rows: [account] };
-      if (sql.startsWith('UPDATE app_users SET recovery_codes_hashes=')) {\n        const index = account.recovery_codes_hashes.indexOf(args[0]);\n        if (index < 0) return { rowCount: 0, rows: [] };\n        account.recovery_codes_hashes.splice(index, 1);\n        return { rowCount: 1, rows: [{ id: account.id }] };\n      }\n      if (sql.startsWith('UPDATE app_users SET password_hash=')) return { rowCount: 1, rows: [] };
+      if (sql.startsWith('UPDATE app_users SET recovery_codes_hashes=')) {
+        const index = account.recovery_codes_hashes.indexOf(args[0]);
+        if (index < 0) return { rowCount: 0, rows: [] };
+        account.recovery_codes_hashes.splice(index, 1);
+        return { rowCount: 1, rows: [{ id: account.id }] };
+      }
+      if (sql.startsWith('UPDATE app_users SET password_hash=')) return { rowCount: 1, rows: [] };
       if (sql.startsWith('DELETE FROM app_sessions')) return { rowCount: 2, rows: [] };
       if (sql.startsWith('DELETE FROM app_mfa_challenges')) return { rowCount: 1, rows: [] };
       throw new Error('Unexpected SQL: ' + sql);
