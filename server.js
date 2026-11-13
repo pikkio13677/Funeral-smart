@@ -51,9 +51,35 @@ const inquirySchema = z.object({
   privacyConsent: z.literal(true)
 }).refine(v => Boolean(v.contactEmail || v.contactPhone), { message: 'Inserire almeno un recapito per poter essere ricontattati.' });
 
-const { createResendVerificationSender } = require('./resend-email');
+const { createResendInvitationSender, createResendVerificationSender } = require('./resend-email');
 const auth = require('./auth')(pool, { sendVerificationEmail: createResendVerificationSender() });
 app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
+
+// Multi-tenant routes stay dormant until the staged migrations, legacy-data
+// backfill, new UI, and production rollback plan have been approved.
+const tenantFeaturesEnabled = process.env.ENABLE_MULTI_TENANT === 'true';
+if (tenantFeaturesEnabled) {
+  const tenantContext = require('./tenant-context')(pool, auth.tokenHash);
+  app.use('/api/v1/tenant', require('./company-context-routes')(pool, auth.authenticate, auth.tokenHash));
+
+  const tenantInvitations = require('./tenant-invitation-routes')({
+    pool,
+    sendInvitationEmail: createResendInvitationSender(),
+    publicAppUrl: process.env.PUBLIC_APP_URL,
+    tenantContext
+  });
+  app.use('/api/v1/tenant', auth.authenticate, tenantInvitations);
+
+  app.use('/api/v1/tenant', auth.authenticate, tenantContext,
+    require('./tenant-customers-cases-routes')(pool),
+    require('./tenant-staff-vehicles-routes')(pool),
+    require('./tenant-inventory-tasks-routes')(pool),
+    require('./tenant-invoices-payments-routes')(pool),
+    require('./tenant-dashboard-routes')(pool),
+    require('./tenant-company-admin-routes')(pool),
+    require('./tenant-audit-routes')(pool)
+  );
+}
 
 app.get('/api/health', async (_req, res) => {
   try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'funeral-smart-api', database: 'connected' }); }
@@ -139,8 +165,14 @@ app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize
   catch (e) { next(e); }
 });
 
-// Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
-app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
+// Non lasciare attive le vecchie scritture globali quando il tenant API viene abilitato.
+if (tenantFeaturesEnabled) {
+  app.use('/api/v1/admin', (_req, res) => res.status(410).json({
+    error: 'Area gestionale legacy disabilitata: usa l’area aziendale.'
+  }));
+} else {
+  app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
+}
 
 // Area gestionale web: disponibile sullo stesso servizio Render all'indirizzo /admin.
 app.get('/admin', (_req, res) => {
