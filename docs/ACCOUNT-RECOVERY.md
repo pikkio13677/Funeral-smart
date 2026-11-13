@@ -15,14 +15,11 @@ L'aggiornamento della password, il consumo dell'eventuale codice di recupero, la
 
 ## Perdita sia dell'Authenticator sia di tutti i codici
 
-Non esiste un bypass self-service e non si deve disattivare MFA tramite una modifica diretta del database o una route non verificata. Prima del lancio va approvata una procedura di recupero amministrativo con:
-1. verifica dell'identità tramite un canale aziendale già registrato e indipendente dalla sessione persa;
-2. approvazione documentata da un secondo amministratore o responsabile autorizzato;
-3. revoca di tutte le sessioni e delle challenge pendenti;
-4. reset MFA controllato, nuova registrazione TOTP e generazione di nuovi codici;
-5. registrazione dell'operazione nell'audit log.
+Non esiste un bypass self-service e non si deve disattivare MFA tramite una route non verificata. Poiché l'installazione può avere un solo amministratore applicativo, non si presume l'esistenza di un secondo approvatore interno.
 
-Questa procedura amministrativa non è ancora implementata come funzione self-service o endpoint: finché non viene realizzata e testata, il recupero dopo la perdita di tutti i fattori deve essere gestito manualmente dal supporto autorizzato, senza scorciatoie sul database di produzione.
+La procedura di emergenza proposta è documentata in [ADMIN-MFA-BREAK-GLASS.md](./ADMIN-MFA-BREAK-GLASS.md). Richiede verifica indipendente dell'identità, controllo dell'account proprietario Render, backup verificato, transazione limitata al singolo account, revoca delle sessioni e challenge, reset dei fattori MFA e audit dell'intervento.
+
+**Stato:** la procedura è documentata ma non ancora operativa. La transazione deve essere implementata, revisionata e provata su un database temporaneo, compreso il rollback, prima di qualsiasi uso in produzione. Non eseguire query improvvisate, non creare un amministratore temporaneo e non modificare il database live per aggirare MFA.
 
 ## Segreti di verifica email
 
