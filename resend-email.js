@@ -26,11 +26,12 @@ function validateInvitationUrl(value) {
 
 function createResendInvitationSender({
   apiKey = process.env.RESEND_API_KEY,
-  from = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM,
+  from = process.env.RESEND_FROM_EMAIL || (process.env.NODE_ENV === 'production' ? '' : DEFAULT_FROM),
   fetchImpl = globalThis.fetch
 } = {}) {
   return async function sendInvitationEmail({ to, companyName, invitationUrl, expiresAt } = {}) {
     if (!apiKey) throw new Error('RESEND_API_KEY non configurata.');
+    if (!from) throw new Error('RESEND_FROM_EMAIL non configurata: imposta un mittente su un dominio verificato.');
     if (typeof fetchImpl !== 'function') throw new Error('Fetch non disponibile nel runtime Node.');
     if (typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
       throw new TypeError('Destinatario email non valido.');
@@ -96,11 +97,12 @@ function createResendInvitationSender({
 
 function createResendVerificationSender({
   apiKey = process.env.RESEND_API_KEY,
-  from = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM,
+  from = process.env.RESEND_FROM_EMAIL || (process.env.NODE_ENV === 'production' ? '' : DEFAULT_FROM),
   fetchImpl = globalThis.fetch
 } = {}) {
   return async function sendVerificationEmail({ to, code, expiresInMinutes = 15 } = {}) {
     if (!apiKey) throw new Error('RESEND_API_KEY non configurata.');
+    if (!from) throw new Error('RESEND_FROM_EMAIL non configurata: imposta un mittente su un dominio verificato.');
     if (typeof fetchImpl !== 'function') throw new Error('Fetch non disponibile nel runtime Node.');
     if (typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
       throw new TypeError('Destinatario email non valido.');
