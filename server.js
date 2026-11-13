@@ -12,6 +12,9 @@ const port = Number(process.env.PORT || 10000);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined });
 
 app.disable('x-powered-by');
+// Render terminates TLS at its proxy; trust one proxy hop so IP-based
+// throttling uses the originating client address rather than the proxy.
+app.set('trust proxy', 1);
 app.use(helmet());
 const allowedOrigins = [...new Set(['https://pikkio13677.github.io', 'https://funeral-smart-api.onrender.com', ...(process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean)])];
 app.use(cors({ credentials: true, origin(origin, cb) {
@@ -128,7 +131,15 @@ app.get('/api/v1/price-lists', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/api/v1/inquiries', async (req, res, next) => {
+const publicSubmissionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Troppe richieste inviate. Riprova più tardi.' }
+});
+
+app.post('/api/v1/inquiries', publicSubmissionLimiter, async (req, res, next) => {
   const parsed = inquirySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
   const v = parsed.data;
@@ -142,7 +153,7 @@ app.post('/api/v1/inquiries', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/api/v1/provider-applications', async (req, res, next) => {
+app.post('/api/v1/provider-applications', publicSubmissionLimiter, async (req, res, next) => {
   const parsed = providerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
   const v = parsed.data;
