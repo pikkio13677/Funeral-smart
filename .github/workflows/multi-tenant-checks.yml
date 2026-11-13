@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - "security/**"
+      - "release/funeral-smart-preflight"
   push:
     branches:
       - feat/multi-azienda-foundation
