@@ -93,4 +93,60 @@ function createResendInvitationSender({
   };
 }
 
-module.exports = { createResendInvitationSender, escapeHtml, validateInvitationUrl };
+
+function createResendVerificationSender({
+  apiKey = process.env.RESEND_API_KEY,
+  from = process.env.RESEND_FROM_EMAIL || DEFAULT_FROM,
+  fetchImpl = globalThis.fetch
+} = {}) {
+  return async function sendVerificationEmail({ to, code, expiresInMinutes = 15 } = {}) {
+    if (!apiKey) throw new Error('RESEND_API_KEY non configurata.');
+    if (typeof fetchImpl !== 'function') throw new Error('Fetch non disponibile nel runtime Node.');
+    if (typeof to !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)) {
+      throw new TypeError('Destinatario email non valido.');
+    }
+    if (typeof code !== 'string' || !/^\\d{6}$/.test(code)) {
+      throw new TypeError('Codice di verifica non valido.');
+    }
+    if (!Number.isInteger(expiresInMinutes) || expiresInMinutes < 1 || expiresInMinutes > 30) {
+      throw new TypeError('Scadenza codice non valida.');
+    }
+    const safeCode = escapeHtml(code);
+    const subject = 'Verifica il tuo indirizzo email - FUNERAL SMART';
+    const text = [
+      'Hai richiesto di verificare questo indirizzo email su FUNERAL SMART.',
+      'Il tuo codice è: ' + code,
+      'Il codice scade tra ' + expiresInMinutes + ' minuti.',
+      'Se non hai richiesto tu questa operazione, ignora il messaggio.'
+    ].join('\\n');
+    const html = '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#202820;max-width:560px;margin:auto">' +
+      '<h2>Verifica indirizzo email</h2>' +
+      '<p>Inserisci questo codice nell’area gestionale FUNERAL SMART:</p>' +
+      '<p style="font-size:28px;font-weight:700;letter-spacing:6px">' + safeCode + '</p>' +
+      '<p>Il codice scade tra <strong>' + expiresInMinutes + ' minuti</strong>.</p>' +
+      '<p>Se non hai richiesto tu questa operazione, ignora il messaggio.</p>' +
+      '</div>';
+    const response = await fetchImpl(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ from, to: [to.trim().toLowerCase()], subject, text, html }),
+      signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+        ? AbortSignal.timeout(10000)
+        : undefined
+    });
+    let payload = {};
+    try { payload = await response.json(); } catch (_) {}
+    if (!response.ok) {
+      throw new Error('Resend ha rifiutato l’invio (HTTP ' + response.status + ').');
+    }
+    if (!payload || typeof payload.id !== 'string' || !payload.id) {
+      throw new Error('Resend non ha restituito un identificativo email valido.');
+    }
+    return { success: true, messageId: payload.id };
+  };
+}
+
+module.exports = { createResendInvitationSender, createResendVerificationSender, escapeHtml, validateInvitationUrl };
