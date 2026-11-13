@@ -24,7 +24,7 @@ async function main() {
   try {
     for (const file of migrationFiles) {
       const sql = await fs.readFile(path.join(__dirname, '..', 'migrations', file), 'utf8');
-      if (/^\\s*(BEGIN|COMMIT)\\s*;/im.test(sql)) {
+      if (/^\s*(BEGIN|COMMIT)\s*;/im.test(sql)) {
         throw new Error(file + ' must not manage transactions; migrate.js/test runner owns them.');
       }
 
@@ -32,7 +32,7 @@ async function main() {
       try {
         await client.query(sql);
         await client.query('COMMIT');
-        process.stdout.write('Draft migration OK: ' + file + '\\n');
+        process.stdout.write('Draft migration OK: ' + file + '\n');
       } catch (error) {
         await client.query('ROLLBACK');
         throw new Error(file + ' failed: ' + error.message);
@@ -73,13 +73,13 @@ async function main() {
       if (!result.rowCount) throw new Error('Expected database object missing: ' + label);
     }
 
-    process.stdout.write('All draft tenant migrations applied and expected objects verified on disposable PostgreSQL.\\n');
+    process.stdout.write('All draft tenant migrations applied and expected objects verified on disposable PostgreSQL.\n');
   } finally {
     await client.end();
   }
 }
 
 main().catch(error => {
-  process.stderr.write(error.stack + '\\n');
+  process.stderr.write(error.stack + '\n');
   process.exitCode = 1;
 });
