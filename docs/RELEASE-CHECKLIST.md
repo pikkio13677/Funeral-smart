@@ -29,7 +29,7 @@ Stato: preparazione al rilascio, non ancora autorizzato per dati reali.
 - Verificati i cinque ruoli aziendali ammessi: `admin`, `manager`, `operator`, `warehouse`, `accounting`. `platform_admin` non è un ruolo tenant.
 - Accettazione invito: richiede account autenticato e attivo, token hashato valido/non scaduto, email già verificata e corrispondente, azienda attiva; membership e audit event sono creati nella stessa transazione.
 - Bootstrap iniziale: lock transazionale, richiede admin iniziale con MFA e conferma esplicita della titolarità dei dati legacy; backfill previsto per customers, funeral_cases, staff, vehicles, inventory_items, stock_movements, tasks, invoices e payments.
-- Punto da chiudere: le tabelle `service_types`, `providers`, `provider_services`, `price_lists`, `provider_applications` e `inquiries` non hanno `company_id) né sono nel backfill 005. Prima del rollout va documentato se sono cataloghi globali/lead pubblici o dati aziendali; se aziendali, servono migrazione, backfill e test di isolamento.
+- Punto da chiudere: le tabelle `service_types`, `providers`, `provider_services`, `price_lists`, `provider_applications` e `inquiries` non hanno `company_id` né sono nel backfill 005. Prima del rollout va documentato se sono cataloghi globali/lead pubblici o dati aziendali; se aziendali, servono migrazione, backfill e test di isolamento.
 - Migrazioni 005–009 restano bozze e non vanno eseguite su Render. Non sono stati eseguiti merge, deploy o interventi sul database di produzione.
 
 ## Bloccanti prima del rilascio
