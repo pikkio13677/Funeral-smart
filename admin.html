@@ -191,7 +191,7 @@ async function renderCompanyModule(host){
  const grid=document.createElement('div');grid.className='grid';
  const fields=[['legalName','Ragione sociale','text'],['vatNumber','Partita IVA','text'],['address','Indirizzo','text'],['city','Comune','text'],['province','Provincia','text'],['email','Email aziendale','email'],['phone','Telefono','tel']];
  const controls={};
- fields.forEach(([name,label,type])=>{const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent=label;const input=document.createElement('input');input.name=name;input.type=type;input.maxLength=name==='legalName'?180:name==='address'?500:254;controls[name]=input;l.append(input);wrap.append(l);grid.append(wrap);});
+ fields.forEach(([name,label,type])=>{const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent=label;const input=document.createElement('input');input.name=name;input.type=type;input.maxLength=({legalName:180,vatNumber:20,address:500,city:100,province:80,email:254,phone:40})[name];input.required=name==='legalName';controls[name]=input;l.append(input);wrap.append(l);grid.append(wrap);});
  const save=document.createElement('button');save.className='btn gold form-actions';save.type='submit';save.textContent='Salva dati aziendali';form.append(grid,save);section.append(heading,hint,form);host.append(section);
  try{const result=await request('/company/profile');fields.forEach(([name])=>{controls[name].value=safe(result.data[name]);});}
  catch(error){showMessage('Caricamento dati aziendali non riuscito: '+error.message);return;}
