@@ -8,8 +8,6 @@
 -- Il middleware dovrà comunque verificare status='active' e companies.status='active'
 -- ad ogni richiesta: la FK da sola non rileva sospensioni/revoche logiche.
 
-BEGIN;
-
 -- Necessario come target della FK composta, pur essendo id già PK.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_company_memberships_user_id_id
   ON company_memberships(user_id, id);
@@ -37,7 +35,6 @@ CREATE INDEX IF NOT EXISTS idx_app_sessions_active_membership
   ON app_sessions(active_membership_id)
   WHERE active_membership_id IS NOT NULL;
 
-COMMIT;
 
 -- ROLLOUT:
 -- 1. Applicare solo su un clone ripristinato da backup dopo aver collaudato la 005.
