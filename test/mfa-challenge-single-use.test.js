@@ -102,9 +102,10 @@ test('one MFA challenge cannot mint two sessions under concurrent verification',
   try {
     const router = createAuth(pool).router;
     const handler = postHandler(router, '/mfa/verify-login');
+    const currentCode = totp(secret);
     const makeRequest = () => ({
       cookies: { fs_mfa_challenge: 'same-login-challenge-token' },
-      body: { code: totp(secret) },
+      body: { code: currentCode },
       ip: '127.0.0.1'
     });
     const first = response();
