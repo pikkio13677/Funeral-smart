@@ -9,6 +9,7 @@ on:
       - feat/multi-azienda-foundation
       - "fix/**"
       - "feature/**"
+      - "security/**"
 
 permissions:
   contents: read
