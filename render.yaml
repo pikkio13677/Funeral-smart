@@ -2,7 +2,7 @@ services:
   - type: web
     name: funeral-smart-api
     runtime: node
-    plan:  free
+    plan: free
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
@@ -26,8 +26,14 @@ services:
       - key: ADMIN_NOTIFICATION_EMAIL
         sync: false
 
+  - type: web
+    name: funeral-smart-web
+    runtime: static
+    buildCommand: echo "Publishing FUNERAL SMART"
+    staticPublishPath: ./public
+
 databases:
   - name: funeral-smart-db
-    plan:  free
+    plan: free
     databaseName: funeral_smart
     user: funeral_smart_user
