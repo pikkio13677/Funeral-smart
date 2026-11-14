@@ -3,7 +3,6 @@ on:
   push:
     branches: [main, "feature/**", "fix/**", "security/**", "release/funeral-smart-preflight"]
   pull_request:
-    branches: [main, "fix/**", "security/**", "release/funeral-smart-preflight"]
 jobs:
   syntax:
     runs-on: ubuntu-latest
