@@ -31,6 +31,8 @@ services:
     runtime: static
     buildCommand: echo "Publishing FUNERAL SMART"
     staticPublishPath: ./public
+    domains:
+      - funeralsmartapp.com
 
 databases:
   - name: funeral-smart-db
