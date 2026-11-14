@@ -2,10 +2,6 @@ name: Multi-tenant branch checks
 
 on:
   pull_request:
-    branches:
-      - main
-      - "security/**"
-      - "release/funeral-smart-preflight"
   push:
     branches:
       - feat/multi-azienda-foundation
