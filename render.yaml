@@ -17,6 +17,14 @@ services:
         sync: false
       - key: CORS_ORIGIN
         sync: false
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: ADMIN_NOTIFICATION_EMAIL
+        sync: false
 
 databases:
   - name: funeral-smart-db
