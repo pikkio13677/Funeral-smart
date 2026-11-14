@@ -1,6 +1,6 @@
 # FUNERAL SMART — Checklist per il rilascio
 
-Aggiornato: 13 novembre 2026  
+Aggiornato: 14 novembre 2026  
 Repository: `pikkio13677/Funeral-smart`  
 Stato: preparazione al rilascio, non ancora autorizzato per dati reali.
 
@@ -10,13 +10,23 @@ Stato: preparazione al rilascio, non ancora autorizzato per dati reali.
 - Login nominativo, password, MFA/TOTP, codici di recupero e sessioni sono implementati nei branch di lavoro.
 - I reparti gestionali previsti sono: dashboard, pratiche/funerali, clienti e famiglie, personale, veicoli, magazzino, attività, fatture e pagamenti.
 - Le route tenant-aware, inviti, verifica email e profilo azienda sono implementate nei branch di lavoro e coperte da test automatici.
-- In una precedente esecuzione della PR #30 erano risultati verdi alcuni controlli CI Node/PostgreSQL; questo non copre le modifiche successive.
-- Sul commit candidato più recente non è ancora disponibile un nuovo run CI verificato; i controlli non sono quindi dichiarati superati.
+- Sul branch candidato `release/funeral-smart-preflight`, il commit `38be2527828695cede0ad498f16669b02874fc85` ha entrambi i workflow GitHub Actions completati con esito `success` il 13 novembre 2026: `Funeral Smart checks` run [43508387688](https://github.com/pikkio13677/Funeral-smart/actions/runs/43508387688) e `Multi-tenant branch checks` run [43508387691](https://github.com/pikkio13677/Funeral-smart/actions/runs/43508387691). Questo conferma la CI sul commit esatto, non un collaudo staging/produzione.
+- Tutte le 21 PR aperte (#9 e #11–#30) risultano ancora draft. Al controllo GitHub riporta `mergeable=true` e `mergeable_state=clean` per tutte; non sono emersi conflitti di merge, ma resta necessaria la revisione e l'integrazione nell'ordine delle dipendenze.
+- Il branch release è 241 commit avanti e 0 indietro rispetto a `main`, non ha una PR aperta verso `main` ed è attualmente senza protezione branch. Non è stato integrato.
 - Le PR della catena precedente sono ancora draft/open: nessuna di queste modifiche è in produzione.
 - Le migrazioni multi-tenant 005–009 sono ancora file `.draft.sql` e non fanno parte delle migrazioni automatiche 001–004.
 - `ENABLE_MULTI_TENANT` deve restare disattivato in produzione finché non sono approvati rollout, backup/restore e test end-to-end.
 - I test Resend sono simulati: non dimostrano l'invio di email reali.
 
+
+## Verifica automatica — 14 novembre 2026
+
+- Branch controllato: `release/funeral-smart-preflight`; HEAD `38be2527828695cede0ad498f16669b02874fc85` (13 novembre 2026, 21:11 UTC).
+- `Funeral Smart checks` run [43508387688](https://github.com/pikkio13677/Funeral-smart/actions/runs/43508387688): `success`; job `syntax` e `multi-tenant-postgres` entrambi verdi.
+- `Multi-tenant branch checks` run [43508387691](https://github.com/pikkio13677/Funeral-smart/actions/runs/43508387691): `success`; job `node-checks` verde.
+- I workflow sul candidato includono controlli di sintassi/unit test, PostgreSQL temporaneo, migrazioni draft, bootstrap/backfill, isolamento tra due aziende, MFA break-glass, backup custom-format/restore e verifiche sul database ripristinato. Il successo CI non sostituisce il collaudo end-to-end su staging.
+- PR #30 HEAD `fbce565d21d9dba22d6fcc5e4c152b18e2717de0`: entrambi i workflow PR completati con successo (run [43443644006](https://github.com/pikkio13677/Funeral-smart/actions/runs/43443644006) e [43443643632](https://github.com/pikkio13677/Funeral-smart/actions/runs/43443643632)).
+- Nessuna PR è stata unita; nessun deploy, modifica Render, attivazione multi-tenant, migrazione o scrittura sul database di produzione è stata eseguita in questa verifica.
 
 ## Registro verifiche — 13 novembre 2026 (aggiornamento PIKKIO20)
 
