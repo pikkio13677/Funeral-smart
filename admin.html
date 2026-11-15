@@ -71,7 +71,8 @@ const bilingualLabels={
  Sepoltura:'Sepoltura / Burial',Cremazione:'Cremazione / Cremation','Rimpatrio internazionale':'Rimpatrio internazionale / International repatriation',Altro:'Altro / Other'
 };
 function displayValue(value){const v=safe(value);return bilingualLabels[v]||v;}
-let active='cases',api='https://funeral-smart-api.onrender.com',currentUser=null,tenantMode=false,tenantActive=false,tenantRole=null,tenantCompany=null,invitationTokenPending=new URLSearchParams(window.location.search).get('token'),invitationRestricted=false;
+let active='cases',api='https://funeral-smart-api.onrender.com',currentUser=null,tenantMode=false,tenantActive=false,tenantRole=null,tenantCompany=null,invitationTokenPending=new URLSearchParams(window.location.search).get('token')||new URLSearchParams(window.location.hash.slice(1)).get('token'),invitationRestricted=false;
+if(invitationTokenPending){const cleanUrl=new URL(window.location.href);cleanUrl.searchParams.delete('token');cleanUrl.hash='';window.history.replaceState(null,'',cleanUrl.pathname+cleanUrl.search);}
 function showMessage(t,ok=false){$('message').textContent=t;$('message').className='msg'+(ok?' ok':'');}
 function headers(){return {'Content-Type':'application/json'};}
 async function request(path,options={}){if(tenantActive){let tenantPath=path;if(tenantPath.startsWith('/audit'))tenantPath=tenantPath.replace('/audit','/company/activity');tenantPath=tenantPath.replace(/^(\/tasks\/[^/?]+)\/status(?=\?|$)/,'$1');return tenantRequest(tenantPath,options);}const r=await fetch(api+'/api/v1/admin'+path,{credentials:'include',...options,headers:{...headers(),...(options.headers||{})}});const data=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(data.error||'Errore API');return data;}
