@@ -1,16 +1,19 @@
-# Email inviti e verifica — Resend
+# Email e variabili del servizio — Resend
 
-Il backend invia email transazionali tramite l'API HTTPS di Resend. La chiave resta esclusivamente sul server e non viene mai esposta al browser.
+Il backend invia email transazionali tramite l'API HTTPS di Resend. Le chiavi e gli altri segreti restano esclusivamente nelle variabili d'ambiente del servizio backend: non inserirli in GitHub, nel frontend o in chat.
 
-## Variabili del servizio Render
+## Variabili dichiarate nel Blueprint Render
 
-Il Blueprint dichiara queste variabili come valori da configurare manualmente nel servizio backend:
-
-- `PUBLIC_APP_URL`: URL HTTPS pubblico del servizio che ospita la pagina di accettazione inviti. Per l'attuale configurazione Render: `https://funeral-smart-api.onrender.com` (senza `/admin` o altri percorsi).
+- `ADMIN_API_KEY`: chiave legacy di compatibilità, da mantenere solo secondo la procedura di transizione; non inserirla mai nel browser.
+- `BOOTSTRAP_ADMIN_TOKEN`: token iniziale robusto per creare il primo amministratore. È un segreto e va configurato fuori dal repository. Dopo il bootstrap, ruotarlo o disattivarlo secondo la procedura approvata.
+- `TOTP_ENCRYPTION_KEY`: chiave dedicata di 32 byte, rappresentata da 64 caratteri esadecimali, necessaria per cifrare i segreti Authenticator. Deve restare stabile: non ruotarla senza una procedura di migrazione e recupero.
+- `CORS_ORIGIN`: soltanto le origini HTTPS effettive autorizzate, separate da virgole se sono più di una.
+- `PUBLIC_APP_URL`: URL HTTPS pubblico usato per i link d'invito, senza percorsi aggiuntivi.
 - `RESEND_API_KEY`: chiave API Resend con permesso Sending.
-- `RESEND_FROM_EMAIL`: mittente autorizzato in Resend, ad esempio `Funeral Smart <inviti@tuodominio.it>`.
+- `RESEND_FROM_EMAIL`: mittente autorizzato in Resend, appartenente a un dominio verificato per gli invii reali.
+- `ENABLE_MULTI_TENANT`: il Blueprint imposta esplicitamente `false`. Non cambiarlo in `true` finché la catena di PR, le migrazioni su staging, il backup/restore e il collaudo end-to-end non sono stati approvati.
 
-Non inserire mai la chiave in GitHub, nel frontend o in chat. Inseriscila direttamente nelle variabili d'ambiente di Render.
+I valori segreti sono dichiarati come variabili da fornire manualmente a Render; il repository non contiene i loro valori.
 
 ## Dominio e invio reale
 
@@ -21,10 +24,9 @@ Il mittente di prova `onboarding@resend.dev` è limitato ai test e non è adatto
 ## Stato e attivazione
 
 - L'adattatore Resend, la richiesta di verifica email e i flussi di invito sono coperti da test simulati.
-- Le nuove route multi-azienda sono protette dal flag `ENABLE_MULTI_TENANT`.
-- Non attivare quel flag finché le PR della catena multi-azienda non sono state approvate, le migrazioni draft non sono state applicate a un database ripristinato e i test end-to-end non sono conclusi.
-- L'aggiunta delle variabili al Blueprint non configura da sola le chiavi, non invia email e non abilita la modalità multi-azienda.
-- Prima dell'attivazione occorre verificare il dominio, impostare le tre variabili su Render e provare inviti e verifica email con destinatari di test autorizzati.
+- Le nuove route multi-azienda sono protette dal flag `ENABLE_MULTI_TENANT`, che resta disattivato.
+- L'aggiunta delle variabili al Blueprint non configura da sola i segreti su Render, non invia email e non abilita la modalità multi-azienda.
+- Prima di qualunque invio reale occorre verificare il dominio, configurare le variabili direttamente su Render e autorizzare una prova con destinatari di test.
 
 ## Test
 
