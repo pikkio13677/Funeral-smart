@@ -13,6 +13,10 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Report high and critical dependency advisories
+        run: |
+          npm audit --json > npm-audit.json || true
+          node -e "const a=require('./npm-audit.json'); for (const [name,v] of Object.entries(a.vulnerabilities || {})) if (['high','critical'].includes(v.severity)) console.log(JSON.stringify({name,severity:v.severity,range:v.range,fixAvailable:v.fixAvailable,via:(v.via || []).map(x => typeof x === 'string' ? x : ({title:x.title,url:x.url,range:x.range}))}))"
       - run: npm run check
       - run: npm test
 
