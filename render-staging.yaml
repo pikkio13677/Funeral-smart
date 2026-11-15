@@ -1,0 +1,42 @@
+# Blueprint separato per il collaudo: non usare il database di produzione.
+services:
+  - type: web
+    name: funeral-smart-api-staging
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: funeral-smart-db-staging
+          property: connectionString
+      - key: ADMIN_API_KEY
+        sync: false
+      - key: BOOTSTRAP_ADMIN_TOKEN
+        sync: false
+      - key: TOTP_ENCRYPTION_KEY
+        sync: false
+      - key: EMAIL_VERIFICATION_PEPPER
+        sync: false
+      - key: CORS_ORIGIN
+        value: https://funeral-smart-web-staging.onrender.com
+      - key: PUBLIC_APP_URL
+        value: https://funeral-smart-web-staging.onrender.com
+      - key: ENABLE_MULTI_TENANT
+        value: "false"
+
+  - type: web
+    name: funeral-smart-web-staging
+    runtime: static
+    buildCommand: sed -i 's#https://funeral-smart-api.onrender.com#https://funeral-smart-api-staging.onrender.com#g' public/api-config.js && echo "Publishing FUNERAL SMART staging"
+    staticPublishPath: ./public
+
+databases:
+  - name: funeral-smart-db-staging
+    plan: free
+    databaseName: funeral_smart_staging
+    user: funeral_smart_staging_user
