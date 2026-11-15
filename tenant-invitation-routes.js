@@ -21,7 +21,8 @@ function hashToken(value) {
 }
 function createInvitationUrl(baseUrl, token) {
   const url = new URL('/invito/accetta', baseUrl);
-  url.searchParams.set('token', token);
+  // Keep bearer invitation tokens in the fragment: fragments are not sent in HTTP requests or Referer headers.
+  url.hash = new URLSearchParams({ token }).toString();
   return url.toString();
 }
 
@@ -251,3 +252,4 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl,
 }
 
 module.exports = createTenantInvitationRouter;
+module.exports.createInvitationUrl = createInvitationUrl;
