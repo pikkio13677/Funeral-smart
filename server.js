@@ -6,6 +6,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const { z } = require('zod');
+const emailNotifications = require('./email-notifications')();
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
@@ -16,7 +17,7 @@ app.disable('x-powered-by');
 // throttling uses the originating client address rather than the proxy.
 app.set('trust proxy', 1);
 app.use(helmet());
-const allowedOrigins = [...new Set(['https://pikkio13677.github.io', 'https://funeral-smart-api.onrender.com', ...(process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean)])];
+const allowedOrigins = [...new Set(['https://pikkio13677.github.io', 'https://funeral-smart-api.onrender.com', 'https://funeral-smart-web.onrender.com', 'https://funeralsmartapp.com', 'https://www.funeralsmartapp.com', ...(process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean)])];
 app.use(cors({ credentials: true, origin(origin, cb) {
   if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
   return cb(new Error('Origine non autorizzata'));
@@ -149,6 +150,7 @@ app.post('/api/v1/inquiries', publicSubmissionLimiter, async (req, res, next) =>
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'received') RETURNING id, created_at AS "createdAt"`,
       [v.city, v.serviceType, v.destinationCountry || null, v.budgetEuro || null, v.notes || null, v.contactEmail || null, v.contactPhone || null, true]
     );
+    await emailNotifications.notifyInquiry({ id: rows[0].id, city: v.city, serviceType: v.serviceType, contactEmail: v.contactEmail });
     res.status(201).json({ data: rows[0], message: 'Richiesta ricevuta. Non è ancora stata inoltrata a un’impresa.' });
   } catch (e) { next(e); }
 });
@@ -163,6 +165,7 @@ app.post('/api/v1/provider-applications', publicSubmissionLimiter, async (req, r
        VALUES ($1,$2,$3,$4,$5,$6,$7,'pending') RETURNING id, created_at AS "createdAt"`,
       [v.businessName, v.vatNumber, v.city, v.province, v.email, v.phone, v.website || null]
     );
+    await emailNotifications.notifyProviderApplication({ id: rows[0].id, businessName: v.businessName, city: v.city, email: v.email });
     res.status(201).json({ data: rows[0], message: 'Candidatura ricevuta: l’impresa non è ancora pubblicata né verificata.' });
   } catch (e) { if (e.code === '23505') return res.status(409).json({ error: 'Partita IVA già presente in una candidatura.' }); next(e); }
 });
