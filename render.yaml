@@ -34,12 +34,6 @@ services:
       - key: ENABLE_MULTI_TENANT
         value: "false"
 
-databases:
-  - name: funeral-smart-db
-    plan: free
-    databaseName: funeral_smart
-    user: funeral_smart_user
-
   - type: web
     name: funeral-smart-web
     runtime: static
