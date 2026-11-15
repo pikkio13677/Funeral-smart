@@ -14,6 +14,13 @@ function routeHandler(router, path, method) {
 }
 const tenant = { companyId: 'company-alpha', membershipId: 'member-alpha', role: 'admin' };
 
+test('invitation URL keeps the bearer token in the fragment, not the query string', () => {
+  const source = require('../tenant-invitation-routes').toString();
+  assert.match(source, /url\.hash = new URLSearchParams\(\{ token \}\)\.toString\(\)/);
+  assert.doesNotMatch(source, /url\.searchParams\.set\(['"]token['"]/);
+});
+
+
 test('invitation creation is disabled when no email provider is configured', async () => {
   let connected = false;
   const router = createRouter({ pool: { query: async () => ({}), connect: async () => { connected = true; } } });
