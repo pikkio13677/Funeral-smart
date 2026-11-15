@@ -252,3 +252,4 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl,
 }
 
 module.exports = createTenantInvitationRouter;
+module.exports.createInvitationUrl = createInvitationUrl;
