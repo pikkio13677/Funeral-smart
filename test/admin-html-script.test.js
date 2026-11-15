@@ -16,7 +16,7 @@ test('published management UI matches the reviewed root admin page', () => {
 
 test('published management page inline JavaScript parses successfully', () => {
   const html = fs.readFileSync(path.join(root, 'public', 'admin.html'), 'utf8');
-  const scripts = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)];
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   assert.ok(scripts.length > 0, 'expected an inline management UI script');
   for (const match of scripts) new vm.Script(match[1]);
 });
