@@ -112,7 +112,7 @@ function cookieOptions() {
   return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000 };
 }
 
-module.exports = function createAuth(pool, { sendVerificationEmail, emailVerificationEnabled = process.env.ENABLE_MULTI_TENANT === 'true' } = {}) {
+module.exports = function createAuth(pool, { sendVerificationEmail, emailVerificationEnabled = process.env.ENABLE_EMAIL_VERIFICATION === 'true' } = {}) {
   const router = express.Router();
 
   async function audit(user, req, action, resource = null, resourceId = null) {
