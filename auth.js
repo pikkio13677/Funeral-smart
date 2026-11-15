@@ -422,6 +422,10 @@ module.exports = function createAuth(pool, { sendVerificationEmail, emailVerific
         return res.status(401).json({ error: 'Account non attivo.' });
       }
       const user = userResult.rows[0];
+      if (user.email && user.email.toLowerCase() !== email) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Per questo invito devi verificare esattamente l’indirizzo email a cui è stato inviato.' });
+      }
       if (user.emailVerifiedAt) {
         await client.query('ROLLBACK');
         if (user.email === email) return res.json({ message: 'Questo indirizzo email è già verificato.' });
