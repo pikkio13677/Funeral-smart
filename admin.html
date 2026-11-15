@@ -133,6 +133,30 @@ async function renderSecurityModule(host){
   };
   panel.append(start,details);
  }
+ const emailPanel=document.createElement('div');emailPanel.className='panel';
+ const emailHeading=document.createElement('h2');emailHeading.textContent='Verifica indirizzo email';
+ const emailIntro=document.createElement('p');emailIntro.className='hint';emailIntro.textContent='La verifica email è separata dalla verifica in due passaggi. Serve per proteggere inviti e accessi aziendali.';
+ emailPanel.append(emailHeading,emailIntro);
+ if(!currentUser.emailVerificationEnabled){
+  const note=document.createElement('p');note.textContent='La procedura email è predisposta ma resta disattivata finché non viene autorizzato il rollout delle migrazioni e del servizio email.';emailPanel.append(note);
+ }else if(currentUser.emailVerifiedAt){
+  const note=document.createElement('p');note.textContent='Indirizzo verificato: '+(currentUser.email||'');emailPanel.append(note);
+ }else{
+  const emailForm=document.createElement('form');emailForm.className='form-actions';
+  const emailField=document.createElement('div');emailField.className='field';
+  const emailLabel=document.createElement('label');emailLabel.textContent='Indirizzo email personale';
+  const emailInput=document.createElement('input');emailInput.type='email';emailInput.required=true;emailInput.maxLength=254;emailInput.autocomplete='email';emailInput.value=currentUser.email||'';
+  emailField.append(emailLabel,emailInput);
+  const sendButton=document.createElement('button');sendButton.className='btn gold';sendButton.type='submit';sendButton.textContent='Invia codice di verifica';
+  emailForm.append(emailField,sendButton);
+  emailForm.onsubmit=async event=>{event.preventDefault();sendButton.disabled=true;try{const result=await authRequest('/email/verification/request',{method:'POST',body:JSON.stringify({email:emailInput.value.trim()})});showMessage(result.message,true);codeField.classList.remove('hidden');codeInput.focus();}catch(error){showMessage(error.message);}finally{sendButton.disabled=false;}};
+  const codeForm=document.createElement('form');codeForm.className='form-actions hidden';const codeField=document.createElement('div');codeField.className='field';
+  const codeLabel=document.createElement('label');codeLabel.textContent='Codice a 6 cifre ricevuto via email';
+  const codeInput=document.createElement('input');codeInput.inputMode='numeric';codeInput.autocomplete='one-time-code';codeInput.maxLength=6;codeInput.pattern='[0-9]{6}';codeInput.required=true;
+  codeField.append(codeLabel,codeInput);const verifyButton=document.createElement('button');verifyButton.className='btn gold';verifyButton.type='submit';verifyButton.textContent='Conferma indirizzo email';codeForm.append(codeField,verifyButton);
+  codeForm.onsubmit=async event=>{event.preventDefault();verifyButton.disabled=true;try{const result=await authRequest('/email/verification/confirm',{method:'POST',body:JSON.stringify({code:codeInput.value.trim()})});currentUser.email=result.data.email;currentUser.emailVerifiedAt=result.data.emailVerifiedAt;emailPanel.replaceChildren(emailHeading,emailIntro);const done=document.createElement('p');done.textContent='Indirizzo verificato correttamente: '+currentUser.email;emailPanel.append(done);showMessage(result.message,true);}catch(error){showMessage(error.message);}finally{verifyButton.disabled=false;}};
+  emailPanel.append(emailForm,codeForm);
+ }
  section.append(heading,intro,panel);host.append(section);
 }
 
@@ -224,7 +248,7 @@ async function rowAction(row){try{
  await loadModule();await loadDashboard();showMessage('Operazione completata.',true);
  }catch(e){showMessage(e.message);}}
 async function loadDashboard(){const [r,casesResult,tasksResult]=await Promise.all([request('/dashboard'),request('/cases'),request('/tasks')]);const d=r.data;const items=[['Pratiche totali',d.cases.total],['Pratiche attive',d.cases.active],['Famiglie/clienti',d.customers.total],['Personale attivo',d.activeStaff],['Veicoli disponibili',d.vehicles.available],['Articoli sotto scorta',d.lowStock],['Attività aperte',d.openTasks],['Da incassare',new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(d.outstandingEuro||0))]];$('stats').replaceChildren();items.forEach(([label,value])=>{const card=document.createElement('div');card.className='stat';const strong=document.createElement('strong');strong.textContent=safe(value);const span=document.createElement('span');span.textContent=label;card.append(strong,span);$('stats').append(card);});const overview=$('overview');overview.replaceChildren();const today=new Date();today.setHours(0,0,0,0);const services=(casesResult.data||[]).filter(x=>x.serviceDate&&new Date(x.serviceDate)>=today&&!['completed','cancelled'].includes(x.status)).sort((a,b)=>new Date(a.serviceDate)-new Date(b.serviceDate)).slice(0,6);const tasks=(tasksResult.data||[]).filter(x=>x.dueDate&&!['done','cancelled'].includes(x.status)).sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)).slice(0,6);const addPanel=(title,rows,format,empty)=>{const panel=document.createElement('section');panel.className='overview-panel';const heading=document.createElement('h2');heading.textContent=title;const list=document.createElement('div');list.className='overview-list';if(!rows.length){const note=document.createElement('div');note.className='hint';note.textContent=empty;list.append(note);}rows.forEach(row=>{const item=document.createElement('div');item.className='overview-item';const strong=document.createElement('strong');const detail=document.createElement('span');const parts=format(row);strong.textContent=parts[0];detail.textContent=parts[1];item.append(strong,detail);list.append(item);});panel.append(heading,list);overview.append(panel);};const dateFmt=v=>new Intl.DateTimeFormat('it-IT',{dateStyle:'medium',timeStyle:v&&v.includes('T')?'short':undefined}).format(new Date(v));addPanel('Prossimi servizi',services,row=>[safe(row.caseCode)+' · '+safe(row.deceasedFirstName)+' '+safe(row.deceasedLastName),dateFmt(row.serviceDate)+' · '+safe(row.serviceType)],'Nessun servizio programmato.');addPanel('Attività in scadenza',tasks,row=>[safe(row.title),dateFmt(row.dueDate)+' · '+safe(row.priority)+' · '+(safe(row.staffFirstName)+' '+safe(row.staffLastName)).trim()],'Nessuna attività con scadenza aperta.');}
-async function enterApp(){ $('connection').classList.add('hidden');$('app').classList.remove('hidden');if(currentUser.role==='admin'&&!currentUser.mfaEnabled)active='security';renderTabs();renderModule();if(['admin','manager'].includes(currentUser.role)&&(currentUser.role!=='admin'||currentUser.mfaEnabled))await loadDashboard();}
+async function enterApp(){try{const profile=await authRequest('/me');currentUser=profile.data;}catch(_e){} $('connection').classList.add('hidden');$('app').classList.remove('hidden');if(currentUser.role==='admin'&&!currentUser.mfaEnabled)active='security';renderTabs();renderModule();if(['admin','manager'].includes(currentUser.role)&&(currentUser.role!=='admin'||currentUser.mfaEnabled))await loadDashboard();}
 $('login').onclick=async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/login',{method:'POST',body:JSON.stringify({username:$('login-user').value,password:$('login-password').value})});if(r.mfaRequired){$('mfa-login-panel').classList.remove('hidden');$('mfa-login-code').focus();return;}currentUser=r.data;await enterApp();}catch(e){showMessage('Accesso non riuscito: '+e.message);}};
 $('mfa-login-verify').onclick=async()=>{try{const r=await authRequest('/mfa/verify-login',{method:'POST',body:JSON.stringify({code:$('mfa-login-code').value.trim()})});currentUser=r.data;$('mfa-login-panel').classList.add('hidden');$('mfa-login-code').value='';await enterApp();}catch(e){showMessage('Verifica non riuscita: '+e.message);}};
 $('show-bootstrap').onclick=()=> $('bootstrap-panel').classList.remove('hidden');
