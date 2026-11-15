@@ -29,3 +29,9 @@ CREATE INDEX IF NOT EXISTS idx_email_verification_user_created
 CREATE INDEX IF NOT EXISTS idx_email_verification_expiry
   ON email_verification_challenges(expires_at)
   WHERE consumed_at IS NULL;
+
+-- Un indirizzo non verificato deve comunque appartenere a un solo account:
+-- evita registrazioni concorrenti con email duplicata prima del completamento OTP.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_app_users_email_nonnull
+  ON app_users(lower(email))
+  WHERE email IS NOT NULL;
