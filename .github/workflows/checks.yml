@@ -1,9 +1,9 @@
 name: Funeral Smart checks
 on:
   push:
-    branches: [main, "feature/**", "fix/**", "security/**", "release/funeral-smart-preflight", "integration/**", "staging/**"]
+    branches: [main, "feature/**", "feat/**", "fix/**", "security/**", "release/funeral-smart-preflight", "integration/**", "staging/**"]
   pull_request:
-    branches: [main, "fix/**", "security/**", "release/funeral-smart-preflight", "integration/**", "staging/**"]
+    branches: [main, "feat/**", "fix/**", "security/**", "release/funeral-smart-preflight", "integration/**", "staging/**"]
 jobs:
   syntax:
     runs-on: ubuntu-latest
@@ -47,6 +47,10 @@ jobs:
         run: npm test
       - name: Build baseline schema on disposable PostgreSQL
         run: node migrate.js
+      - name: Verify public inquiry persistence on disposable PostgreSQL
+        env:
+          RUN_INQUIRY_POSTGRES_TESTS: 'true'
+        run: node --test test/inquiries-postgres.integration.test.js
       - name: Apply and verify draft tenant migrations
         run: npm run test:migrations
       - name: Verify initial company bootstrap and legacy backfill
