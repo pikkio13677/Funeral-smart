@@ -8,6 +8,7 @@ const { Pool } = require('pg');
 const { z } = require('zod');
 const emailNotifications = require('./email-notifications')();
 const stagingSubmissionGuard = require('./staging-submission-guard')();
+const createLegacyAdminReadGuard = require('./legacy-admin-read-guard');
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
@@ -64,6 +65,7 @@ app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standar
 // Multi-tenant routes stay dormant until the staged migrations, legacy-data
 // backfill, new UI, and production rollback plan have been approved.
 const tenantFeaturesEnabled = process.env.ENABLE_MULTI_TENANT === 'true';
+const legacyAdminReadGuard = createLegacyAdminReadGuard(tenantFeaturesEnabled);
 if (tenantFeaturesEnabled) {
   const tenantContext = require('./tenant-context')(pool, auth.tokenHash);
   app.use('/api/v1/tenant', require('./company-context-routes')(pool, auth.authenticate, auth.tokenHash));
@@ -172,12 +174,12 @@ app.post('/api/v1/provider-applications', stagingSubmissionGuard, publicSubmissi
   } catch (e) { if (e.code === '23505') return res.status(409).json({ error: 'Partita IVA già presente in una candidatura.' }); next(e); }
 });
 
-app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, async (_req, res, next) => {
+app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, legacyAdminReadGuard, async (_req, res, next) => {
   try { const { rows } = await pool.query('SELECT id, city, service_type AS "serviceType", destination_country AS "destinationCountry", budget_euro AS "budgetEuro", notes, contact_email AS "contactEmail", contact_phone AS "contactPhone", status, created_at AS "createdAt" FROM inquiries ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
   catch (e) { next(e); }
 });
 
-app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize, async (_req, res, next) => {
+app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize, legacyAdminReadGuard, async (_req, res, next) => {
   try { const { rows } = await pool.query('SELECT id, business_name AS "businessName", vat_number AS "vatNumber", city, province, email, phone, website, status, created_at AS "createdAt" FROM provider_applications ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
   catch (e) { next(e); }
 });
