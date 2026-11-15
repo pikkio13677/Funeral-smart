@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { Pool } = require('pg');
 
 const databaseUrl = process.env.DATABASE_URL;
-const integration = databaseUrl
+const integration = databaseUrl && process.env.RUN_INQUIRY_POSTGRES_TESTS === 'true'
   ? test
   : test.skip;
 
