@@ -15,9 +15,13 @@ function routeHandler(router, path, method) {
 const tenant = { companyId: 'company-alpha', membershipId: 'member-alpha', role: 'admin' };
 
 test('invitation URL keeps the bearer token in the fragment, not the query string', () => {
-  const source = require('../tenant-invitation-routes').toString();
-  assert.match(source, /url\.hash = new URLSearchParams\(\{ token \}\)\.toString\(\)/);
-  assert.doesNotMatch(source, /url\.searchParams\.set\(['"]token['"]/);
+  const { createInvitationUrl } = require('../tenant-invitation-routes');
+  const value = createInvitationUrl('https://funeralsmart.example', 'secret-token');
+  const url = new URL(value);
+  assert.equal(url.origin, 'https://funeralsmart.example');
+  assert.equal(url.pathname, '/invito/accetta');
+  assert.equal(url.search, '');
+  assert.equal(new URLSearchParams(url.hash.slice(1)).get('token'), 'secret-token');
 });
 
 
