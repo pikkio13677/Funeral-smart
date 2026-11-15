@@ -248,24 +248,60 @@ function renderAuditModule(host){
 }
 async function renderProviderApplicationsModule(host){
  const section=document.createElement('section');section.className='module active';
- const heading=document.createElement('h2');heading.textContent='Candidature delle imprese funebri';
- const hint=document.createElement('p');hint.className='hint';hint.textContent='Elenco delle candidature ricevute. La registrazione non equivale a verifica: nessuna impresa viene pubblicata finché non è verificata dall’amministratore.';
- const box=document.createElement('div');box.className='panel table-wrap';box.textContent='Caricamento candidature...';
- section.append(heading,hint,box);host.append(section);
- try{
-  const result=await request('/provider-applications');const rows=result.data||[];box.replaceChildren();
-  if(!rows.length){box.textContent='Nessuna candidatura ricevuta.';return;}
-  const table=document.createElement('table'),thead=document.createElement('thead'),head=document.createElement('tr');
-  ['Ricevuta','Impresa','Partita IVA','Comune','Provincia','Email','Telefono','Sito web','Stato'].forEach(label=>{const th=document.createElement('th');th.textContent=label;head.append(th);});
-  thead.append(head);table.append(thead);const body=document.createElement('tbody');
-  rows.forEach(row=>{
-   const tr=document.createElement('tr');
-   const values=[row.createdAt?new Date(row.createdAt).toLocaleString('it-IT'):'',row.businessName,row.vatNumber,row.city,row.province,row.email,row.phone,row.website,displayValue(row.status)];
-   values.forEach(value=>{const td=document.createElement('td');td.textContent=safe(value);tr.append(td);});
-   body.append(tr);
-  });
-  table.append(body);box.append(table);
- }catch(error){box.textContent='Caricamento candidature non riuscito: '+error.message;}
+ const heading=document.createElement('h2');heading.textContent='Gestione imprese funebri';
+ const hint=document.createElement('p');hint.className='hint';hint.textContent='Tre passaggi distinti: candidatura ricevuta, approvazione amministrativa e verifica documentale. Solo le imprese verificate possono apparire nelle ricerche pubbliche.';
+ const applicationsTitle=document.createElement('h3');applicationsTitle.textContent='Candidature ricevute';
+ const applicationsBox=document.createElement('div');applicationsBox.className='panel table-wrap';applicationsBox.textContent='Caricamento candidature...';
+ const providersTitle=document.createElement('h3');providersTitle.textContent='Imprese registrate e verifica';
+ const providersHint=document.createElement('p');providersHint.className='hint';providersHint.textContent='Prima di confermare la verifica, controlla esternamente i dati e la documentazione dell’impresa. Il sistema non acquisisce copie dei documenti.';
+ const providersBox=document.createElement('div');providersBox.className='panel table-wrap';providersBox.textContent='Caricamento imprese...';
+ section.append(heading,hint,applicationsTitle,applicationsBox,providersTitle,providersHint,providersBox);host.append(section);
+ const actionButton=(label,handler)=>{const b=document.createElement('button');b.className='btn alt';b.type='button';b.textContent=label;b.onclick=handler;return b;};
+ async function refresh(){
+  applicationsBox.textContent='Caricamento candidature...';providersBox.textContent='Caricamento imprese...';
+  try{
+   const result=await request('/provider-applications');const rows=result.data||[];applicationsBox.replaceChildren();
+   if(!rows.length)applicationsBox.textContent='Nessuna candidatura ricevuta.';
+   else{
+    const table=document.createElement('table'),thead=document.createElement('thead'),head=document.createElement('tr');
+    ['Ricevuta','Impresa','Partita IVA','Comune','Provincia','Email','Telefono','Sito web','Stato','Azioni'].forEach(label=>{const th=document.createElement('th');th.textContent=label;head.append(th);});
+    thead.append(head);table.append(thead);const body=document.createElement('tbody');
+    rows.forEach(row=>{
+     const tr=document.createElement('tr');
+     [row.createdAt?new Date(row.createdAt).toLocaleString('it-IT'):'',row.businessName,row.vatNumber,row.city,row.province,row.email,row.phone,row.website,displayValue(row.status)].forEach(value=>{const td=document.createElement('td');td.textContent=safe(value);tr.append(td);});
+     const actions=document.createElement('td');
+     if(currentUser?.role==='admin'&&row.status==='pending'){
+      const approve=actionButton('Approva candidatura',async()=>{if(!window.confirm('Approvare la candidatura? L’impresa resterà non verificata e non sarà pubblica.'))return;approve.disabled=true;try{await request('/provider-applications/'+encodeURIComponent(row.id)+'/approve',{method:'POST',body:JSON.stringify({})});showMessage('Candidatura approvata: impresa ancora da verificare.',true);await refresh();}catch(error){showMessage(error.message);approve.disabled=false;}});
+      const reject=actionButton('Rifiuta',async()=>{if(!window.confirm('Rifiutare questa candidatura?'))return;reject.disabled=true;try{await request('/provider-applications/'+encodeURIComponent(row.id)+'/reject',{method:'POST',body:JSON.stringify({})});showMessage('Candidatura rifiutata.',true);await refresh();}catch(error){showMessage(error.message);reject.disabled=false;}});
+      actions.append(approve,reject);
+     }else actions.textContent=row.status==='pending'?'In attesa di decisione':displayValue(row.status);
+     tr.append(actions);body.append(tr);
+    });
+    table.append(body);applicationsBox.append(table);
+   }
+  }catch(error){applicationsBox.textContent='Caricamento candidature non riuscito: '+error.message;}
+  try{
+   const result=await request('/providers');const rows=result.data||[];providersBox.replaceChildren();
+   if(!rows.length)providersBox.textContent='Nessuna impresa registrata.';
+   else{
+    const table=document.createElement('table'),thead=document.createElement('thead'),head=document.createElement('tr');
+    ['Impresa','Partita IVA','Comune','Provincia','Email','Telefono','Stato','Verifica','Azioni'].forEach(label=>{const th=document.createElement('th');th.textContent=label;head.append(th);});
+    thead.append(head);table.append(thead);const body=document.createElement('tbody');
+    rows.forEach(row=>{
+     const tr=document.createElement('tr');
+     [row.businessName,row.vatNumber,row.city,row.province,row.email,row.phone,displayValue(row.status),row.verificationDate?new Date(row.verificationDate).toLocaleDateString('it-IT'):'Non verificata'].forEach(value=>{const td=document.createElement('td');td.textContent=safe(value);tr.append(td);});
+     const actions=document.createElement('td');
+     if(currentUser?.role==='admin'&&row.status==='pending'){
+      const verify=actionButton('Conferma verifica',async()=>{if(!window.confirm('Confermi di aver controllato la documentazione e i dati dell’impresa? Solo dopo la conferma potrà essere visibile pubblicamente.'))return;verify.disabled=true;try{await request('/providers/'+encodeURIComponent(row.id)+'/verify',{method:'POST',body:JSON.stringify({documentsReviewed:true})});showMessage('Impresa verificata.',true);await refresh();}catch(error){showMessage(error.message);verify.disabled=false;}});
+      actions.append(verify);
+     }else actions.textContent=row.status==='verified'?'Verificata':displayValue(row.status);
+     tr.append(actions);body.append(tr);
+    });
+    table.append(body);providersBox.append(table);
+   }
+  }catch(error){providersBox.textContent='Caricamento imprese non riuscito: '+error.message;}
+ }
+ await refresh();
 }
 async function renderInquiriesModule(host){
  const section=document.createElement('section');section.className='module active';
