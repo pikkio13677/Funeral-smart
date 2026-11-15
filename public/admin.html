@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#123b32"><title>FUNERAL SMART — Area gestionale</title>
+<style>
+:root{--g:#123b32;--g2:#1d5b4b;--gold:#c9ad78;--bg:#f3f6f2;--ink:#24312a;--muted:#68756e;--line:#dfe7df}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}header{background:linear-gradient(120deg,var(--g),var(--g2));color:white;padding:20px}header h1{margin:0;font-size:20px;letter-spacing:1px}.sub{color:#d8e6dc;font-size:13px}.wrap{max-width:1180px;margin:auto;padding:18px}.panel,.stat,.module{background:white;border:1px solid var(--line);border-radius:15px;padding:16px;margin-bottom:15px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}.field input,.field select,.field textarea{width:100%;padding:11px;border:1px solid #d3ddd4;border-radius:9px;background:#fff;font:inherit}.field textarea{min-height:70px}.btn{border:0;border-radius:9px;background:var(--g);color:white;padding:11px 15px;font-weight:700;cursor:pointer}.btn.alt{background:#edf3ed;color:var(--g);border:1px solid var(--line)}.btn.gold{background:var(--gold);color:#26392f}.row{display:flex;gap:9px;flex-wrap:wrap;align-items:end}.tabs{display:flex;gap:7px;overflow:auto;padding:5px 0 14px}.tab{white-space:nowrap;border:1px solid var(--line);background:white;border-radius:30px;padding:9px 13px;cursor:pointer}.tab.active{background:var(--g);color:white}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px}.overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:14px 0}.overview-panel{background:#fff;border:1px solid var(--line);border-radius:15px;padding:15px}.overview-panel h2{font-size:16px}.overview-list{display:grid;gap:9px}.overview-item{padding:9px;border-radius:9px;background:var(--bg);font-size:13px}.overview-item strong{display:block;color:var(--g)}.overview-item span{color:var(--muted)}.stat strong{display:block;font-size:25px;color:var(--g)}.stat span{font-size:12px;color:var(--muted)}h2{font-size:19px;margin:0 0 12px}.hint{font-size:12px;color:var(--muted)}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:620px}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted);font-size:11px;text-transform:uppercase}.hidden{display:none!important}.msg{padding:11px;border-radius:9px;background:#fff4df;color:#624e27;margin:10px 0}.msg.ok{background:#eaf5ed;color:#245b3c}.form-actions{margin-top:12px}.module{display:none}.module.active{display:block}.empty{padding:20px;text-align:center;color:var(--muted)}@media(max-width:600px){.wrap{padding:12px}.panel{padding:13px}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>FUNERAL SMART · AREA GESTIONALE</h1><div class="sub">Amministrazione e organizzazione interna</div></div></header>
+<main class="wrap">
+<section class="panel" id="connection">
+<h2>Accesso personale protetto</h2>
+<p class="hint">Accedi con username e password personali. Al primo avvio crea l'amministratore con il token iniziale configurato su Render.</p>
+<div class="grid">
+<div class="field"><label for="api">URL API Render</label><input id="api" type="url" value="https://funeral-smart-api.onrender.com"></div>
+<div class="field"><label for="login-user">Username</label><input id="login-user" autocomplete="username"></div>
+<div class="field"><label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password"></div>
+</div>
+<div class="row form-actions"><button class="btn gold" id="login">Accedi</button><button class="btn alt" id="show-bootstrap" type="button">Primo accesso amministratore</button></div>
+<div id="bootstrap-panel" class="panel hidden">
+<h2>Crea il primo amministratore</h2>
+<div class="grid">
+<div class="field"><label for="bootstrap-token">Token iniziale Render</label><input id="bootstrap-token" type="password"></div>
+<div class="field"><label for="bootstrap-name">Nome e cognome</label><input id="bootstrap-name"></div>
+<div class="field"><label for="bootstrap-user">Username</label><input id="bootstrap-user"></div>
+<div class="field"><label for="bootstrap-password">Password (almeno 12 caratteri)</label><input id="bootstrap-password" type="password" minlength="12"></div>
+</div>
+<div class="row form-actions"><button class="btn gold" id="bootstrap-create" type="button">Crea amministratore</button><button class="btn alt" id="hide-bootstrap" type="button">Chiudi</button></div>
+</div>
+<div id="mfa-login-panel" class="panel hidden"><h2>Verifica in due passaggi</h2><p class="hint">Apri la tua app Authenticator e inserisci il codice a 6 cifre. Puoi usare anche un codice di recupero.</p><div class="field"><label for="mfa-login-code">Codice di verifica</label><input id="mfa-login-code" inputmode="numeric" autocomplete="one-time-code"></div><div class="form-actions"><button class="btn gold" id="mfa-login-verify" type="button">Verifica e accedi</button></div></div>
+<div id="message" class="msg hidden" role="status"></div>
+</section>
+<section id="app" class="hidden">
+<div class="stats" id="stats"></div>
+<div class="overview" id="overview"></div>
+<nav class="tabs" id="tabs"></nav>
+<div id="modules"></div>
+</section>
+<p class="hint">Versione iniziale gestionale. Prima dell'uso con dati reali occorrono autenticazione nominativa con MFA, ruoli, audit log, backup verificati e revisione privacy/sicurezza.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const definitions={
+cases:{label:'Funerali e pratiche',endpoint:'cases',fields:[['customerId','Cliente / Customer','reference',{endpoint:'customers',label:['firstName','lastName']}],['caseCode','Codice pratica','text',true],['deceasedFirstName','Nome persona defunta','text',true],['deceasedLastName','Cognome persona defunta','text',true],['dateOfDeath','Data del decesso','date'],['serviceType','Tipo servizio','select',['Sepoltura','Cremazione','Rimpatrio internazionale','Altro']],['serviceDate','Data e ora servizio','datetime-local'],['location','Luogo','text'],['destination','Destinazione','text'],['estimatedTotal','Totale preventivato (€)','number'],['notes','Note operative','textarea']],columns:['caseCode','deceasedFirstName','deceasedLastName','customerFirstName','customerLastName','serviceType','serviceDate','status'],labels:['Codice','Nome','Cognome','Cliente','Cognome cliente','Servizio','Data servizio','Stato']},
+customers:{label:'Clienti e famiglie',endpoint:'customers',fields:[['firstName','Nome','text',true],['lastName','Cognome','text',true],['phone','Telefono','tel'],['email','Email','email'],['address','Indirizzo','text'],['notes','Note','textarea']],columns:['firstName','lastName','phone','email'],labels:['Nome','Cognome','Telefono','Email']},
+staff:{label:'Personale',endpoint:'staff',fields:[['firstName','Nome','text',true],['lastName','Cognome','text',true],['role','Ruolo','text',true],['phone','Telefono','tel'],['email','Email','email']],columns:['firstName','lastName','role','phone','active'],labels:['Nome','Cognome','Ruolo','Telefono','Attivo']},
+vehicles:{label:'Veicoli',endpoint:'vehicles',fields:[['plate','Targa','text',true],['makeModel','Marca e modello','text',true],['vehicleType','Tipo mezzo','text'],['status','Stato','select',['available','assigned','maintenance','inactive']],['nextMaintenance','Prossima manutenzione','date'],['notes','Note','textarea']],columns:['plate','makeModel','vehicleType','status','nextMaintenance'],labels:['Targa','Mezzo','Tipo','Stato','Manutenzione']},
+inventory:{label:'Magazzino',endpoint:'inventory',fields:[['sku','Codice articolo','text'],['name','Articolo','text',true],['category','Categoria','text',true],['quantity','Giacenza iniziale','number'],['minQuantity','Scorta minima','number'],['unit','Unità (pz, confezioni...)','text'],['unitCost','Costo unitario (€)','number']],columns:['sku','name','category','quantity','unit','lowStock'],labels:['Codice','Articolo','Categoria','Giacenza','Unità','Scorta bassa']},
+tasks:{label:'Attività e scadenze',endpoint:'tasks',fields:[['caseId','Pratica collegata / Linked case','reference',{endpoint:'cases',label:['caseCode','deceasedFirstName','deceasedLastName']}],['assignedTo','Assegnato a / Assigned to','reference',{endpoint:'staff',label:['firstName','lastName']}],['title','Attività','text',true],['description','Descrizione','textarea'],['dueDate','Scadenza','datetime-local'],['priority','Priorità','select',['low','normal','high','urgent']]],columns:['title','caseCode','staffFirstName','staffLastName','dueDate','priority','status'],labels:['Attività','Pratica','Nome assegnatario','Cognome assegnatario','Scadenza','Priorità','Stato']},
+invoices:{label:'Fatture e pagamenti',endpoint:'invoices',fields:[['caseId','Pratica collegata / Linked case','reference',{endpoint:'cases',label:['caseCode','deceasedFirstName','deceasedLastName']}],['customerId','Cliente / Customer','reference',{endpoint:'customers',label:['firstName','lastName']}],['invoiceNumber','Numero documento','text',true],['amount','Importo (€)','number',true],['issueDate','Data emissione','date'],['dueDate','Scadenza','date'],['status','Stato','select',['draft','issued']],['notes','Note','textarea']],columns:['invoiceNumber','customerFirstName','customerLastName','caseCode','issueDate','dueDate','amount','paidAmount','remainingAmount','status'],labels:['Numero','Nome cliente','Cognome cliente','Pratica','Emissione','Scadenza','Importo','Incassato','Residuo','Stato']}
+};
+const bilingualLabels={
+ draft:'Bozza / Draft',issued:'Emessa / Issued',partial:'Parzialmente pagata / Partially paid',paid:'Pagata / Paid',overdue:'Scaduta / Overdue',cancelled:'Annullata / Cancelled',
+ available:'Disponibile / Available',assigned:'Assegnato / Assigned',maintenance:'In manutenzione / Under maintenance',inactive:'Inattivo / Inactive',
+ low:'Bassa / Low',normal:'Normale / Normal',high:'Alta / High',urgent:'Urgente / Urgent',
+ open:'Aperta / Open',planned:'Pianificata / Planned',in_progress:'In corso / In progress',completed:'Completata / Completed',done:'Completata / Done',
+ Sepoltura:'Sepoltura / Burial',Cremazione:'Cremazione / Cremation','Rimpatrio internazionale':'Rimpatrio internazionale / International repatriation',Altro:'Altro / Other'
+};
+function displayValue(value){const v=safe(value);return bilingualLabels[v]||v;}
+let active='cases',api='https://funeral-smart-api.onrender.com',currentUser=null;
+function showMessage(t,ok=false){$('message').textContent=t;$('message').className='msg'+(ok?' ok':'');}
+function headers(){return {'Content-Type':'application/json'};}
+async function request(path,options={}){const r=await fetch(api+'/api/v1/admin'+path,{credentials:'include',...options,headers:{...headers(),...(options.headers||{})}});const data=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(data.error||'Errore API');return data;}
+async function authRequest(path,options={}){const r=await fetch(api+'/api/v1/auth'+path,{credentials:'include',...options,headers:{...headers(),...(options.headers||{})}});const data=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(data.error||'Errore API');return data;}
+function safe(v){return v===null||v===undefined?'':String(v);}
+function allowedTabs(){const r=currentUser?.role;if(r==='admin'&&!currentUser.mfaEnabled)return ['security'];if(r==='admin'||r==='manager')return Object.keys(definitions).concat(r==='admin'?['users','security','audit']:['security']);if(r==='operator')return ['cases','customers','tasks','security'];if(r==='warehouse')return ['inventory','security'];if(r==='accounting')return ['invoices','security'];return[];}
+function renderTabs(){const nav=$('tabs');nav.replaceChildren();const ids=allowedTabs();if(!ids.includes(active))active=ids[0]||'cases';ids.forEach(id=>{const b=document.createElement('button');b.className='tab'+(id===active?' active':'');b.textContent=id==='users'?'Utenti':id==='security'?'Sicurezza MFA':id==='audit'?'Registro attività':definitions[id].label;b.onclick=()=>{active=id;renderTabs();renderModule();};nav.append(b);});}
+function fieldNode(f){const [name,label,type,extra]=f;const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent=label;const isSelect=type==='select'||type==='reference';const el=type==='textarea'?document.createElement('textarea'):isSelect?document.createElement('select'):document.createElement('input');if(type==='select'){(extra||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=displayValue(v);el.append(o);});}else if(type==='reference'){const o=document.createElement('option');o.value='';o.textContent='Nessuna selezione / None';el.append(o);el.dataset.reference=JSON.stringify(extra);}else el.type=type==='datetime-local'?'datetime-local':type;el.name=name;if(extra===true)el.required=true;if(type==='number'){el.step='0.01';el.min='0';}l.htmlFor='f-'+name;el.id='f-'+name;wrap.append(l,el);return wrap;}
+async function populateReferences(form,fields){for(const f of fields.filter(x=>x[2]==='reference')){const el=form.elements.namedItem(f[0]);if(!el)continue;try{const cfg=f[3],result=await request('/'+cfg.endpoint);(result.data||[]).forEach(item=>{const o=document.createElement('option');o.value=item.id;o.textContent=cfg.label.map(k=>safe(item[k])).filter(Boolean).join(' · ');el.append(o);});}catch(e){const o=document.createElement('option');o.value='';o.textContent='Elenco non disponibile / List unavailable';el.append(o);}}}
+async function renderUsersModule(host){
+ const section=document.createElement('section');section.className='module active';
+ const heading=document.createElement('h2');heading.textContent='Gestione utenti e permessi';
+ const hint=document.createElement('p');hint.className='hint';hint.textContent='Crea un account personale per ogni dipendente. La password è protetta con hash e non viene mostrata dopo il salvataggio.';
+ const form=document.createElement('form');form.className='panel';
+ const grid=document.createElement('div');grid.className='grid';
+ const addField=(id,label,type,minLength=0)=>{const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.htmlFor=id;l.textContent=label;const input=document.createElement('input');input.id=id;input.name=id;input.type=type;input.required=true;if(minLength)input.minLength=minLength;wrap.append(l,input);grid.append(wrap);return input;};
+ const username=addField('user-username','Username','text',3);
+ const displayName=addField('user-display','Nome e cognome','text',2);
+ const password=addField('user-password','Password (almeno 12 caratteri)','password',12);
+ const roleWrap=document.createElement('div');roleWrap.className='field';const roleLabel=document.createElement('label');roleLabel.htmlFor='user-role';roleLabel.textContent='Ruolo / reparto';const role=document.createElement('select');role.id='user-role';[['manager','Responsabile'],['operator','Operatore'],['warehouse','Magazziniere'],['accounting','Amministrazione']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;role.append(o);});roleWrap.append(roleLabel,role);grid.append(roleWrap);
+ const submit=document.createElement('button');submit.className='btn gold form-actions';submit.type='submit';submit.textContent='Crea account';form.append(grid,submit);
+ const tableBox=document.createElement('div');tableBox.className='panel table-wrap';
+ form.onsubmit=async e=>{e.preventDefault();submit.disabled=true;try{await authRequest('/users',{method:'POST',body:JSON.stringify({username:username.value,displayName:displayName.value,password:password.value,role:role.value})});form.reset();showMessage('Account creato correttamente. Consegna la password iniziale in modo riservato.',true);await refreshUsersTable(tableBox);}catch(err){showMessage(err.message);}finally{submit.disabled=false;}};
+ section.append(heading,hint,form,tableBox);host.append(section);await refreshUsersTable(tableBox);
+}
+async function refreshUsersTable(box){
+ box.textContent='Caricamento utenti...';
+ try{const result=await authRequest('/users');box.replaceChildren();const table=document.createElement('table'),head=document.createElement('tr');['Username','Nome','Ruolo','Stato','Ultimo accesso','Azione'].forEach(v=>{const th=document.createElement('th');th.textContent=v;head.append(th);});const thead=document.createElement('thead');thead.append(head);table.append(thead);const body=document.createElement('tbody');const names={admin:'Amministratore',manager:'Responsabile',operator:'Operatore',warehouse:'Magazziniere',accounting:'Amministrazione'};(result.data||[]).forEach(u=>{const tr=document.createElement('tr');[u.username,u.displayName,names[u.role]||u.role,u.active?'Attivo':'Disattivato',u.lastLoginAt?new Date(u.lastLoginAt).toLocaleString('it-IT'):'Mai'].forEach(v=>{const td=document.createElement('td');td.textContent=safe(v);tr.append(td);});const td=document.createElement('td');if(u.role!=='admin'){const b=document.createElement('button');b.className='btn alt';b.textContent=u.active?'Disattiva':'Riattiva';b.onclick=async()=>{try{await authRequest('/users/'+u.id+'/active',{method:'PATCH',body:JSON.stringify({active:!u.active})});await refreshUsersTable(box);}catch(e){showMessage(e.message);}};td.append(b);}else td.textContent='Protetto';tr.append(td);body.append(tr);});table.append(body);box.append(table);}catch(e){box.textContent='Errore: '+e.message;}
+}
+
+async function renderSecurityModule(host){
+ const section=document.createElement('section');section.className='module active';
+ const heading=document.createElement('h2');heading.textContent='Sicurezza · Verifica in due passaggi';
+ const intro=document.createElement('p');intro.className='hint';intro.textContent='Proteggi l’account con un codice temporaneo generato da un’app Authenticator. Per l’amministratore questa verifica è obbligatoria prima di usare i reparti gestionali.';
+ const panel=document.createElement('div');panel.className='panel';
+ if(currentUser.mfaEnabled){
+  const activeText=document.createElement('p');activeText.textContent='La verifica in due passaggi è attiva per questo account.';
+  const note=document.createElement('p');note.className='hint';note.textContent='Conserva i codici di recupero in un luogo sicuro. Ogni codice può essere usato una sola volta.';
+  panel.append(activeText,note);
+ } else {
+  const start=document.createElement('button');start.className='btn gold';start.type='button';start.textContent='Configura Authenticator';
+  const details=document.createElement('div');details.className='hidden';
+  start.onclick=async()=>{
+   start.disabled=true;
+   try{
+    const result=await authRequest('/mfa/setup',{method:'POST',body:JSON.stringify({})});
+    details.replaceChildren();
+    const guide=document.createElement('p');guide.textContent='Apri Google Authenticator, Microsoft Authenticator o un’app compatibile. Aggiungi un account scegliendo “Inserisci una chiave di configurazione”.';
+    const label=document.createElement('strong');label.textContent='Chiave segreta (non condividerla):';
+    const secret=document.createElement('p');secret.textContent=result.secret;secret.style.wordBreak='break-all';secret.style.fontWeight='700';
+    const copy=document.createElement('button');copy.className='btn alt';copy.type='button';copy.textContent='Copia chiave segreta';copy.onclick=async()=>{try{await navigator.clipboard.writeText(result.secret);showMessage('Chiave copiata. Incollala solo nell’app Authenticator.',true);}catch(_e){showMessage('Seleziona e copia manualmente la chiave.');}};
+    const uri=document.createElement('p');uri.className='hint';uri.textContent='Configurazione: FUNERAL SMART · codice a 6 cifre · aggiornamento ogni 30 secondi.';
+    const form=document.createElement('form');form.className='form-actions';
+    const field=document.createElement('div');field.className='field';const fieldLabel=document.createElement('label');fieldLabel.textContent='Codice a 6 cifre mostrato dall’app';const code=document.createElement('input');code.inputMode='numeric';code.autocomplete='one-time-code';code.maxLength=6;code.required=true;code.pattern='[0-9]{6}';field.append(fieldLabel,code);
+    const verify=document.createElement('button');verify.className='btn gold';verify.type='submit';verify.textContent='Attiva verifica in due passaggi';form.append(field,verify);
+    form.onsubmit=async e=>{e.preventDefault();verify.disabled=true;try{
+      const enabled=await authRequest('/mfa/enable',{method:'POST',body:JSON.stringify({code:code.value.trim()})});
+      details.replaceChildren();
+      const success=document.createElement('p');success.textContent=enabled.message;
+      const codesTitle=document.createElement('strong');codesTitle.textContent='Codici di recupero · salvali adesso';
+      const codes=document.createElement('pre');codes.textContent=enabled.recoveryCodes.join('\n');codes.style.whiteSpace='pre-wrap';codes.style.padding='12px';codes.style.background='#f3f6f2';codes.style.borderRadius='8px';
+      const copyCodes=document.createElement('button');copyCodes.className='btn alt';copyCodes.type='button';copyCodes.textContent='Copia codici di recupero';copyCodes.onclick=async()=>{try{await navigator.clipboard.writeText(enabled.recoveryCodes.join('\n'));showMessage('Codici copiati. Conservali in un luogo sicuro.',true);}catch(_e){showMessage('Seleziona e copia manualmente i codici.');}};
+      const continueBtn=document.createElement('button');continueBtn.className='btn gold';continueBtn.type='button';continueBtn.textContent='Ho salvato i codici · continua';
+      continueBtn.onclick=async()=>{currentUser.mfaEnabled=true;active='cases';await enterApp();};
+      details.append(success,codesTitle,codes,copyCodes,continueBtn);
+      currentUser.mfaEnabled=true;
+      showMessage('MFA attivata correttamente.',true);
+    }catch(err){showMessage(err.message);}finally{verify.disabled=false;}};
+    details.append(guide,label,secret,copy,uri,form);details.classList.remove('hidden');
+   }catch(err){showMessage(err.message);start.disabled=false;}
+  };
+  panel.append(start,details);
+ }
+ const emailPanel=document.createElement('div');emailPanel.className='panel';
+ const emailHeading=document.createElement('h2');emailHeading.textContent='Verifica indirizzo email';
+ const emailIntro=document.createElement('p');emailIntro.className='hint';emailIntro.textContent='La verifica email è separata dalla verifica in due passaggi. Serve per proteggere inviti e accessi aziendali.';
+ emailPanel.append(emailHeading,emailIntro);
+ if(!currentUser.emailVerificationEnabled){
+  const note=document.createElement('p');note.textContent='La procedura email è predisposta ma resta disattivata finché non viene autorizzato il rollout delle migrazioni e del servizio email.';emailPanel.append(note);
+ }else if(currentUser.emailVerifiedAt){
+  const note=document.createElement('p');note.textContent='Indirizzo verificato: '+(currentUser.email||'');emailPanel.append(note);
+ }else{
+  const emailForm=document.createElement('form');emailForm.className='form-actions';
+  const emailField=document.createElement('div');emailField.className='field';
+  const emailLabel=document.createElement('label');emailLabel.textContent='Indirizzo email personale';
+  const emailInput=document.createElement('input');emailInput.type='email';emailInput.required=true;emailInput.maxLength=254;emailInput.autocomplete='email';emailInput.value=currentUser.email||'';
+  emailField.append(emailLabel,emailInput);
+  const sendButton=document.createElement('button');sendButton.className='btn gold';sendButton.type='submit';sendButton.textContent='Invia codice di verifica';
+  emailForm.append(emailField,sendButton);
+  emailForm.onsubmit=async event=>{event.preventDefault();sendButton.disabled=true;try{const result=await authRequest('/email/verification/request',{method:'POST',body:JSON.stringify({email:emailInput.value.trim()})});showMessage(result.message,true);codeField.classList.remove('hidden');codeInput.focus();}catch(error){showMessage(error.message);}finally{sendButton.disabled=false;}};
+  const codeForm=document.createElement('form');codeForm.className='form-actions hidden';const codeField=document.createElement('div');codeField.className='field';
+  const codeLabel=document.createElement('label');codeLabel.textContent='Codice a 6 cifre ricevuto via email';
+  const codeInput=document.createElement('input');codeInput.inputMode='numeric';codeInput.autocomplete='one-time-code';codeInput.maxLength=6;codeInput.pattern='[0-9]{6}';codeInput.required=true;
+  codeField.append(codeLabel,codeInput);const verifyButton=document.createElement('button');verifyButton.className='btn gold';verifyButton.type='submit';verifyButton.textContent='Conferma indirizzo email';codeForm.append(codeField,verifyButton);
+  codeForm.onsubmit=async event=>{event.preventDefault();verifyButton.disabled=true;try{const result=await authRequest('/email/verification/confirm',{method:'POST',body:JSON.stringify({code:codeInput.value.trim()})});currentUser.email=result.data.email;currentUser.emailVerifiedAt=result.data.emailVerifiedAt;emailPanel.replaceChildren(emailHeading,emailIntro);const done=document.createElement('p');done.textContent='Indirizzo verificato correttamente: '+currentUser.email;emailPanel.append(done);showMessage(result.message,true);}catch(error){showMessage(error.message);}finally{verifyButton.disabled=false;}};
+  emailPanel.append(emailForm,codeForm);
+ }
+ section.append(heading,intro,panel);host.append(section);
+}
+
+function renderAuditModule(host){
+ const section=document.createElement('section');section.className='module active';
+ const heading=document.createElement('h2');heading.textContent='Registro attività';
+ const hint=document.createElement('p');hint.className='hint';hint.textContent='Ultime operazioni di modifica completate. Il registro non mostra password, codici o contenuti personali dei moduli.';
+ const box=document.createElement('div');box.className='panel table-wrap';box.textContent='Caricamento registro...';
+ section.append(heading,hint,box);host.append(section);
+ request('/audit?limit=100').then(result=>{
+  box.replaceChildren();const rows=result.data||[];
+  if(!rows.length){box.textContent='Nessuna operazione registrata.';return;}
+  const table=document.createElement('table'),thead=document.createElement('thead'),head=document.createElement('tr');
+  ['Data e ora','Utente','Operazione','Reparto','Riferimento','Indirizzo IP'].forEach(label=>{const th=document.createElement('th');th.textContent=label;head.append(th);});
+  thead.append(head);table.append(thead);const body=document.createElement('tbody');
+  rows.forEach(row=>{
+   const tr=document.createElement('tr');
+   [row.createdAt?new Date(row.createdAt).toLocaleString('it-IT'):'',row.username,row.action,row.resource,row.resourceId,row.ipAddress].forEach(value=>{const td=document.createElement('td');td.textContent=safe(value);tr.append(td);});
+   body.append(tr);
+  });
+  table.append(body);box.append(table);
+ }).catch(error=>{box.textContent='Errore caricamento registro: '+error.message;});
+}
+function renderModule(){const host=$('modules');host.replaceChildren();if(active==='audit'){renderAuditModule(host);return;}if(active==='security'){renderSecurityModule(host);return;}if(active==='users'){renderUsersModule(host);return;}const d=definitions[active],section=document.createElement('section');section.className='module active';const h=document.createElement('h2');h.textContent=d.label;const p=document.createElement('p');p.className='hint';p.textContent='I dati sono visibili solo dopo autenticazione amministrativa.';const form=document.createElement('form');form.className='panel';if(currentUser.role==='manager')form.classList.add('hidden');form.append(Object.assign(document.createElement('h2'),{textContent:'Nuovo inserimento'}));const grid=document.createElement('div');grid.className='grid';d.fields.forEach(f=>grid.append(fieldNode(f)));const submit=document.createElement('button');submit.className='btn form-actions';submit.textContent='Salva';form.append(grid,submit);form.onsubmit=async e=>{e.preventDefault();const data={};new FormData(form).forEach((v,k)=>{if(v!==''){const f=d.fields.find(x=>x[0]===k);data[k]=f&&f[2]==='number'?Number(v):v;}});try{await request('/'+d.endpoint,{method:'POST',body:JSON.stringify(data)});form.reset();await loadModule();showMessage('Dato salvato correttamente.',true);}catch(err){showMessage(err.message);}};const tableBox=document.createElement('div');tableBox.className='panel table-wrap';tableBox.id='table-'+active;section.append(h,p,form,tableBox);host.append(section);populateReferences(form,d.fields);loadModule();}
+async function loadModule(){
+ const d=definitions[active],box=$('table-'+active);if(!box)return;
+ box.textContent='Caricamento...';
+ try{
+  const result=await request('/'+d.endpoint),rows=result.data||[];box.replaceChildren();
+  if(!rows.length){box.textContent='Nessun elemento registrato.';return;}
+  const table=document.createElement('table'),thead=document.createElement('thead'),tr=document.createElement('tr');
+  d.labels.forEach(label=>{const th=document.createElement('th');th.textContent=label;tr.append(th);});
+  if(['cases','tasks','inventory','invoices'].includes(active)){const th=document.createElement('th');th.textContent='Azioni';tr.append(th);}
+  thead.append(tr);table.append(thead);const tbody=document.createElement('tbody');
+  rows.forEach(row=>{
+   const line=document.createElement('tr');
+   d.columns.forEach(col=>{const td=document.createElement('td');td.textContent=displayValue(row[col]);line.append(td);});
+   if(['cases','tasks','inventory','invoices'].includes(active)){
+    const td=document.createElement('td'),b=document.createElement('button');b.className='btn alt';
+    if(active==='invoices'){
+     if(row.status==='draft'){b.textContent='Emetti fattura';b.className='btn gold';b.onclick=()=>issueInvoice(row);}
+     else if(row.status==='paid'){b.textContent='Pagata';b.disabled=true;}
+     else if(row.status==='cancelled'){b.textContent='Annullata';b.disabled=true;}
+     else {b.textContent='Registra incasso';b.onclick=()=>showPaymentForm(row,td);}
+    }else{
+     b.textContent=active==='cases'?'Completa':active==='tasks'?'Segna fatto':'Movimento';
+     b.onclick=()=>rowAction(row);
+    }
+    td.append(b);line.append(td);
+   }
+   tbody.append(line);
+  });
+  table.append(tbody);box.append(table);
+ }catch(e){box.textContent='Errore caricamento: '+e.message;}
+}
+async function issueInvoice(row){
+ if(!confirm('Confermi l’emissione della fattura '+safe(row.invoiceNumber)+'? Dopo l’emissione sarà possibile registrare gli incassi.'))return;
+ try{
+  await request('/invoices/'+row.id+'/issue',{method:'PATCH'});
+  await loadModule();await loadDashboard();
+  showMessage('Fattura emessa correttamente. Ora puoi registrare gli incassi.',true);
+ }catch(e){showMessage('Emissione non riuscita: '+e.message);}
+}
+function showPaymentForm(row,cell){
+ cell.replaceChildren();
+ const form=document.createElement('form');form.className='grid';
+ const amountWrap=document.createElement('div');amountWrap.className='field';
+ const amountLabel=document.createElement('label');amountLabel.textContent='Importo incassato (€)';
+ const amount=document.createElement('input');amount.type='number';amount.name='amount';amount.min='0.01';amount.step='0.01';amount.required=true;amount.placeholder='Es. 40';
+ amountLabel.append(amount);amountWrap.append(amountLabel);
+ const methodWrap=document.createElement('div');methodWrap.className='field';
+ const methodLabel=document.createElement('label');methodLabel.textContent='Metodo di pagamento';
+ const method=document.createElement('select');method.name='method';method.required=true;
+ [['','Seleziona metodo'],['contanti','Contanti'],['bonifico','Bonifico'],['carta','Carta'],['assegno','Assegno'],['altro','Altro']].forEach(([v,t])=>{const o=document.createElement('option');o.value=v;o.textContent=t;method.append(o);});
+ methodLabel.append(method);methodWrap.append(methodLabel);
+ const feedback=document.createElement('div');feedback.className='msg';feedback.setAttribute('role','status');
+ const actions=document.createElement('div');actions.className='row';
+ const save=document.createElement('button');save.className='btn';save.type='submit';save.textContent='Conferma incasso';
+ const cancel=document.createElement('button');cancel.className='btn alt';cancel.type='button';cancel.textContent='Annulla';cancel.onclick=()=>{cell.replaceChildren();const b=document.createElement('button');b.className='btn alt';b.textContent='Registra incasso';b.onclick=()=>showPaymentForm(row,cell);cell.append(b);};
+ actions.append(save,cancel);form.append(amountWrap,methodWrap,actions,feedback);
+ form.onsubmit=async e=>{e.preventDefault();const value=Number(amount.value);if(!Number.isFinite(value)||value<=0){feedback.textContent='Inserisci un importo valido.';return;}if(!method.value){feedback.textContent='Seleziona il metodo di pagamento.';return;}save.disabled=true;save.textContent='Salvataggio...';feedback.textContent='Invio del pagamento in corso...';try{await request('/invoices/'+row.id+'/payments',{method:'POST',body:JSON.stringify({amount:value,paymentDate:new Date().toISOString().slice(0,10),method:method.value})});feedback.textContent='Incasso registrato correttamente.';feedback.className='msg ok';await loadModule();await loadDashboard();}catch(err){save.disabled=false;save.textContent='Conferma incasso';feedback.textContent='Errore: '+err.message;}};
+ cell.append(form);amount.focus();
+}
+async function rowAction(row){try{
+ if(active==='cases'){if(!confirm('Segnare la pratica come completata?'))return;await request('/cases/'+row.id+'/status',{method:'PATCH',body:JSON.stringify({status:'completed'})});}
+ if(active==='tasks'){if(!confirm('Segnare l’attività come completata?'))return;await request('/tasks/'+row.id+'/status',{method:'PATCH',body:JSON.stringify({status:'done'})});}
+ if(active==='inventory'){const movementType=(prompt('Scrivi CARICO oppure SCARICO')||'').trim().toLowerCase();if(!['carico','scarico','in','out'].includes(movementType))return;const quantity=Number(prompt('Quantità da movimentare'));if(!Number.isFinite(quantity)||quantity<=0)return;const reason=prompt('Causale (facoltativa)')||'';await request('/inventory/'+row.id+'/movements',{method:'POST',body:JSON.stringify({movementType:['carico','in'].includes(movementType)?'in':'out',quantity,reason})});}
+ if(active==='invoices'){const amount=Number((prompt('Importo incassato (€)')||'').replace(',','.'));if(!Number.isFinite(amount)||amount<=0)return;const method=prompt('Metodo (bonifico, contanti, carta...)')||'';if(!method.trim())return;await request('/invoices/'+row.id+'/payments',{method:'POST',body:JSON.stringify({amount,method})});}
+ await loadModule();await loadDashboard();showMessage('Operazione completata.',true);
+ }catch(e){showMessage(e.message);}}
+async function loadDashboard(){const [r,casesResult,tasksResult]=await Promise.all([request('/dashboard'),request('/cases'),request('/tasks')]);const d=r.data;const items=[['Pratiche totali',d.cases.total],['Pratiche attive',d.cases.active],['Famiglie/clienti',d.customers.total],['Personale attivo',d.activeStaff],['Veicoli disponibili',d.vehicles.available],['Articoli sotto scorta',d.lowStock],['Attività aperte',d.openTasks],['Da incassare',new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(d.outstandingEuro||0))]];$('stats').replaceChildren();items.forEach(([label,value])=>{const card=document.createElement('div');card.className='stat';const strong=document.createElement('strong');strong.textContent=safe(value);const span=document.createElement('span');span.textContent=label;card.append(strong,span);$('stats').append(card);});const overview=$('overview');overview.replaceChildren();const today=new Date();today.setHours(0,0,0,0);const services=(casesResult.data||[]).filter(x=>x.serviceDate&&new Date(x.serviceDate)>=today&&!['completed','cancelled'].includes(x.status)).sort((a,b)=>new Date(a.serviceDate)-new Date(b.serviceDate)).slice(0,6);const tasks=(tasksResult.data||[]).filter(x=>x.dueDate&&!['done','cancelled'].includes(x.status)).sort((a,b)=>new Date(a.dueDate)-new Date(b.dueDate)).slice(0,6);const addPanel=(title,rows,format,empty)=>{const panel=document.createElement('section');panel.className='overview-panel';const heading=document.createElement('h2');heading.textContent=title;const list=document.createElement('div');list.className='overview-list';if(!rows.length){const note=document.createElement('div');note.className='hint';note.textContent=empty;list.append(note);}rows.forEach(row=>{const item=document.createElement('div');item.className='overview-item';const strong=document.createElement('strong');const detail=document.createElement('span');const parts=format(row);strong.textContent=parts[0];detail.textContent=parts[1];item.append(strong,detail);list.append(item);});panel.append(heading,list);overview.append(panel);};const dateFmt=v=>new Intl.DateTimeFormat('it-IT',{dateStyle:'medium',timeStyle:v&&v.includes('T')?'short':undefined}).format(new Date(v));addPanel('Prossimi servizi',services,row=>[safe(row.caseCode)+' · '+safe(row.deceasedFirstName)+' '+safe(row.deceasedLastName),dateFmt(row.serviceDate)+' · '+safe(row.serviceType)],'Nessun servizio programmato.');addPanel('Attività in scadenza',tasks,row=>[safe(row.title),dateFmt(row.dueDate)+' · '+safe(row.priority)+' · '+(safe(row.staffFirstName)+' '+safe(row.staffLastName)).trim()],'Nessuna attività con scadenza aperta.');}
+async function enterApp(){try{const profile=await authRequest('/me');currentUser=profile.data;}catch(_e){} $('connection').classList.add('hidden');$('app').classList.remove('hidden');if(currentUser.role==='admin'&&!currentUser.mfaEnabled)active='security';renderTabs();renderModule();if(['admin','manager'].includes(currentUser.role)&&(currentUser.role!=='admin'||currentUser.mfaEnabled))await loadDashboard();}
+$('login').onclick=async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/login',{method:'POST',body:JSON.stringify({username:$('login-user').value,password:$('login-password').value})});if(r.mfaRequired){$('mfa-login-panel').classList.remove('hidden');$('mfa-login-code').focus();return;}currentUser=r.data;await enterApp();}catch(e){showMessage('Accesso non riuscito: '+e.message);}};
+$('mfa-login-verify').onclick=async()=>{try{const r=await authRequest('/mfa/verify-login',{method:'POST',body:JSON.stringify({code:$('mfa-login-code').value.trim()})});currentUser=r.data;$('mfa-login-panel').classList.add('hidden');$('mfa-login-code').value='';await enterApp();}catch(e){showMessage('Verifica non riuscita: '+e.message);}};
+$('show-bootstrap').onclick=()=> $('bootstrap-panel').classList.remove('hidden');
+$('hide-bootstrap').onclick=()=> $('bootstrap-panel').classList.add('hidden');
+$('bootstrap-create').onclick=async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/bootstrap',{method:'POST',body:JSON.stringify({token:$('bootstrap-token').value,username:$('bootstrap-user').value,displayName:$('bootstrap-name').value,password:$('bootstrap-password').value})});showMessage(r.message,true);$('login-user').value=$('bootstrap-user').value;$('login-password').value=$('bootstrap-password').value;$('bootstrap-panel').classList.add('hidden');$('bootstrap-token').value='';$('bootstrap-password').value='';}catch(e){showMessage('Creazione non riuscita: '+e.message);}};
+(async()=>{api=$('api').value.trim().replace(/\/+$/,'');try{const r=await authRequest('/me');currentUser=r.data;await enterApp();}catch(_e){}})();
+</script>
+</body></html>
