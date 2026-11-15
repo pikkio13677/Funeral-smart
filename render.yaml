@@ -2,7 +2,7 @@ services:
   - type: web
     name: funeral-smart-api
     runtime: node
-    plan:  free
+    plan: free
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
@@ -17,9 +17,25 @@ services:
         sync: false
       - key: CORS_ORIGIN
         sync: false
+      - key: PUBLIC_APP_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: ADMIN_NOTIFICATION_EMAIL
+        sync: false
+
+  - type: web
+    name: funeral-smart-web
+    runtime: static
+    buildCommand: echo "Publishing FUNERAL SMART"
+    staticPublishPath: ./public
+    domains:
+      - funeralsmartapp.com
 
 databases:
   - name: funeral-smart-db
-    plan:  free
+    plan: free
     databaseName: funeral_smart
     user: funeral_smart_user

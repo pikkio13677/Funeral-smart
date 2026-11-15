@@ -45,6 +45,23 @@ Impostare nelle Environment Variables del servizio:
 
 La chiave `ADMIN_API_KEY` non va mai inserita in `index.html`, `api-config.js`, file pubblici o messaggi. Per la prima area gestionale viene digitata dall'amministratore nel browser e resta solo in `sessionStorage fino alla chiusura della sessione. È una protezione provvisoria: prima dell'uso con dati reali sostituirla con login nominativi, ruoli, MFA, sessioni server-side e audit log.
 
+## Email transazionali tramite Resend
+
+Le richieste pubbliche e le candidature vengono salvate nel database prima di tentare l'invio delle notifiche. Un errore di Resend non annulla la registrazione né espone la chiave API.
+
+Configurare esclusivamente nel servizio Render:
+- `RESEND_API_KEY`: chiave Resend con permesso Sending.
+- `RESEND_FROM_EMAIL`: mittente autorizzato su un dominio verificato.
+- `ADMIN_NOTIFICATION_EMAIL`: casella che riceve le nuove richieste e le candidature.
+- `PUBLIC_APP_URL`: URL HTTPS pubblico del servizio, usato per collegare l'area gestionale.
+
+Flussi previsti:
+- conferma al richiedente, se ha fornito un indirizzo email;
+- avviso all'amministratore per ogni nuova richiesta;
+- avviso all'amministratore per ogni nuova candidatura, che resta in attesa di verifica.
+
+Le email non inoltrano automaticamente le richieste alle imprese. Non includono le note libere inviate dall'utente. Non inserire mai chiavi API in GitHub o in chat.
+
 ## API gestionali
 Tutte le rotte seguenti richiedono l'header `x-admin-key`:
 - `GET /api/v1/admin/dashboard`
