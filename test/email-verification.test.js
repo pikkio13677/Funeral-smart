@@ -75,6 +75,7 @@ test('email verification confirmation updates only the authenticated account and
     async query(sql, args = []) {
       calls.push({ sql, args });
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+      if (sql.includes('SELECT id FROM app_users')) return { rowCount: 1, rows: [{ id: 'user-1' }] };
       if (sql.includes('FROM email_verification_challenges')) return { rowCount: 1, rows: [{
         id: 'challenge-1', email: 'member@example.com', code_hash: digest(code), attempts: 0
       }] };
@@ -104,6 +105,7 @@ test('wrong email verification code increments attempts and never changes the ac
     async query(sql, args = []) {
       calls.push({ sql, args });
       if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+      if (sql.includes('SELECT id FROM app_users')) return { rowCount: 1, rows: [{ id: 'user-1' }] };
       if (sql.includes('FROM email_verification_challenges')) return { rowCount: 1, rows: [{
         id: 'challenge-1', email: 'member@example.com', code_hash: digest('111111'), attempts: 0
       }] };
