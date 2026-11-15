@@ -13,4 +13,6 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Fail on high or critical dependency advisories
+        run: npm audit --audit-level=high
       - run: npm run check
