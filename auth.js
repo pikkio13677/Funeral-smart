@@ -393,6 +393,14 @@ module.exports = function createAuth(pool, { sendVerificationEmail, emailVerific
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const activeUser = await client.query(
+        'SELECT id FROM app_users WHERE id=$1 AND active=TRUE FOR UPDATE',
+        [req.user.id]
+      );
+      if (!activeUser.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Account non attivo.' });
+      }
       const challengeResult = await client.query(
         `SELECT id, email, code_hash, attempts
          FROM email_verification_challenges
