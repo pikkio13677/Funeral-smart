@@ -458,7 +458,7 @@ module.exports = function createAuth(pool, { sendVerificationEmail, emailVerific
   });
 
   router.get('/me', authenticate, (req, res) => {
-    res.json({ data: { id: req.user.id, username: req.user.username, displayName: req.user.displayName, role: req.user.role, roleLabel: ROLE_LABELS[req.user.role] || 'Accesso temporaneo', mfaEnabled: Boolean(req.user.mfaEnabled) } });
+    res.json({ data: { id: req.user.id, username: req.user.username, displayName: req.user.displayName, role: req.user.role, roleLabel: ROLE_LABELS[req.user.role] || 'Accesso temporaneo', mfaEnabled: Boolean(req.user.mfaEnabled), email: req.user.email || null, emailVerifiedAt: req.user.emailVerifiedAt || null, emailVerificationEnabled } });
   });
 
   router.get('/users', authenticate, async (req, res, next) => {
