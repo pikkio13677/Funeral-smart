@@ -34,7 +34,7 @@ test('tenant UI exposes accounting invoice actions and permitted audit views', (
   const html = fs.readFileSync(require.resolve('../admin.html'), 'utf8');
   assert.match(html, /accounting:\{customers:\['read'\],cases:\['read'\],invoices:\['read','create','issue','pay'\],audit:\['read'\]\}/);
   assert.match(html, /r==='accounting'\)return \['invoices','security','audit'\]/);
-  assert.match(html, /r==='admin'\|\|r==='manager'\)return Object\.keys\(definitions\)\.concat\(\['inquiries'\],r==='admin'\?\['company','users','security','audit'\]:\['security','audit'\]\)/);
+  assert.match(html, /r==='admin'\|\|r==='manager'\)return Object\.keys\(definitions\)\.concat\(tenantActive\?\[\]:\['inquiries'\],r==='admin'\?\['company','users','security','audit'\]:\['security','audit'\]\)/);
 });
 
 test('online inquiries are visible in a read-only authorized admin module', () => {
