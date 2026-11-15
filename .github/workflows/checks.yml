@@ -1,9 +1,9 @@
 name: Funeral Smart checks
 on:
   push:
-    branches: [main, "feature/**", "fix/**", "security/**", "release/funeral-smart-preflight"]
+    branches: [main, "feature/**", "fix/**", "security/**", "release/funeral-smart-preflight", "integration/**", "staging/**"]
   pull_request:
-    branches: [main, "fix/**", "security/**", "release/funeral-smart-preflight", "integration/**"]
+    branches: [main, "fix/**", "security/**", "release/funeral-smart-preflight", "integration/**", "staging/**"]
 jobs:
   syntax:
     runs-on: ubuntu-latest

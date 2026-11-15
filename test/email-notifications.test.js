@@ -66,3 +66,15 @@ test('missing administrator recipient skips only administrator notices', async (
   assert.equal(calls.length, 1);
   assert.equal(calls[0].body.to[0], 'cliente@example.com');
 });
+
+test('staging explicitly disables all outbound email even when credentials exist', async () => {
+  const { calls, logs, notifier } = setup({ STAGING_MODE: 'true' });
+  await notifier.notifyInquiry({
+    id: 45, city: 'Brescia', serviceType: 'Cremazione', contactEmail: 'cliente@example.com'
+  });
+  await notifier.notifyProviderApplication({
+    id: 10, businessName: 'Impresa di prova', city: 'Brescia', email: 'impresa@example.com'
+  });
+  assert.equal(calls.length, 0);
+  assert.equal(logs.filter(message => message.includes('disabilitato esplicitamente')).length, 3);
+});
