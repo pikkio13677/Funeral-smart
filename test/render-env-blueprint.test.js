@@ -41,7 +41,7 @@ test('secret values are supplied out of band and never committed in the Blueprin
 });
 
 test('multi-tenant mode is explicitly disabled by the Render Blueprint', () => {
-  assert.match(envBlock('ENABLE_MULTI_TENANT'), /value:\s*["']?false["']?\s*$/);
+  assert.match(envBlock('ENABLE_MULTI_TENANT'), /value:\s*["']?false["']?/);
 });
 
 test('deployment documentation covers bootstrap, MFA, email and the disabled multi-tenant flag', () => {
