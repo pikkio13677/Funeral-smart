@@ -69,7 +69,7 @@ test('acceptance hashes the raw token and creates membership only in the invitat
       calls.push({ sql, args });
       if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
       if (sql.includes('FROM company_invitations')) return { rowCount: 1, rows: [{ id: 'invite-1', companyId: 'company-from-db', email: 'member@example.com', role: 'operator', status: 'pending', expiresAt: new Date(Date.now() + 60000) }] };
-      if (sql.includes('FROM app_users')) return { rowCount: 1, rows: [{ id: 'user-1', username: 'member', email: null, emailVerifiedAt: null, active: true }] };
+      if (sql.includes('FROM app_users')) return { rowCount: 1, rows: [{ id: 'user-1', username: 'member', email: 'member@example.com', emailVerifiedAt: new Date(), active: true }] };
       if (sql.includes('FROM companies')) return { rowCount: 1, rows: [{ id: 'company-from-db' }] };
       if (sql.includes('FROM company_memberships')) return { rowCount: 0, rows: [] };
       if (sql.includes('INSERT INTO company_memberships')) return { rowCount: 1, rows: [{ id: 'membership-new' }] };
@@ -87,6 +87,44 @@ test('acceptance hashes the raw token and creates membership only in the invitat
   const membershipInsert = calls.find(c => c.sql.includes('INSERT INTO company_memberships'));
   assert.deepEqual(membershipInsert.args, ['company-from-db', 'user-1', 'operator']);
   assert.ok(calls.some(c => c.sql === 'COMMIT'));
+});
+
+test('acceptance rejects unverified or mismatched email identities before creating membership', async () => {
+  for (const identity of [
+    { email: 'member@example.com', emailVerifiedAt: null },
+    { email: 'other@example.com', emailVerifiedAt: new Date() }
+  ]) {
+    const calls = [];
+    const client = {
+      async query(sql, args = []) {
+        calls.push({ sql, args });
+        if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+        if (sql.includes('FROM company_invitations')) return { rowCount: 1, rows: [{
+          id: 'invite-2', companyId: 'company-from-db', email: 'member@example.com',
+          role: 'operator', status: 'pending', expiresAt: new Date(Date.now() + 60000)
+        }] };
+        if (sql.includes('FROM app_users')) return { rowCount: 1, rows: [{
+          id: 'user-1', username: 'member', ...identity, active: true
+        }] };
+        throw new Error('No later query should run for an unverified/mismatched identity: ' + sql);
+      },
+      release() {}
+    };
+    const router = createRouter({ pool: {
+      query: async () => ({ rowCount: 0, rows: [] }),
+      connect: async () => client
+    } });
+    const res = response();
+    await routeHandler(router, '/company/invitations/accept', 'post')(
+      { user: { id: 'user-1' }, body: { token: 't'.repeat(48) } },
+      res,
+      error => { throw error; }
+    );
+    assert.equal(res.statusCode, 403);
+    assert.equal(calls.some(c => c.sql.includes('INSERT INTO company_memberships')), false);
+    assert.equal(calls.some(c => c.sql.includes('UPDATE app_users SET email')), false);
+    assert.ok(calls.some(c => c.sql === 'ROLLBACK'));
+  }
 });
 
 test('invitation listing is always scoped to the verified tenant company', async () => {
