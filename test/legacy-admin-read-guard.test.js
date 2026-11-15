@@ -32,3 +32,11 @@ test('server applies the guard after authentication and authorization to both gl
   assert.match(server, /app\.get\('\/api\/v1\/admin\/inquiries', auth\.authenticate, auth\.authorize, legacyAdminReadGuard,/);
   assert.match(server, /app\.get\('\/api\/v1\/admin\/provider-applications', auth\.authenticate, auth\.authorize, legacyAdminReadGuard,/);
 });
+
+
+test('all legacy admin department routes are disabled in tenant mode, not only two GET endpoints', () => {
+  const server = require('node:fs').readFileSync(require.resolve('../server.js'), 'utf8');
+  assert.match(server, /if \(tenantFeaturesEnabled\) \{\s*app\.use\('\/api\/v1\/admin', \(_req, res\) => res\.status\(410\)/);
+  assert.match(server, /else \{\s*app\.use\('\/api\/v1\/admin', auth\.authenticate, auth\.authorize, require\('\.\/admin-routes'\)/);
+  assert.doesNotMatch(server, /app\.use\('\/api\/v1\/admin', auth\.authenticate, auth\.authorize, require\('\.\/admin-routes'\)[\s\S]*?if \(tenantFeaturesEnabled\)/);
+});
