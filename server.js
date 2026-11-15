@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const { z } = require('zod');
 const emailNotifications = require('./email-notifications')();
+const stagingSubmissionGuard = require('./staging-submission-guard')();
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
@@ -141,7 +142,7 @@ const publicSubmissionLimiter = rateLimit({
   message: { error: 'Troppe richieste inviate. Riprova più tardi.' }
 });
 
-app.post('/api/v1/inquiries', publicSubmissionLimiter, async (req, res, next) => {
+app.post('/api/v1/inquiries', stagingSubmissionGuard, publicSubmissionLimiter, async (req, res, next) => {
   const parsed = inquirySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
   const v = parsed.data;
@@ -156,7 +157,7 @@ app.post('/api/v1/inquiries', publicSubmissionLimiter, async (req, res, next) =>
   } catch (e) { next(e); }
 });
 
-app.post('/api/v1/provider-applications', publicSubmissionLimiter, async (req, res, next) => {
+app.post('/api/v1/provider-applications', stagingSubmissionGuard, publicSubmissionLimiter, async (req, res, next) => {
   const parsed = providerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
   const v = parsed.data;
