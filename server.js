@@ -53,7 +53,7 @@ const inquirySchema = z.object({
   privacyConsent: z.literal(true)
 }).refine(v => Boolean(v.contactEmail || v.contactPhone), { message: 'Inserire almeno un recapito per poter essere ricontattati.' });
 
-const emailVerificationEnabled = process.env.ENABLE_MULTI_TENANT === 'true';
+const emailVerificationEnabled = process.env.ENABLE_EMAIL_VERIFICATION === 'true';
 const auth = require('./auth')(pool, {
   sendVerificationEmail: createResendVerificationSender(),
   emailVerificationEnabled
