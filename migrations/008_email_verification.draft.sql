@@ -1,7 +1,7 @@
 -- FUNERAL SMART — bozza migrazione 008: codici di verifica email
 -- Dipende da 007_audit_invitations.draft.sql (app_users.email).
 -- NON aggiungere a migrate.js e NON applicare a produzione prima del rollout completo.
--- I codici in chiaro vengono inviati una sola volta e nel DB resta solo SHA-256.
+-- I codici in chiaro vengono inviati una sola volta e nel DB resta solo un digest HMAC-SHA-256 protetto da pepper.
 
 CREATE TABLE IF NOT EXISTS email_verification_challenges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
