@@ -39,3 +39,17 @@ databases:
     plan: free
     databaseName: funeral_smart
     user: funeral_smart_user
+
+  - type: web
+    name: funeral-smart-web
+    runtime: static
+    buildCommand: echo "Publishing FUNERAL SMART"
+    staticPublishPath: ./public
+    domains:
+      - funeralsmartapp.com
+
+databases:
+  - name: funeral-smart-db
+    plan: free
+    databaseName: funeral_smart
+    user: funeral_smart_user
