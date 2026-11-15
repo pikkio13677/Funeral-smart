@@ -46,13 +46,19 @@ test('online inquiries are visible in a read-only authorized admin module', () =
   assert.match(html, /if\(active==='inquiries'\)\{renderInquiriesModule\(host\);return;\}/);
 });
 
-test('provider applications are visible in a read-only authorized admin module', () => {
+test('provider approval and verification controls are available only to administrators', () => {
   const html = fs.readFileSync(require.resolve('../admin.html'), 'utf8');
-  assert.match(html, /function renderProviderApplicationsModule\(host\)/);
-  assert.match(html, /request\('\/provider-applications'\)/);
-  assert.match(html, /Candidature delle imprese funebri/);
-  assert.match(html, /Partita IVA/);
-  assert.match(html, /if\(active==='providerApplications'\)\{renderProviderApplicationsModule\(host\);return;\}/);
-  assert.match(html, /nessuna impresa viene pubblicata finché non è verificata/);
-  assert.match(html, /if\(active==='providerApplications'\)\{renderProviderApplicationsModule\(host\);return;\}/);
+  assert.ok(html.includes('function renderProviderApplicationsModule(host)'));
+  assert.ok(html.includes("request('/provider-applications')"));
+  assert.ok(html.includes("request('/providers')"));
+  assert.ok(html.includes("'/provider-applications/'+encodeURIComponent(row.id)+'/approve'"));
+  assert.ok(html.includes("'/provider-applications/'+encodeURIComponent(row.id)+'/reject'"));
+  assert.ok(html.includes("'/providers/'+encodeURIComponent(row.id)+'/verify'"));
+  assert.ok(html.includes('documentsReviewed:true'));
+  assert.ok(html.includes('Conferma verifica'));
+  assert.ok(html.includes("currentUser?.role==='admin'"));
+  assert.ok(html.includes('Gestione imprese funebri'));
+  assert.ok(html.includes('Partita IVA'));
+  assert.ok(html.includes("if(active==='providerApplications'){renderProviderApplicationsModule(host);return;}"));
+  assert.ok(html.includes('Solo le imprese verificate possono apparire nelle ricerche pubbliche.'));
 });

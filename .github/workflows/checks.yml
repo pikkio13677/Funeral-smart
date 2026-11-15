@@ -51,6 +51,10 @@ jobs:
         env:
           RUN_INQUIRY_POSTGRES_TESTS: 'true'
         run: node --test test/inquiries-postgres.integration.test.js
+      - name: Verify provider publication gates on disposable PostgreSQL
+        env:
+          RUN_PROVIDER_POSTGRES_TESTS: 'true'
+        run: node --test test/provider-workflow-postgres.integration.test.js
       - name: Apply and verify draft tenant migrations
         run: npm run test:migrations
       - name: Verify initial company bootstrap and legacy backfill

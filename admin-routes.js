@@ -166,5 +166,129 @@ module.exports = function createAdminRouter(pool, adminOnly) {
   });
   router.post('/invoices/:id/payments',async(req,res,next)=>{const p=paymentSchema.safeParse(req.body);if(!p.success)return fail(res,p);const v=p.data;const client=await pool.connect();try{await client.query('BEGIN');const inv=await client.query('SELECT id,amount,status FROM invoices WHERE id=$1 FOR UPDATE',[req.params.id]);if(!inv.rowCount){await client.query('ROLLBACK');return res.status(404).json({error:'Documento non trovato'});}if(['draft','cancelled'].includes(inv.rows[0].status)){await client.query('ROLLBACK');return res.status(409).json({error:'Il documento non può ricevere pagamenti nello stato attuale'});}const paid=await client.query('SELECT COALESCE(SUM(amount),0) AS total FROM payments WHERE invoice_id=$1',[req.params.id]);const remaining=Number(inv.rows[0].amount)-Number(paid.rows[0].total);if(v.amount>remaining+0.001){await client.query('ROLLBACK');return res.status(409).json({error:'Il pagamento supera il residuo da incassare'});}const payment=await client.query('INSERT INTO payments(invoice_id,amount,payment_date,method,reference) VALUES($1,$2,COALESCE($3::date,CURRENT_DATE),$4,$5) RETURNING id,amount,payment_date AS "paymentDate",method,reference',[req.params.id,v.amount,v.paymentDate||null,v.method,v.reference||null]);const total=Number(paid.rows[0].total)+v.amount;const status=total>=Number(inv.rows[0].amount)?'paid':'partial';await client.query('UPDATE invoices SET status=$1 WHERE id=$2',[status,req.params.id]);await client.query('COMMIT');res.status(201).json({data:payment.rows[0],paidAmount:total,remainingEuro:Number(inv.rows[0].amount)-total,status});}catch(e){await client.query('ROLLBACK');next(e);}finally{client.release();}});
 
+
+  // Le candidature approvate diventano fornitori in stato pending:
+  // non sono pubbliche finché un amministratore non completa la verifica.
+  router.post('/provider-applications/:id/approve', async (req, res, next) => {
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return res.status(400).json({ error: 'Identificativo candidatura non valido.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const application = await client.query(
+        `SELECT id, business_name, vat_number, city, province, email, phone, website, status
+         FROM provider_applications WHERE id = $1 FOR UPDATE`,
+        [id.data]
+      );
+      if (!application.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Candidatura non trovata.' });
+      }
+      const item = application.rows[0];
+      if (item.status !== 'pending') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'La candidatura è già stata gestita.' });
+      }
+      const duplicate = await client.query('SELECT id FROM providers WHERE vat_number = $1', [item.vat_number]);
+      if (duplicate.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Esiste già un’impresa con questa partita IVA.' });
+      }
+      const provider = await client.query(
+        `INSERT INTO providers
+          (business_name, vat_number, city, province, email, phone, website, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'pending')
+         RETURNING id, business_name AS "businessName", vat_number AS "vatNumber", city,
+                   province, email, phone, website, status, verification_date AS "verificationDate"`,
+        [item.business_name, item.vat_number, item.city, item.province, item.email, item.phone, item.website]
+      );
+      await client.query("UPDATE provider_applications SET status = 'approved' WHERE id = $1", [id.data]);
+      await client.query('COMMIT');
+      return res.status(201).json({
+        data: provider.rows[0],
+        message: 'Candidatura approvata. L’impresa resta non verificata e non è pubblica.'
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (error.code === '23505') return res.status(409).json({ error: 'Partita IVA già registrata per un’impresa.' });
+      return next(error);
+    } finally { client.release(); }
+  });
+
+  router.post('/provider-applications/:id/reject', async (req, res, next) => {
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return res.status(400).json({ error: 'Identificativo candidatura non valido.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query(
+        'SELECT id, status FROM provider_applications WHERE id = $1 FOR UPDATE',
+        [id.data]
+      );
+      if (!current.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Candidatura non trovata.' });
+      }
+      if (current.rows[0].status !== 'pending') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'La candidatura è già stata gestita.' });
+      }
+      await client.query("UPDATE provider_applications SET status = 'rejected' WHERE id = $1", [id.data]);
+      await client.query('COMMIT');
+      return res.json({ message: 'Candidatura rifiutata. Nessuna impresa è stata pubblicata.' });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      return next(error);
+    } finally { client.release(); }
+  });
+
+  router.get('/providers', async (_req, res, next) => {
+    try {
+      const result = await pool.query(
+        `SELECT id, business_name AS "businessName", vat_number AS "vatNumber", city, province,
+                email, phone, website, status, verification_date AS "verificationDate",
+                created_at AS "createdAt"
+         FROM providers ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'verified' THEN 1 ELSE 2 END,
+                  business_name LIMIT 300`
+      );
+      return res.json({ data: result.rows });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/providers/:id/verify', async (req, res, next) => {
+    const id = z.string().uuid().safeParse(req.params.id);
+    const confirmation = z.object({ documentsReviewed: z.literal(true) }).strict().safeParse(req.body);
+    if (!id.success || !confirmation.success) {
+      return res.status(400).json({ error: 'Conferma la verifica dei documenti prima di procedere.' });
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query('SELECT id, status FROM providers WHERE id = $1 FOR UPDATE', [id.data]);
+      if (!current.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Impresa non trovata.' });
+      }
+      if (current.rows[0].status !== 'pending') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Solo un’impresa in attesa può essere verificata.' });
+      }
+      const verified = await client.query(
+        `UPDATE providers SET status = 'verified', verification_date = NOW(), updated_at = NOW()
+         WHERE id = $1 RETURNING id, business_name AS "businessName", status,
+                           verification_date AS "verificationDate"`,
+        [id.data]
+      );
+      await client.query('COMMIT');
+      return res.json({
+        data: verified.rows[0],
+        message: 'Impresa verificata. Potrà comparire nelle ricerche pubbliche.'
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      return next(error);
+    } finally { client.release(); }
+  });
+
   return router;
 };
