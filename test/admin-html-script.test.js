@@ -51,6 +51,8 @@ test('provider applications are visible in a read-only authorized admin module',
   assert.match(html, /function renderProviderApplicationsModule\(host\)/);
   assert.match(html, /request\('\/provider-applications'\)/);
   assert.match(html, /Candidature delle imprese funebri/);
+  assert.match(html, /Partita IVA/);
+  assert.match(html, /if\(active==='providerApplications'\)\{renderProviderApplicationsModule\(host\);return;\}/);
   assert.match(html, /nessuna impresa viene pubblicata finché non è verificata/);
   assert.match(html, /if\(active==='providerApplications'\)\{renderProviderApplicationsModule\(host\);return;\}/);
 });
