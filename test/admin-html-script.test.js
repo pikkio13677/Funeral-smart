@@ -62,3 +62,14 @@ test('provider approval and verification controls are available only to administ
   assert.ok(html.includes("if(active==='providerApplications'){renderProviderApplicationsModule(host);return;}"));
   assert.ok(html.includes('Solo le imprese verificate possono apparire nelle ricerche pubbliche.'));
 });
+
+test('price list administration creates drafts and gates publication', () => {
+  const html = fs.readFileSync(require.resolve('../admin.html'), 'utf8');
+  const server = fs.readFileSync(require.resolve('../server.js'), 'utf8');
+  assert.ok(html.includes("request('/price-lists')"));
+  assert.ok(html.includes("request('/price-lists',{method:'POST'"));
+  assert.ok(html.includes("'/price-lists/'+encodeURIComponent(row.id)+'/publication'"));
+  assert.ok(html.includes('Salva listino come bozza'));
+  assert.ok(html.includes('I nuovi listini vengono salvati come bozze.'));
+  assert.ok(server.includes('SELECT id, code, label, description FROM service_types'));
+});

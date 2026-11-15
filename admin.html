@@ -255,7 +255,55 @@ async function renderProviderApplicationsModule(host){
  const providersTitle=document.createElement('h3');providersTitle.textContent='Imprese registrate e verifica';
  const providersHint=document.createElement('p');providersHint.className='hint';providersHint.textContent='Prima di confermare la verifica, controlla esternamente i dati e la documentazione dell’impresa. Il sistema non acquisisce copie dei documenti.';
  const providersBox=document.createElement('div');providersBox.className='panel table-wrap';providersBox.textContent='Caricamento imprese...';
- section.append(heading,hint,applicationsTitle,applicationsBox,providersTitle,providersHint,providersBox);host.append(section);
+ const priceListsTitle=document.createElement('h3');priceListsTitle.textContent='Listini e prezzi';
+ const priceListsHint=document.createElement('p');priceListsHint.className='hint';priceListsHint.textContent='I nuovi listini vengono salvati come bozze. La pubblicazione è possibile solo per imprese verificate e può essere revocata in qualsiasi momento.';
+ const priceListForm=document.createElement('form');priceListForm.className='panel';
+ const priceListFields=document.createElement('div');priceListFields.className='grid';
+ const makePriceField=(label,type,required=false)=>{const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent=label;const input=type==='textarea'?document.createElement('textarea'):document.createElement('input');if(type!=='textarea')input.type=type;input.required=required;wrap.append(l,input);priceListFields.append(wrap);return input;};
+ const priceProvider=document.createElement('select');priceProvider.required=true;
+ const providerWrap=document.createElement('div');providerWrap.className='field';const providerLabel=document.createElement('label');providerLabel.textContent='Impresa verificata';providerWrap.append(providerLabel,priceProvider);priceListFields.append(providerWrap);
+ const priceService=document.createElement('select');priceService.required=true;
+ const serviceWrap=document.createElement('div');serviceWrap.className='field';const serviceLabel=document.createElement('label');serviceLabel.textContent='Servizio';serviceWrap.append(serviceLabel,priceService);priceListFields.append(serviceWrap);
+ const priceTitle=makePriceField('Titolo listino','text',true);priceTitle.maxLength=180;
+ const priceTotal=makePriceField('Prezzo totale in euro (facoltativo)','number');priceTotal.min='0';priceTotal.step='0.01';
+ const vatWrap=document.createElement('div');vatWrap.className='field';const vatLabel=document.createElement('label');vatLabel.textContent='IVA inclusa?';const vatSelect=document.createElement('select');[['','Non specificato'],['true','Sì'],['false','No']].forEach(([value,label])=>{const o=document.createElement('option');o.value=value;o.textContent=label;vatSelect.append(o);});vatWrap.append(vatLabel,vatSelect);priceListFields.append(vatWrap);
+ const included=makePriceField('Voci incluse (una per riga)','textarea');
+ const excluded=makePriceField('Voci escluse (una per riga)','textarea');
+ const thirdParty=makePriceField('Costi di terzi / note','textarea');
+ const validFrom=makePriceField('Valido dal','date');
+ const validUntil=makePriceField('Valido fino al','date');
+ const savePrice=document.createElement('button');savePrice.className='btn gold form-actions';savePrice.type='submit';savePrice.textContent='Salva listino come bozza';
+ priceListForm.append(priceListFields,savePrice);
+ if(currentUser?.role!=='admin')priceListForm.classList.add('hidden');
+ const priceListsBox=document.createElement('div');priceListsBox.className='panel table-wrap';priceListsBox.textContent='Caricamento listini...';
+ section.append(heading,hint,applicationsTitle,applicationsBox,providersTitle,providersHint,providersBox,priceListsTitle,priceListsHint,priceListForm,priceListsBox);host.append(section);
+ try{
+  const [providerResult,serviceResponse]=await Promise.all([request('/providers'),fetch(api+'/api/v1/services')]);
+  const providers=(providerResult.data||[]).filter(p=>p.status==='verified');
+  providers.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.businessName+' · '+p.city;priceProvider.append(o);});
+  const serviceResult=await serviceResponse.json();
+  (serviceResult.data||[]).forEach(s=>{const o=document.createElement('option');o.value=s.code;o.textContent=s.label;priceService.append(o);});
+  if(!providers.length){const o=document.createElement('option');o.value='';o.textContent='Nessuna impresa verificata';priceProvider.append(o);savePrice.disabled=true;}
+ }catch(error){priceListForm.classList.add('hidden');showMessage('Elenco imprese o servizi non disponibile: '+error.message);}
+ priceListForm.onsubmit=async event=>{
+  event.preventDefault();savePrice.disabled=true;
+  try{
+   const serviceCode=priceService.value;
+   const serviceResponse=await fetch(api+'/api/v1/services');const serviceData=await serviceResponse.json();
+   const service=(serviceData.data||[]).find(item=>item.code===serviceCode);
+   if(!service)throw new Error('Servizio non disponibile.');
+   const payload={providerId:priceProvider.value,serviceTypeId:service.id,title:priceTitle.value.trim(),
+    includedItems:included.value.split('\\n').map(x=>x.trim()).filter(Boolean),
+    excludedItems:excluded.value.split('\\n').map(x=>x.trim()).filter(Boolean),
+    thirdPartyCostsNote:thirdParty.value.trim()||null,
+    validFrom:validFrom.value||null,validUntil:validUntil.value||null};
+   if(priceTotal.value!=='')payload.totalEuro=Number(priceTotal.value);
+   if(vatSelect.value!=='')payload.vatIncluded=vatSelect.value==='true';
+   await request('/price-lists',{method:'POST',body:JSON.stringify(payload)});
+   priceListForm.reset();showMessage('Listino salvato come bozza non pubblica.',true);await refreshPriceLists();
+  }catch(error){showMessage(error.message);}finally{savePrice.disabled=false;}
+ };
+
  const actionButton=(label,handler)=>{const b=document.createElement('button');b.className='btn alt';b.type='button';b.textContent=label;b.onclick=handler;return b;};
  async function refresh(){
   applicationsBox.textContent='Caricamento candidature...';providersBox.textContent='Caricamento imprese...';
@@ -302,6 +350,33 @@ async function renderProviderApplicationsModule(host){
   }catch(error){providersBox.textContent='Caricamento imprese non riuscito: '+error.message;}
  }
  await refresh();
+ await refreshPriceLists();
+ async function refreshPriceLists(){
+  priceListsBox.textContent='Caricamento listini...';
+  try{
+   const result=await request('/price-lists');const rows=result.data||[];priceListsBox.replaceChildren();
+   if(!rows.length){priceListsBox.textContent='Nessun listino registrato.';return;}
+   const table=document.createElement('table'),thead=document.createElement('thead'),head=document.createElement('tr');
+   ['Impresa','Servizio','Titolo','Prezzo (€)','IVA inclusa','Validità','Stato','Azioni'].forEach(label=>{const th=document.createElement('th');th.textContent=label;head.append(th);});
+   thead.append(head);table.append(thead);const body=document.createElement('tbody');
+   rows.forEach(row=>{
+    const tr=document.createElement('tr');
+    const values=[row.businessName,row.serviceLabel,row.title,row.totalEuro===null||row.totalEuro===undefined?'Da richiedere':new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(row.totalEuro)),row.vatIncluded===null||row.vatIncluded===undefined?'Non indicata':row.vatIncluded?'Sì':'No',[row.validFrom,row.validUntil].filter(Boolean).join(' – ')||'Non indicata',row.published?'Pubblicato':'Bozza'];
+    values.forEach(value=>{const td=document.createElement('td');td.textContent=safe(value);tr.append(td);});
+    const actions=document.createElement('td');
+    if(currentUser?.role==='admin'){
+     const toggle=actionButton(row.published?'Ritira':'Pubblica',async()=>{
+      if(!row.published&&row.providerStatus!=='verified'){showMessage('Verifica prima l’impresa.');return;}
+      if(!window.confirm(row.published?'Ritirare questo listino dalla pubblicazione?':'Pubblicare questo listino?'))return;
+      toggle.disabled=true;try{await request('/price-lists/'+encodeURIComponent(row.id)+'/publication',{method:'PATCH',body:JSON.stringify({published:!row.published})});showMessage(row.published?'Listino ritirato.':'Listino pubblicato.',true);await refreshPriceLists();}catch(error){showMessage(error.message);toggle.disabled=false;}
+     });
+     actions.append(toggle);
+    }else actions.textContent=row.published?'Pubblicato':'Bozza';
+    tr.append(actions);body.append(tr);
+   });
+   table.append(body);priceListsBox.append(table);
+  }catch(error){priceListsBox.textContent='Caricamento listini non riuscito: '+error.message;}
+ }
 }
 async function renderInquiriesModule(host){
  const section=document.createElement('section');section.className='module active';
