@@ -95,7 +95,7 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/v1/services', async (_req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT code, label, description FROM service_types WHERE active = TRUE ORDER BY sort_order, label');
+    const { rows } = await pool.query('SELECT id, code, label, description FROM service_types WHERE active = TRUE ORDER BY sort_order, label');
     res.json({ data: rows });
   } catch (e) { next(e); }
 });
