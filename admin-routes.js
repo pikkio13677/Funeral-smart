@@ -290,5 +290,115 @@ module.exports = function createAdminRouter(pool, adminOnly) {
     } finally { client.release(); }
   });
 
+
+  const priceListSchema = z.object({
+    providerId: z.string().uuid(),
+    serviceTypeId: z.string().uuid(),
+    title: text(180, 1),
+    totalEuro: z.number().nonnegative().max(10000000).nullable().optional(),
+    vatIncluded: z.boolean().nullable().optional(),
+    includedItems: z.array(text(240, 1)).max(100).optional().default([]),
+    excludedItems: z.array(text(240, 1)).max(100).optional().default([]),
+    thirdPartyCostsNote: optionalText(1500),
+    validFrom: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/).nullable().optional(),
+    validUntil: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/).nullable().optional()
+  }).strict().refine(v => !v.validFrom || !v.validUntil || v.validUntil >= v.validFrom, {
+    message: 'La data di fine validità non può precedere quella iniziale.'
+  });
+
+  router.get('/price-lists', async (_req, res, next) => {
+    try {
+      const result = await pool.query(
+        `SELECT pl.id, pl.provider_id AS "providerId", p.business_name AS "businessName",
+                p.status AS "providerStatus", pl.service_type_id AS "serviceTypeId",
+                st.label AS "serviceLabel", pl.title, pl.total_euro AS "totalEuro",
+                pl.vat_included AS "vatIncluded", pl.included_items AS "includedItems",
+                pl.excluded_items AS "excludedItems", pl.third_party_costs_note AS "thirdPartyCostsNote",
+                pl.valid_from AS "validFrom", pl.valid_until AS "validUntil",
+                pl.published, pl.created_at AS "createdAt"
+         FROM price_lists pl JOIN providers p ON p.id=pl.provider_id
+         JOIN service_types st ON st.id=pl.service_type_id
+         ORDER BY p.business_name, pl.created_at DESC LIMIT 300`
+      );
+      return res.json({ data: result.rows });
+    } catch (error) { return next(error); }
+  });
+
+  router.post('/price-lists', async (req, res, next) => {
+    const parsed = priceListSchema.safeParse(req.body);
+    if (!parsed.success) return fail(res, parsed);
+    const v = parsed.data;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const provider = await client.query('SELECT id, status FROM providers WHERE id=$1 FOR UPDATE', [v.providerId]);
+      if (!provider.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Impresa non trovata.' });
+      }
+      if (provider.rows[0].status !== 'verified') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Puoi creare un listino solo per un’impresa verificata.' });
+      }
+      const service = await client.query('SELECT id FROM service_types WHERE id=$1 AND active=TRUE', [v.serviceTypeId]);
+      if (!service.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Servizio non disponibile.' });
+      }
+      const result = await client.query(
+        `INSERT INTO price_lists
+          (provider_id, service_type_id, title, total_euro, vat_included,
+           included_items, excluded_items, third_party_costs_note, valid_from, valid_until, published)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,FALSE)
+         RETURNING id, provider_id AS "providerId", title, total_euro AS "totalEuro",
+                   published, valid_from AS "validFrom", valid_until AS "validUntil"`,
+        [v.providerId, v.serviceTypeId, v.title, v.totalEuro ?? null, v.vatIncluded ?? null,
+         JSON.stringify(v.includedItems), JSON.stringify(v.excludedItems),
+         v.thirdPartyCostsNote || null, v.validFrom || null, v.validUntil || null]
+      );
+      await client.query('COMMIT');
+      return res.status(201).json({ data: result.rows[0], message: 'Listino salvato come bozza: non è pubblico.' });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      return next(error);
+    } finally { client.release(); }
+  });
+
+  router.patch('/price-lists/:id/publication', async (req, res, next) => {
+    const id = z.string().uuid().safeParse(req.params.id);
+    const parsed = z.object({ published: z.boolean() }).strict().safeParse(req.body);
+    if (!id.success || !parsed.success) return res.status(400).json({ error: 'Aggiornamento pubblicazione non valido.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query(
+        `SELECT pl.id, p.status AS "providerStatus"
+         FROM price_lists pl JOIN providers p ON p.id=pl.provider_id
+         WHERE pl.id=$1 FOR UPDATE OF pl,p`,
+        [id.data]
+      );
+      if (!current.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Listino non trovato.' });
+      }
+      if (parsed.data.published && current.rows[0].providerStatus !== 'verified') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Puoi pubblicare un listino solo per un’impresa verificata.' });
+      }
+      const result = await client.query(
+        'UPDATE price_lists SET published=$1 WHERE id=$2 RETURNING id, published',
+        [parsed.data.published, id.data]
+      );
+      await client.query('COMMIT');
+      return res.json({
+        data: result.rows[0],
+        message: parsed.data.published ? 'Listino pubblicato.' : 'Listino ritirato dalla pubblicazione.'
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      return next(error);
+    } finally { client.release(); }
+  });
+
   return router;
 };
