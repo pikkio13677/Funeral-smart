@@ -112,7 +112,7 @@ function cookieOptions() {
   return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000 };
 }
 
-module.exports = function createAuth(pool, { sendVerificationEmail, emailVerificationEnabled = process.env.ENABLE_EMAIL_VERIFICATION === 'true' } = {}) {
+module.exports = function createAuth(pool, { sendVerificationEmail, emailVerificationEnabled = process.env.ENABLE_EMAIL_VERIFICATION === 'true', invitationRegistrationEnabled = process.env.ENABLE_INVITATION_REGISTRATION === 'true' } = {}) {
   const router = express.Router();
 
   async function audit(user, req, action, resource = null, resourceId = null) {
@@ -308,6 +308,92 @@ module.exports = function createAuth(pool, { sendVerificationEmail, emailVerific
       res.cookie(SESSION_COOKIE, token, cookieOptions());
       res.json({ data: { id: user.id, username: user.username, displayName: user.displayName, role: user.role, roleLabel: ROLE_LABELS[user.role], mfaEnabled: false } });
     } catch (e) { next(e); }
+  });
+
+  router.post('/invitation/register', async (req, res, next) => {
+    if (!invitationRegistrationEnabled || !emailVerificationEnabled) {
+      return res.status(404).json({ error: 'Registrazione tramite invito non ancora attiva.' });
+    }
+    const parsed = z.object({
+      token: z.string().min(32).max(200),
+      username: z.string().trim().min(3).max(60).regex(/^[a-zA-Z0-9._-]+$/),
+      displayName: z.string().trim().min(2).max(160),
+      password: z.string().min(12).max(200)
+    }).strict().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Dati non validi. Username 3-60 caratteri e password di almeno 12 caratteri.' });
+    }
+
+    const client = await pool.connect();
+    let sessionToken;
+    let user;
+    try {
+      await client.query('BEGIN');
+      const invitation = await client.query(
+        \`SELECT id, email, status, expires_at AS "expiresAt"
+         FROM company_invitations
+         WHERE token_hash=$1
+         FOR UPDATE\`,
+        [tokenHash(parsed.data.token)]
+      );
+      if (!invitation.rowCount || invitation.rows[0].status !== 'pending') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Invito non valido, revocato o già utilizzato.' });
+      }
+      const invite = invitation.rows[0];
+      if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+        await client.query(
+          "UPDATE company_invitations SET status='expired' WHERE id=$1 AND status='pending'",
+          [invite.id]
+        );
+        await client.query('COMMIT');
+        return res.status(410).json({ error: 'Invito scaduto. Chiedi all’amministratore di inviarne uno nuovo.' });
+      }
+
+      const existing = await client.query(
+        'SELECT id, email_verified_at AS "emailVerifiedAt" FROM app_users WHERE lower(email)=$1 OR username=$2 FOR UPDATE',
+        [invite.email.toLowerCase(), parsed.data.username.toLowerCase()]
+      );
+      if (existing.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: existing.rows[0].emailVerifiedAt
+            ? 'Esiste già un account verificato per questo indirizzo. Accedi con quell’account per accettare l’invito.'
+            : 'Esiste già un account con questo indirizzo o username. Accedi con l’account esistente e verifica l’email.'
+        });
+      }
+
+      const passwordHash = await hashPassword(parsed.data.password);
+      const inserted = await client.query(
+        \`INSERT INTO app_users(username, display_name, password_hash, role, email)
+         VALUES($1,$2,$3,'operator',$4)
+         RETURNING id, username, display_name AS "displayName", email\`,
+        [parsed.data.username.toLowerCase(), parsed.data.displayName, passwordHash, invite.email.toLowerCase()]
+      );
+      user = inserted.rows[0];
+      sessionToken = crypto.randomBytes(32).toString('base64url');
+      await client.query(
+        "INSERT INTO app_sessions(user_id, token_hash, expires_at) VALUES($1,$2,NOW()+($3 || ' days')::interval)",
+        [user.id, tokenHash(sessionToken), String(SESSION_DAYS)]
+      );
+      await client.query(
+        'INSERT INTO audit_log(user_id, username, action, resource, resource_id, ip_address) VALUES($1,$2,$3,$4,$5,$6)',
+        [user.id, user.username, 'auth.invitation_registered', 'company_invitation', invite.id, req.ip || null]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      if (error.code === '23505') return res.status(409).json({ error: 'Username o account già esistente. Accedi con l’account corretto.' });
+      return next(error);
+    } finally {
+      client.release();
+    }
+
+    res.cookie(SESSION_COOKIE, sessionToken, cookieOptions());
+    return res.status(201).json({
+      data: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, emailVerifiedAt: null },
+      message: 'Account creato. Verifica ora l’indirizzo email per completare l’accettazione dell’invito.'
+    });
   });
 
   router.post('/email/verification/request', authenticate, async (req, res, next) => {
