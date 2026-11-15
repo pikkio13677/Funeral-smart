@@ -80,3 +80,27 @@ test('production requires an explicit verified sender for invitations and verifi
     else process.env.NODE_ENV = previous;
   }
 });
+
+
+test('staging blocks invitation and verification emails even when Resend credentials exist', async () => {
+  let calls = 0;
+  const shouldNotFetch = async () => {
+    calls += 1;
+    throw new Error('fetch must not run in staging');
+  };
+  const invitation = createResendInvitationSender({
+    stagingMode: true,
+    apiKey: 'test-secret',
+    from: 'FUNERAL SMART <verified@example.com>',
+    fetchImpl: shouldNotFetch
+  });
+  const verification = createResendVerificationSender({
+    stagingMode: true,
+    apiKey: 'test-secret',
+    from: 'FUNERAL SMART <verified@example.com>',
+    fetchImpl: shouldNotFetch
+  });
+  await assert.rejects(invitation(input), /disabilitato in staging/);
+  await assert.rejects(verification({ to: 'user@example.com', code: '123456' }), /disabilitato in staging/);
+  assert.equal(calls, 0);
+});

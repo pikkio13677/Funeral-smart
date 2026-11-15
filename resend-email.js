@@ -25,11 +25,13 @@ function validateInvitationUrl(value) {
 }
 
 function createResendInvitationSender({
+  stagingMode = process.env.STAGING_MODE === 'true',
   apiKey = process.env.RESEND_API_KEY,
   from = process.env.RESEND_FROM_EMAIL || (process.env.NODE_ENV === 'production' ? '' : DEFAULT_FROM),
   fetchImpl = globalThis.fetch
 } = {}) {
   return async function sendInvitationEmail({ to, companyName, invitationUrl, expiresAt } = {}) {
+    if (stagingMode) throw new Error('Invio email disabilitato in staging.');
     if (!apiKey) throw new Error('RESEND_API_KEY non configurata.');
     if (!from) throw new Error('RESEND_FROM_EMAIL non configurata: imposta un mittente su un dominio verificato.');
     if (typeof fetchImpl !== 'function') throw new Error('Fetch non disponibile nel runtime Node.');
@@ -96,11 +98,13 @@ function createResendInvitationSender({
 
 
 function createResendVerificationSender({
+  stagingMode = process.env.STAGING_MODE === 'true',
   apiKey = process.env.RESEND_API_KEY,
   from = process.env.RESEND_FROM_EMAIL || (process.env.NODE_ENV === 'production' ? '' : DEFAULT_FROM),
   fetchImpl = globalThis.fetch
 } = {}) {
   return async function sendVerificationEmail({ to, code, expiresInMinutes = 15 } = {}) {
+    if (stagingMode) throw new Error('Invio email disabilitato in staging.');
     if (!apiKey) throw new Error('RESEND_API_KEY non configurata.');
     if (!from) throw new Error('RESEND_FROM_EMAIL non configurata: imposta un mittente su un dominio verificato.');
     if (typeof fetchImpl !== 'function') throw new Error('Fetch non disponibile nel runtime Node.');
