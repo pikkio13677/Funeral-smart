@@ -50,6 +50,11 @@ test('provider applications are visible in a read-only authorized admin module',
   const html = fs.readFileSync(require.resolve('../admin.html'), 'utf8');
   assert.match(html, /function renderProviderApplicationsModule\(host\)/);
   assert.match(html, /request\('\/provider-applications'\)/);
+  assert.match(html, /request\('\/providers'\)/);
+  assert.match(html, /provider-applications\/\'\+encodeURIComponent\(row\.id\)\+\'\/approve/);
+  assert.match(html, /documentsReviewed:true/);
+  assert.match(html, /Conferma verifica/);
+  assert.match(html, /currentUser\?\.role==='admin'/);
   assert.match(html, /Candidature delle imprese funebri/);
   assert.match(html, /Partita IVA/);
   assert.match(html, /if\(active==='providerApplications'\)\{renderProviderApplicationsModule\(host\);return;\}/);
