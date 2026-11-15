@@ -29,8 +29,18 @@ services:
         sync: false
       - key: RESEND_FROM_EMAIL
         sync: false
+      - key: ADMIN_NOTIFICATION_EMAIL
+        sync: false
       - key: ENABLE_MULTI_TENANT
         value: "false"
+
+  - type: web
+    name: funeral-smart-web
+    runtime: static
+    buildCommand: echo "Publishing FUNERAL SMART"
+    staticPublishPath: ./public
+    domains:
+      - funeralsmartapp.com
 
 databases:
   - name: funeral-smart-db

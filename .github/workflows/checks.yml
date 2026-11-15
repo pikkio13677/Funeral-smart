@@ -1,9 +1,9 @@
 name: Funeral Smart checks
 on:
   push:
-    branches: [main, "feature/**", "fix/**", "security/**", "release/funeral-smart-preflight"]
+    branches: [main, "feature/**", "feat/**", "fix/**", "security/**", "release/funeral-smart-preflight", "integration/**", "staging/**"]
   pull_request:
-    branches: [main, "fix/**", "security/**", "release/funeral-smart-preflight"]
+    branches: [main, "feat/**", "fix/**", "security/**", "release/funeral-smart-preflight", "integration/**", "staging/**"]
 jobs:
   syntax:
     runs-on: ubuntu-latest
@@ -13,6 +13,11 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - name: Report high and critical dependency advisories
+        run: |
+          npm audit --json > npm-audit.json || true
+          node -e "const a=require('./npm-audit.json'); for (const [name,v] of Object.entries(a.vulnerabilities || {})) if (['high','critical'].includes(v.severity)) console.log(JSON.stringify({name,severity:v.severity,range:v.range,fixAvailable:v.fixAvailable,via:(v.via || []).map(x => typeof x === 'string' ? x : ({title:x.title,url:x.url,range:x.range}))}))"
+          npm audit --audit-level=high
       - run: npm run check
       - run: npm test
 
@@ -47,6 +52,14 @@ jobs:
         run: npm test
       - name: Build baseline schema on disposable PostgreSQL
         run: node migrate.js
+      - name: Verify public inquiry persistence on disposable PostgreSQL
+        env:
+          RUN_INQUIRY_POSTGRES_TESTS: 'true'
+        run: node --test test/inquiries-postgres.integration.test.js
+      - name: Verify provider publication gates on disposable PostgreSQL
+        env:
+          RUN_PROVIDER_POSTGRES_TESTS: 'true'
+        run: node --test test/provider-workflow-postgres.integration.test.js
       - name: Apply and verify draft tenant migrations
         run: npm run test:migrations
       - name: Verify initial company bootstrap and legacy backfill

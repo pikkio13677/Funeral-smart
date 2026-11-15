@@ -6,6 +6,9 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const { z } = require('zod');
+const emailNotifications = require('./email-notifications')();
+const stagingSubmissionGuard = require('./staging-submission-guard')();
+const createLegacyAdminReadGuard = require('./legacy-admin-read-guard');
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
@@ -16,7 +19,8 @@ app.disable('x-powered-by');
 // throttling uses the originating client address rather than the proxy.
 app.set('trust proxy', 1);
 app.use(helmet());
-const allowedOrigins = [...new Set(['https://pikkio13677.github.io', 'https://funeral-smart-api.onrender.com', ...(process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean)])];
+const productionOrigins = process.env.STAGING_MODE === 'true' ? [] : ['https://pikkio13677.github.io', 'https://funeral-smart-api.onrender.com', 'https://funeral-smart-web.onrender.com', 'https://funeralsmartapp.com', 'https://www.funeralsmartapp.com'];
+const allowedOrigins = [...new Set([...productionOrigins, ...(process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean)])];
 app.use(cors({ credentials: true, origin(origin, cb) {
   if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
   return cb(new Error('Origine non autorizzata'));
@@ -61,6 +65,7 @@ app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standar
 // Multi-tenant routes stay dormant until the staged migrations, legacy-data
 // backfill, new UI, and production rollback plan have been approved.
 const tenantFeaturesEnabled = process.env.ENABLE_MULTI_TENANT === 'true';
+const legacyAdminReadGuard = createLegacyAdminReadGuard(tenantFeaturesEnabled);
 if (tenantFeaturesEnabled) {
   const tenantContext = require('./tenant-context')(pool, auth.tokenHash);
   app.use('/api/v1/tenant', require('./company-context-routes')(pool, auth.authenticate, auth.tokenHash));
@@ -92,7 +97,7 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/v1/services', async (_req, res, next) => {
   try {
-    const { rows } = await pool.query('SELECT code, label, description FROM service_types WHERE active = TRUE ORDER BY sort_order, label');
+    const { rows } = await pool.query('SELECT id, code, label, description FROM service_types WHERE active = TRUE ORDER BY sort_order, label');
     res.json({ data: rows });
   } catch (e) { next(e); }
 });
@@ -139,7 +144,7 @@ const publicSubmissionLimiter = rateLimit({
   message: { error: 'Troppe richieste inviate. Riprova più tardi.' }
 });
 
-app.post('/api/v1/inquiries', publicSubmissionLimiter, async (req, res, next) => {
+app.post('/api/v1/inquiries', stagingSubmissionGuard, publicSubmissionLimiter, async (req, res, next) => {
   const parsed = inquirySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
   const v = parsed.data;
@@ -149,11 +154,12 @@ app.post('/api/v1/inquiries', publicSubmissionLimiter, async (req, res, next) =>
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'received') RETURNING id, created_at AS "createdAt"`,
       [v.city, v.serviceType, v.destinationCountry || null, v.budgetEuro || null, v.notes || null, v.contactEmail || null, v.contactPhone || null, true]
     );
+    await emailNotifications.notifyInquiry({ id: rows[0].id, city: v.city, serviceType: v.serviceType, contactEmail: v.contactEmail });
     res.status(201).json({ data: rows[0], message: 'Richiesta ricevuta. Non è ancora stata inoltrata a un’impresa.' });
   } catch (e) { next(e); }
 });
 
-app.post('/api/v1/provider-applications', publicSubmissionLimiter, async (req, res, next) => {
+app.post('/api/v1/provider-applications', stagingSubmissionGuard, publicSubmissionLimiter, async (req, res, next) => {
   const parsed = providerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
   const v = parsed.data;
@@ -163,16 +169,17 @@ app.post('/api/v1/provider-applications', publicSubmissionLimiter, async (req, r
        VALUES ($1,$2,$3,$4,$5,$6,$7,'pending') RETURNING id, created_at AS "createdAt"`,
       [v.businessName, v.vatNumber, v.city, v.province, v.email, v.phone, v.website || null]
     );
+    await emailNotifications.notifyProviderApplication({ id: rows[0].id, businessName: v.businessName, city: v.city, email: v.email });
     res.status(201).json({ data: rows[0], message: 'Candidatura ricevuta: l’impresa non è ancora pubblicata né verificata.' });
   } catch (e) { if (e.code === '23505') return res.status(409).json({ error: 'Partita IVA già presente in una candidatura.' }); next(e); }
 });
 
-app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, async (_req, res, next) => {
+app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, legacyAdminReadGuard, async (_req, res, next) => {
   try { const { rows } = await pool.query('SELECT id, city, service_type AS "serviceType", destination_country AS "destinationCountry", budget_euro AS "budgetEuro", notes, contact_email AS "contactEmail", contact_phone AS "contactPhone", status, created_at AS "createdAt" FROM inquiries ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
   catch (e) { next(e); }
 });
 
-app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize, async (_req, res, next) => {
+app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize, legacyAdminReadGuard, async (_req, res, next) => {
   try { const { rows } = await pool.query('SELECT id, business_name AS "businessName", vat_number AS "vatNumber", city, province, email, phone, website, status, created_at AS "createdAt" FROM provider_applications ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
   catch (e) { next(e); }
 });

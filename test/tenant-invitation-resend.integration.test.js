@@ -86,7 +86,7 @@ test('tenant invitation route sends through the Resend adapter and stores only t
   const email = JSON.parse(outgoing.options.body);
   assert.deepEqual(email.to, ['collega@example.com']);
   assert.match(email.html, /Impresa di prova/);
-  assert.match(email.text, /https:\/\/funeral-smart\.example\/invito\/accetta\?token=/);
+  assert.match(email.text, /https:\/\/funeral-smart\.example\/invito\/accetta#token=/);
 
   const insert = pool.calls.find(call => call.sql?.includes('INSERT INTO company_invitations'));
   assert.ok(insert);
