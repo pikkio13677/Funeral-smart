@@ -47,6 +47,8 @@ jobs:
         run: npm test
       - name: Build baseline schema on disposable PostgreSQL
         run: node migrate.js
+      - name: Verify public inquiry persistence on disposable PostgreSQL
+        run: node --test test/inquiries-postgres.integration.test.js
       - name: Apply and verify draft tenant migrations
         run: npm run test:migrations
       - name: Verify initial company bootstrap and legacy backfill
