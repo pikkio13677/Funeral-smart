@@ -72,9 +72,13 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
       }
       const user = userResult.rows[0];
       const invitedEmail = normalizeEmail(invite.email);
-      if (user.email && normalizeEmail(user.email) !== invitedEmail && user.emailVerifiedAt) {
+      // The invitation link alone does not prove ownership of the invited mailbox.
+      // Require an independently verified email on the signed-in account.
+      if (!user.email || !user.emailVerifiedAt || normalizeEmail(user.email) !== invitedEmail) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Questo account è già associato a un altro indirizzo email verificato.' });
+        return res.status(403).json({
+          error: 'Per accettare l’invito devi usare un account con lo stesso indirizzo email già verificato.'
+        });
       }
 
       const company = await client.query(
@@ -95,10 +99,6 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
         return res.status(409).json({ error: 'Questo account ha già una membership per l’azienda.' });
       }
 
-      await client.query(
-        'UPDATE app_users SET email = $1, email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW() WHERE id = $2',
-        [invitedEmail, req.user.id]
-      );
       const membership = await client.query(
         `INSERT INTO company_memberships(company_id, user_id, role, status)
          VALUES($1, $2, $3, 'active') RETURNING id`,
