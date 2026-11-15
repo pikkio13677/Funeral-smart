@@ -1,25 +1,32 @@
-# Email inviti — Resend
+# Variabili e invio email — FUNERAL SMART
 
-Il modulo `resend-email.js` invia email transazionali dal backend tramite l'API HTTPS di Resend. Non richiede l'SDK e non espone mai la chiave al browser.
+Le variabili e i segreti sono configurati esclusivamente nel servizio backend Render. Non inserirli in GitHub, nel frontend, nei log o in chat.
 
-## Variabili Render
+## Variabili dichiarate nel Blueprint
 
-Configurare esclusivamente nel servizio backend:
-
+- `ADMIN_API_KEY`: chiave legacy di compatibilità. Non deve essere esposta nel browser.
+- `BOOTSTRAP_ADMIN_TOKEN`: token iniziale per il bootstrap dell'amministratore; configurarlo privatamente e ruotarlo/disattivarlo dopo il bootstrap secondo la procedura approvata.
+- `TOTP_ENCRYPTION_KEY`: chiave stabile di 32 byte, rappresentata da 64 caratteri esadecimali, per cifrare i segreti MFA. Non ruotarla senza una procedura di migrazione e recupero.
+- `EMAIL_VERIFICATION_PEPPER`: segreto casuale dedicato di almeno 32 byte per HMAC dei codici di verifica email. Non riutilizzare le altre chiavi.
+- `CORS_ORIGIN`: soltanto le origini HTTPS autorizzate, separate da virgole.
+- `PUBLIC_APP_URL`: URL HTTPS pubblico utilizzato per i link d'invito.
 - `RESEND_API_KEY`: chiave API Resend con permesso Sending.
-- `RESEND_FROM_EMAIL`: mittente autorizzato.
-- `EMAIL_VERIFICATION_PEPPER`: segreto casuale dedicato di almeno 32 byte, usato come chiave HMAC per memorizzare i codici di verifica email. Generarlo con un password manager o un generatore crittografico e conservarlo solo nelle variabili d'ambiente Render. Non riutilizzare `RESEND_API_KEY` o `TOTP_ENCRYPTION_KEY`. Per il solo test iniziale può essere `FUNERAL SMART <onboarding@resend.dev>`; in produzione è obbligatorio un indirizzo appartenente a un dominio verificato in Resend. Se manca, il backend rifiuta l'invio invece di ricadere sul mittente di prova.
+- `RESEND_FROM_EMAIL`: mittente autorizzato; per invii reali deve appartenere a un dominio verificato in Resend.
+- `ADMIN_NOTIFICATION_EMAIL`: casella amministrativa destinataria delle notifiche operative.
+- `ENABLE_MULTI_TENANT`: impostato esplicitamente a `false`. Non attivarlo finché migrazioni, isolamento, backup/restore, staging, MFA, ruoli e rollback non sono stati approvati.
 
-Non inserire mai la chiave in GitHub, nel frontend o in chat.
+I valori segreti sono dichiarati come variabili da fornire manualmente al servizio Render; il repository non contiene i loro valori.
 
-## Limite del mittente di prova
+## Invio email e staging
 
-Il mittente `onboarding@resend.dev` è destinato ai test e può inviare soltanto all'indirizzo email proprietario dell'account Resend. Non consente di invitare colleghi o clienti. Per invii reali a terzi occorre verificare in Resend un dominio che si possiede e usare un mittente di quel dominio.
+Il backend usa l'API HTTPS di Resend. Le chiavi restano sul server e non vengono mai inviate al browser. L'ambiente di staging usa un database distinto, imposta `STAGING_MODE=true` e blocca tutte le email in uscita, anche se le credenziali fossero presenti.
 
-## Stato dell'integrazione
+Il mittente di prova `onboarding@resend.dev` è limitato ai test e non consente invii generici a terzi. Per invii reali occorre verificare in Resend un dominio posseduto e usare un mittente di quel dominio.
 
-Il backend costruisce gli adattatori Resend e li passa alle route di verifica email e invito. Le route multi-azienda vengono montate soltanto con `ENABLE_MULTI_TENANT=true`, che resta disattivato in produzione finché non sono approvati migrazioni, backup/restore, test di isolamento e piano di rollback. Le chiavi e i segreti restano esclusivamente nelle variabili d'ambiente del servizio backend. Senza `EMAIL_VERIFICATION_PEPPER` di almeno 32 byte, richiesta e conferma dei codici email vengono rifiutate.
+## Verifica prima del lancio
 
-## Test
-
-Eseguire `npm test`. I test usano un client HTTP simulato e non inviano email reali.
+- [ ] Verificare privatamente tutte le variabili richieste, senza condividerne i valori.
+- [ ] Verificare SPF/DKIM del dominio mittente.
+- [ ] Eseguire un test email controllato solo dopo autorizzazione esplicita.
+- [ ] Mantenere `ENABLE_MULTI_TENANT=false` fino all'approvazione formale del rollout.
+- [ ] Non applicare migrazioni draft al database di produzione durante i test.
