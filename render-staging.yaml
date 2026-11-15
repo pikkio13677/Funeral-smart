@@ -10,6 +10,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: STAGING_MODE
+        value: "true"
       - key: DATABASE_URL
         fromDatabase:
           name: funeral-smart-db-staging
