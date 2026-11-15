@@ -21,7 +21,8 @@ function hashToken(value) {
 }
 function createInvitationUrl(baseUrl, token) {
   const url = new URL('/invito/accetta', baseUrl);
-  url.searchParams.set('token', token);
+  // Keep bearer invitation tokens in the fragment: fragments are not sent in HTTP requests or Referer headers.
+  url.hash = new URLSearchParams({ token }).toString();
   return url.toString();
 }
 
@@ -72,9 +73,13 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
       }
       const user = userResult.rows[0];
       const invitedEmail = normalizeEmail(invite.email);
-      if (user.email && normalizeEmail(user.email) !== invitedEmail && user.emailVerifiedAt) {
+      if (!user.emailVerifiedAt || !user.email) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Questo account è già associato a un altro indirizzo email verificato.' });
+        return res.status(403).json({ error: 'Verifica prima il tuo indirizzo email personale, poi accetta l’invito.' });
+      }
+      if (normalizeEmail(user.email) !== invitedEmail) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Accedi con l’account che ha verificato l’indirizzo email a cui è stato inviato l’invito.' });
       }
 
       const company = await client.query(
@@ -95,10 +100,6 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
         return res.status(409).json({ error: 'Questo account ha già una membership per l’azienda.' });
       }
 
-      await client.query(
-        'UPDATE app_users SET email = $1, email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW() WHERE id = $2',
-        [invitedEmail, req.user.id]
-      );
       const membership = await client.query(
         `INSERT INTO company_memberships(company_id, user_id, role, status)
          VALUES($1, $2, $3, 'active') RETURNING id`,
@@ -247,3 +248,4 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
 }
 
 module.exports = createTenantInvitationRouter;
+module.exports.createInvitationUrl = createInvitationUrl;
