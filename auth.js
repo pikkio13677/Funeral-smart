@@ -359,5 +359,5 @@ module.exports = function createAuth(pool) {
     } catch (e) { next(e); }
   });
 
-  return { router, authenticate, authorize };
+  return { router, authenticate, authorize, tokenHash };
 };
