@@ -16,7 +16,8 @@ test('multi-tenant routes remain opt-in and are mounted only behind the explicit
   assert.match(server, /require\('\.\/tenant-customers-cases-routes'\)/);
   assert.match(server, /require\('\.\/tenant-invoices-payments-routes'\)/);
   assert.ok(server.indexOf("app.get('/api/v1/services'") < server.indexOf('if (multiTenantEnabled) {'));
-  assert.ok(server.indexOf("app.use('/api/v1/admin'") < server.indexOf('if (multiTenantEnabled) {'));
+  assert.match(server, /if \(multiTenantEnabled\) \{[\s\S]*?app\.use\('\/api\/v1\/admin', auth\.authenticate, auth\.authorize, \(_req, res\) => \{/);
+  assert.match(server, /else \{\s*app\.use\('\/api\/v1\/admin', auth\.authenticate, auth\.authorize, require\('\.\/admin-routes'\)/);
 });
 
 test('multi-tenant startup fails closed unless verification flags and database schema are ready', () => {
