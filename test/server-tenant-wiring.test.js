@@ -34,7 +34,7 @@ test('invitation acceptance is authenticated before tenant context is applied', 
   const tenantMiddleware = invitation.indexOf("router.use('/company/invitations'");
   assert.ok(acceptance >= 0);
   assert.ok(tenantMiddleware > acceptance);
-  assert.match(invitation, /router\\.use\\('\/company\\/invitations',/);
+  assert.match(invitation, /router\.use\('\/company\/invitations',/);
   assert.match(invitation, /router\.post\('\/company\/invitations\/accept', \..*authenticate/);
 });
 
