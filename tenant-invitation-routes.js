@@ -129,15 +129,18 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl,
 
   // Acceptance is intentionally registered before tenantContext: a new member
   // must be able to accept an invitation before selecting their first company.
-  if (typeof authenticate === 'function') router.use(authenticate);
-  if (typeof tenantContext === 'function') router.use(tenantContext);
-
-  router.use((req, res, next) => {
-    if (!req.tenant?.companyId || !req.tenant?.membershipId || !req.tenant?.role) {
-      return res.status(403).json({ error: 'Contesto aziendale verificato richiesto.' });
+  // Scope these middlewares to invitation-management endpoints only.
+  // The acceptance route above must run first and works before a tenant is selected.
+  router.use('/company/invitations',
+    ...(typeof authenticate === 'function' ? [authenticate] : []),
+    ...(typeof tenantContext === 'function' ? [tenantContext] : []),
+    (req, res, next) => {
+      if (!req.tenant?.companyId || !req.tenant?.membershipId || !req.tenant?.role) {
+        return res.status(403).json({ error: 'Contesto aziendale verificato richiesto.' });
+      }
+      return next();
     }
-    return next();
-  });
+  );
 
   router.post('/company/invitations', authorizeTenant('members', 'invite'), async (req, res, next) => {
     const parsed = inviteSchema.safeParse(req.body);
