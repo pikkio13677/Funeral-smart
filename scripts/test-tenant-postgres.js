@@ -122,7 +122,7 @@ async function main() {
       'PASS: IDOR-style cross-tenant case update is denied.',
       'PASS: Cross-tenant customer reference on case creation is denied.',
       'PASS: Denied write leaves Beta data unchanged.'
-    ].join('\\n') + '\\n');
+    ].join('\n') + '\n');
   } finally {
     if (alfaServer) await new Promise(resolve => alfaServer.server.close(resolve));
     if (betaServer) await new Promise(resolve => betaServer.server.close(resolve));
@@ -132,6 +132,6 @@ async function main() {
 }
 
 main().catch(error => {
-  process.stderr.write((error.stack || error.message) + '\\n');
+  process.stderr.write((error.stack || error.message) + '\n');
   process.exitCode = 1;
 });
