@@ -44,3 +44,12 @@ test('company context endpoints authenticate individually without intercepting u
   assert.match(routes, /router\.post\('\/active-company', authenticate,/);
   assert.doesNotMatch(routes, /router\.use\(authenticate\)/);
 });
+
+test('unscoped legacy business admin API is disabled when multi-tenant mode is enabled', () => {
+  const guard = server.indexOf("res.status(410).json({ error: 'Le API gestionali precedenti sono disattivate.");
+  const tenantMount = server.indexOf("app.use('/api/v1', auth.authenticate, tenantContext");
+  assert.ok(guard >= 0, 'legacy admin API must fail closed with HTTP 410');
+  assert.ok(tenantMount > guard, 'legacy admin API guard must be mounted before tenant business routers');
+  assert.match(server, /if \(multiTenantEnabled\) \{[\s\S]*?app\.use\('\/api\/v1\/admin', auth\.authenticate, auth\.authorize, \(_req, res\) => \{[\s\S]*?res\.status\(410\)/);
+  assert.match(server, /else \{\s*app\.use\('\/api\/v1\/admin', auth\.authenticate, auth\.authorize, require\('\.\/admin-routes'\)/);
+});
