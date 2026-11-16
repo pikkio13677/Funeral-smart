@@ -17,9 +17,7 @@ module.exports = function createCompanyContextRouter(pool, authenticate, tokenHa
   }
 
   const router = express.Router();
-  router.use(authenticate);
-
-  router.get('/companies', async (req, res, next) => {
+  router.get('/companies', authenticate, async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Autenticazione richiesta.' });
     try {
       const result = await pool.query(
@@ -39,7 +37,7 @@ module.exports = function createCompanyContextRouter(pool, authenticate, tokenHa
     }
   });
 
-  router.post('/active-company', async (req, res, next) => {
+  router.post('/active-company', authenticate, async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Autenticazione richiesta.' });
 
     const parsed = z.object({ companyId: z.string().uuid() }).strict().safeParse(req.body);
