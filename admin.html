@@ -68,7 +68,7 @@ async function request(path,options={}){const base=tenantMode?api+'/api/v1':api+
 async function authRequest(path,options={}){const r=await fetch(api+'/api/v1/auth'+path,{credentials:'include',...options,headers:{...headers(),...(options.headers||{})}});const data=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(data.error||'Errore API');return data;}
 function safe(v){return v===null||v===undefined?'':String(v);}
 const TENANT_ACCESS={
- admin:{cases:['read','create','update'],customers:['read','create','update'],staff:['read','create','update'],vehicles:['read','create','update'],inventory:['read','create','update'],tasks:['read','create','update'],invoices:['read','create','issue','pay'],audit:['read']},
+ admin:{cases:['read','create','update'],customers:['read','create','update'],staff:['read','create','update'],vehicles:['read','create','update'],inventory:['read','create','update'],tasks:['read','create','update'],invoices:['read','create','issue','pay'],audit:['read'],company:['read','update'],members:['read','invite','update']},
  manager:{cases:['read','create','update'],customers:['read','create','update'],staff:['read'],vehicles:['read'],inventory:['read','create','update'],tasks:['read','create','update'],invoices:['read'],audit:['read']},
  operator:{cases:['read','create','update'],customers:['read','create'],tasks:['read','create','update']},
  warehouse:{inventory:['read','create','update'],cases:['read'],tasks:['read']},
@@ -79,7 +79,7 @@ function allowedTabs(){
  if(tenantMode){
   if((tenantRole==='admin'||currentUser?.role==='admin')&&!currentUser?.mfaEnabled)return ['security'];
   const byRole={
-   admin:['cases','customers','staff','vehicles','inventory','tasks','invoices','audit'],
+   admin:['cases','customers','staff','vehicles','inventory','tasks','invoices','company','members','audit'],
    manager:['cases','customers','staff','vehicles','inventory','tasks','invoices','audit'],
    operator:['cases','customers','tasks'],
    warehouse:['inventory','cases','tasks'],
@@ -233,6 +233,67 @@ async function renderSecurityModule(host){
  section.append(heading,intro,panel);host.append(section);
 }
 
+
+async function renderTenantCompanyModule(host){
+ host.replaceChildren();
+ const section=document.createElement('section');section.className='module active';
+ const heading=document.createElement('h2');heading.textContent='Profilo aziendale';
+ const hint=document.createElement('p');hint.className='hint';hint.textContent='Dati identificativi dell’azienda attiva. Le modifiche riguardano soltanto questa azienda.';
+ const panel=document.createElement('div');panel.className='panel';panel.textContent='Caricamento profilo aziendale...';
+ section.append(heading,hint,panel);host.append(section);
+ try{
+  const result=await request('/company/profile'),company=result.data;panel.replaceChildren();
+  const fields=[['legalName','Ragione sociale','text'],['vatNumber','Partita IVA','text'],['address','Indirizzo','text'],['city','Comune','text'],['province','Provincia','text'],['email','Email','email'],['phone','Telefono','tel']];
+  const form=document.createElement('form'),grid=document.createElement('div');grid.className='grid';
+  fields.forEach(([key,label,type])=>{const wrap=document.createElement('div');wrap.className='field';const caption=document.createElement('label');caption.textContent=label;const input=document.createElement('input');input.name=key;input.type=type;input.value=safe(company[key]);input.disabled=!tenantCan('company','update');wrap.append(caption,input);grid.append(wrap);});
+  form.append(grid);
+  if(tenantCan('company','update')){
+   const save=document.createElement('button');save.type='submit';save.className='btn gold form-actions';save.textContent='Salva dati aziendali';form.append(save);
+   form.onsubmit=async event=>{event.preventDefault();save.disabled=true;const body={};new FormData(form).forEach((value,key)=>body[key]=String(value).trim()||null);try{await request('/company/profile',{method:'PATCH',body:JSON.stringify(body)});showMessage('Profilo aziendale aggiornato.',true);await renderTenantCompanyModule(host);}catch(error){showMessage(error.message);}finally{save.disabled=false;}};
+  }
+  panel.append(form);
+ }catch(error){panel.textContent='Errore caricamento profilo: '+error.message;}
+}
+async function renderTenantMembersModule(host){
+ host.replaceChildren();
+ const section=document.createElement('section');section.className='module active';
+ const heading=document.createElement('h2');heading.textContent='Membri e inviti aziendali';
+ const hint=document.createElement('p');hint.className='hint';hint.textContent='Gestione degli accessi limitata all’azienda attiva. Gli inviti vengono inviati solo quando il servizio email è configurato e il rollout viene autorizzato.';
+ section.append(heading,hint);host.append(section);
+ const form=document.createElement('form');form.className='panel';
+ const grid=document.createElement('div');grid.className='grid';
+ const emailWrap=document.createElement('div');emailWrap.className='field';const emailLabel=document.createElement('label');emailLabel.textContent='Email da invitare';const email=document.createElement('input');email.type='email';email.required=true;email.maxLength=254;emailWrap.append(emailLabel,email);
+ const roleWrap=document.createElement('div');roleWrap.className='field';const roleLabel=document.createElement('label');roleLabel.textContent='Ruolo iniziale';const role=document.createElement('select');[['manager','Responsabile'],['operator','Operatore'],['warehouse','Magazzino'],['accounting','Amministrazione'],['admin','Amministratore']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;role.append(option);});roleWrap.append(roleLabel,role);
+ grid.append(emailWrap,roleWrap);const send=document.createElement('button');send.type='submit';send.className='btn gold form-actions';send.textContent='Invia invito';form.append(grid,send);
+ form.onsubmit=async event=>{event.preventDefault();send.disabled=true;try{const result=await request('/company/invitations',{method:'POST',body:JSON.stringify({email:email.value.trim(),role:role.value})});showMessage(result.message||'Invito creato.',true);email.value='';await loadTenantMembers(section);}catch(error){showMessage(error.message);}finally{send.disabled=false;}};
+ section.append(form);
+ const membersBox=document.createElement('div');membersBox.className='panel table-wrap';membersBox.textContent='Caricamento membri...';section.append(membersBox);
+ const invitationsBox=document.createElement('div');invitationsBox.className='panel table-wrap';invitationsBox.textContent='Caricamento inviti...';section.append(invitationsBox);
+ await loadTenantMembers(section,membersBox,invitationsBox);
+}
+async function loadTenantMembers(section,membersBox=null,invitationsBox=null){
+ const boxes=section.querySelectorAll('.table-wrap');membersBox=membersBox||boxes[0];invitationsBox=invitationsBox||boxes[1];
+ try{
+  const result=await request('/company/members');membersBox.replaceChildren();
+  const table=document.createElement('table'),head=document.createElement('tr');['Nome','Username','Ruolo','Stato','Azione'].forEach(label=>{const th=document.createElement('th');th.textContent=label;head.append(th);});const thead=document.createElement('thead');thead.append(head);table.append(thead);const body=document.createElement('tbody');
+  (result.data||[]).forEach(member=>{
+   const row=document.createElement('tr');[member.displayName,member.username].forEach(value=>{const cell=document.createElement('td');cell.textContent=safe(value);row.append(cell);});
+   const roleCell=document.createElement('td'),roleSelect=document.createElement('select');[['admin','Amministratore'],['manager','Responsabile'],['operator','Operatore'],['warehouse','Magazzino'],['accounting','Amministrazione']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;if(member.role===value)option.selected=true;roleSelect.append(option);});roleCell.append(roleSelect);row.append(roleCell);
+   const statusCell=document.createElement('td'),statusSelect=document.createElement('select');[['active','Attivo'],['suspended','Sospeso'],['revoked','Revocato']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;if(member.status===value)option.selected=true;statusSelect.append(option);});statusCell.append(statusSelect);row.append(statusCell);
+   const action=document.createElement('td'),save=document.createElement('button');save.className='btn alt';save.textContent='Salva';save.onclick=async()=>{save.disabled=true;try{await request('/company/members/'+member.membershipId,{method:'PATCH',body:JSON.stringify({role:roleSelect.value,status:statusSelect.value})});showMessage('Permessi del membro aggiornati.',true);await loadTenantMembers(section,membersBox,invitationsBox);}catch(error){showMessage(error.message);save.disabled=false;}};action.append(save);row.append(action);body.append(row);
+  });
+  table.append(body);membersBox.append(table);if(!(result.data||[]).length)membersBox.textContent='Nessun membro associato.';
+ }catch(error){membersBox.textContent='Elenco membri non disponibile: '+error.message;}
+ if(invitationsBox){
+  try{
+   const result=await request('/company/invitations');invitationsBox.replaceChildren();
+   const table=document.createElement('table'),head=document.createElement('tr');['Email','Ruolo','Stato','Scadenza','Azione'].forEach(label=>{const th=document.createElement('th');th.textContent=label;head.append(th);});const thead=document.createElement('thead');thead.append(head);table.append(thead);const body=document.createElement('tbody');
+   (result.data||[]).forEach(invite=>{const row=document.createElement('tr');[invite.email,invite.role,invite.status,invite.expiresAt?new Date(invite.expiresAt).toLocaleString('it-IT'):''].forEach(value=>{const cell=document.createElement('td');cell.textContent=safe(value);row.append(cell);});const action=document.createElement('td');if(invite.status==='pending'){const button=document.createElement('button');button.className='btn alt';button.textContent='Revoca';button.onclick=async()=>{button.disabled=true;try{await request('/company/invitations/'+invite.id+'/revoke',{method:'POST'});showMessage('Invito revocato.',true);await loadTenantMembers(section,membersBox,invitationsBox);}catch(error){showMessage(error.message);button.disabled=false;}};action.append(button);}row.append(action);body.append(row);});
+   table.append(body);invitationsBox.append(table);if(!(result.data||[]).length)invitationsBox.textContent='Nessun invito registrato.';
+  }catch(error){invitationsBox.textContent='Elenco inviti non disponibile: '+error.message;}
+ }
+}
+
 function renderAuditModule(host){
  const section=document.createElement('section');section.className='module active';
  const heading=document.createElement('h2');heading.textContent='Registro attività';
@@ -258,6 +319,8 @@ function renderModule(){
  if(active==='audit'){renderAuditModule(host);return;}
  if(active==='security'){renderSecurityModule(host);return;}
  if(active==='users'&&!tenantMode){renderUsersModule(host);return;}
+ if(active==='company'&&tenantMode){renderTenantCompanyModule(host);return;}
+ if(active==='members'&&tenantMode){renderTenantMembersModule(host);return;}
  const d=definitions[active];if(!d)return;
  const section=document.createElement('section');section.className='module active';
  const h=document.createElement('h2');h.textContent=d.label;
