@@ -232,7 +232,16 @@ app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize
 });
 
 // Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
-app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
+if (multiTenantEnabled) {
+  // The legacy admin router reads company data without tenant scoping.
+  // Refuse it entirely while multi-tenant mode is active; the tenant API is the only
+  // supported path for company-scoped business records.
+  app.use('/api/v1/admin', auth.authenticate, auth.authorize, (_req, res) => {
+    res.status(410).json({ error: 'Le API gestionali precedenti sono disattivate. Usa le API aziendali.' });
+  });
+} else {
+  app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
+}
 
 if (multiTenantEnabled) {
   const createTenantContext = require('./tenant-context');
