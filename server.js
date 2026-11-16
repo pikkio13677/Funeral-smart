@@ -7,7 +7,7 @@ const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const { z } = require('zod');
 const emailNotifications = require('./email-notifications')();
-const { createResendVerificationSender } = require('./resend-email');
+const { createResendInvitationSender, createResendVerificationSender } = require('./resend-email');
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
@@ -59,6 +59,83 @@ const auth = require('./auth')(pool, {
   emailVerificationEnabled
 });
 app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
+
+const multiTenantEnabled = process.env.ENABLE_MULTI_TENANT === 'true';
+
+async function assertMultiTenantSchemaReady() {
+  if (process.env.ENABLE_EMAIL_VERIFICATION !== 'true' ||
+      process.env.ENABLE_INVITATION_REGISTRATION !== 'true') {
+    throw new Error('ENABLE_MULTI_TENANT richiede anche ENABLE_EMAIL_VERIFICATION e ENABLE_INVITATION_REGISTRATION.');
+  }
+  if (Buffer.byteLength(process.env.EMAIL_VERIFICATION_PEPPER || '', 'utf8') < 32) {
+    throw new Error('EMAIL_VERIFICATION_PEPPER deve contenere almeno 32 byte.');
+  }
+
+  const requiredTables = [
+    'companies', 'company_memberships', 'company_invitations',
+    'email_verification_challenges'
+  ];
+  const missingTables = await pool.query(
+    "SELECT name FROM unnest($1::text[]) AS expected(name) WHERE to_regclass('public.' || name) IS NULL",
+    [requiredTables]
+  );
+  const requiredColumns = [
+    ['app_sessions', 'active_membership_id'],
+    ['app_users', 'email'], ['app_users', 'email_verified_at'],
+    ['audit_log', 'company_id'], ['audit_log', 'membership_id'],
+    ['customers', 'company_id'], ['funeral_cases', 'company_id'],
+    ['staff', 'company_id'], ['vehicles', 'company_id'],
+    ['inventory_items', 'company_id'], ['stock_movements', 'company_id'],
+    ['tasks', 'company_id'], ['invoices', 'company_id'], ['payments', 'company_id']
+  ];
+  const missingColumns = await pool.query(
+    `SELECT expected.table_name, expected.column_name
+     FROM unnest($1::text[], $2::text[]) AS expected(table_name, column_name)
+     WHERE NOT EXISTS (
+       SELECT 1 FROM information_schema.columns actual
+       WHERE actual.table_schema = 'public'
+         AND actual.table_name = expected.table_name
+         AND actual.column_name = expected.column_name
+     )`,
+    [requiredColumns.map(item => item[0]), requiredColumns.map(item => item[1])]
+  );
+  if (missingTables.rowCount || missingColumns.rowCount) {
+    const objects = [
+      ...missingTables.rows.map(row => row.name),
+      ...missingColumns.rows.map(row => row.table_name + '.' + row.column_name)
+    ];
+    throw new Error('Migrazioni multi-azienda/verifica email mancanti: ' + objects.join(', '));
+  }
+}
+
+if (multiTenantEnabled) {
+  const createTenantContext = require('./tenant-context');
+  const tenantContext = createTenantContext(pool, auth.tokenHash);
+  const companyContext = require('./company-context-routes')(pool, auth.authenticate, auth.tokenHash);
+  const invitationRoutes = require('./tenant-invitation-routes')({
+    pool,
+    authenticate: auth.authenticate,
+    tenantContext,
+    sendInvitationEmail: createResendInvitationSender(),
+    publicAppUrl: process.env.PUBLIC_APP_URL
+  });
+
+  // Company selection and invitation acceptance must be available before a tenant is selected.
+  app.use('/api/v1', companyContext);
+  app.use('/api/v1', invitationRoutes);
+
+  // Every business module is protected by a database-derived active tenant context.
+  app.use('/api/v1', auth.authenticate, tenantContext,
+    require('./tenant-dashboard-routes')(pool),
+    require('./tenant-customers-cases-routes')(pool),
+    require('./tenant-staff-vehicles-routes')(pool),
+    require('./tenant-inventory-tasks-routes')(pool),
+    require('./tenant-invoices-payments-routes')(pool),
+    require('./tenant-company-admin-routes')(pool),
+    require('./tenant-audit-routes')(pool)
+  );
+}
+
 
 app.get('/api/health', async (_req, res) => {
   try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'funeral-smart-api', database: 'connected' }); }
@@ -171,5 +248,5 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Errore interno. Riprova più tardi.' });
 });
 
-app.listen(port, () => console.log(`FUNERAL SMART API in ascolto sulla porta ${port}`));
+async function startServer() {\n  if (multiTenantEnabled) await assertMultiTenantSchemaReady();\n  app.listen(port, () => console.log(`FUNERAL SMART API in ascolto sulla porta ${port}`));\n}\nstartServer().catch(error => {\n  console.error('[startup] Avvio non riuscito:', error.message);\n  process.exitCode = 1;\n});
 process.on('SIGTERM', async () => { await pool.end(); process.exit(0); });
