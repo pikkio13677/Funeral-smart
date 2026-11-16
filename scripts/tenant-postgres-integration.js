@@ -6,7 +6,9 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const express = require('express');
 const { Client } = require('pg');
+const crypto = require('node:crypto');
 const createTenantCustomersCasesRouter = require('../tenant-customers-cases-routes');
+const createTenantContext = require('../tenant-context');
 
 async function listen(app) {
   const server = http.createServer(app);
@@ -48,6 +50,112 @@ async function main() {
       "INSERT INTO funeral_cases (company_id, case_code, customer_id, deceased_first_name, deceased_last_name, service_type) VALUES ($1, 'IT-BETA-TEST', $2, 'Defunto', 'Beta', 'burial') RETURNING id",
       [beta, betaCustomer]
     )).rows[0].id;
+
+    // Create two independent identities and memberships for real session-context tests.
+    const alfaUser = (await client.query(
+      "INSERT INTO app_users (username, display_name, password_hash, role) VALUES ('alfa_test_user', 'Alfa Test', 'test-only-hash', 'admin') RETURNING id"
+    )).rows[0].id;
+    const betaUser = (await client.query(
+      "INSERT INTO app_users (username, display_name, password_hash, role) VALUES ('beta_test_user', 'Beta Test', 'test-only-hash', 'admin') RETURNING id"
+    )).rows[0].id;
+    const alfaMembership = (await client.query(
+      "INSERT INTO company_memberships (company_id, user_id, role) VALUES ($1, $2, 'admin') RETURNING id",
+      [alfa, alfaUser]
+    )).rows[0].id;
+    const betaMembership = (await client.query(
+      "INSERT INTO company_memberships (company_id, user_id, role) VALUES ($1, $2, 'admin') RETURNING id",
+      [beta, betaUser]
+    )).rows[0].id;
+
+    async function expectDbFailure(label, sql, values) {
+      await client.query('SAVEPOINT expected_constraint_failure');
+      let failed = false;
+      try {
+        await client.query(sql, values);
+      } catch (error) {
+        failed = true;
+      } finally {
+        await client.query('ROLLBACK TO SAVEPOINT expected_constraint_failure');
+        await client.query('RELEASE SAVEPOINT expected_constraint_failure');
+      }
+      assert.equal(failed, true, label);
+    }
+
+    // Session membership must belong to the same authenticated user.
+    const alfaToken = 'alfa-test-session-token-0123456789abcdef';
+    const alfaTokenHash = crypto.createHash('sha256').update(alfaToken).digest('hex');
+    await client.query(
+      'INSERT INTO app_sessions (user_id, token_hash, expires_at, active_membership_id) VALUES ($1, $2, NOW() + INTERVAL \'1 hour\', $3)',
+      [alfaUser, alfaTokenHash, alfaMembership]
+    );
+    await expectDbFailure(
+      'A session must not reference another user\'s membership',
+      "INSERT INTO app_sessions (user_id, token_hash, expires_at, active_membership_id) VALUES ($1, $2, NOW() + INTERVAL '1 hour', $3)",
+      [betaUser, crypto.createHash('sha256').update('beta-invalid-session-token-0123456789').digest('hex'), alfaMembership]
+    );
+
+    // The middleware derives tenant identity from the database, and checks revocation live.
+    const contextApp = express();
+    contextApp.use((req, _res, next) => {
+      req.user = { id: alfaUser };
+      req.cookies = { fs_session: alfaToken };
+      next();
+    });
+    contextApp.use(createTenantContext(client, value => crypto.createHash('sha256').update(value).digest('hex')));
+    contextApp.get('/tenant', (req, res) => res.json({ tenant: req.tenant }));
+    const contextServer = await listen(contextApp);
+    try {
+      const activeContext = await fetch(contextServer.baseUrl + '/tenant');
+      assert.equal(activeContext.status, 200, 'An active session and membership must establish tenant context');
+      const activeTenant = (await activeContext.json()).tenant;
+      assert.equal(activeTenant.companyId, alfa);
+      assert.equal(activeTenant.membershipId, alfaMembership);
+      assert.equal(activeTenant.role, 'admin');
+      await client.query("UPDATE company_memberships SET status = 'revoked' WHERE id = $1", [alfaMembership]);
+      const revokedContext = await fetch(contextServer.baseUrl + '/tenant');
+      assert.equal(revokedContext.status, 403, 'A revoked membership must lose access on the next request');
+      await client.query("UPDATE company_memberships SET status = 'active' WHERE id = $1", [alfaMembership]);
+    } finally {
+      await new Promise(resolve => contextServer.server.close(resolve));
+    }
+
+    // Audit rows must carry a membership that matches both company and user.
+    await client.query(
+      "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, $4)",
+      [alfaUser, alfa, alfa, alfaMembership]
+    );
+    await expectDbFailure(
+      'Audit rows must not mix a company with another company membership',
+      "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, $4)",
+      [alfaUser, beta, beta, alfaMembership]
+    );
+    await expectDbFailure(
+      'Tenant audit context must include company, membership and user together',
+      "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, NULL)",
+      [alfaUser, alfa, alfa]
+    );
+
+    // Invitation constraints: normalized address, digest-only token, consistent status timestamps.
+    const invitationHash = crypto.createHash('sha256').update('alfa-invitation-token').digest('hex');
+    await client.query(
+      "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, expires_at) VALUES ($1, 'nuovo@alfa.example', 'operator', $2, $3, NOW() + INTERVAL '72 hours')",
+      [alfa, invitationHash, alfaMembership]
+    );
+    await expectDbFailure(
+      'Only one pending invitation per company and normalized email is allowed',
+      "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, expires_at) VALUES ($1, 'nuovo@alfa.example', 'operator', $2, $3, NOW() + INTERVAL '72 hours')",
+      [alfa, crypto.createHash('sha256').update('duplicate-invitation-token').digest('hex'), alfaMembership]
+    );
+    await expectDbFailure(
+      'Invitation token_hash must be a SHA-256 hex digest',
+      "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, expires_at) VALUES ($1, 'hash@alfa.example', 'operator', 'not-a-digest', $2, NOW() + INTERVAL '72 hours')",
+      [alfa, alfaMembership]
+    );
+    await expectDbFailure(
+      'Accepted invitation status requires accepted_at',
+      "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, status, expires_at) VALUES ($1, 'accepted@alfa.example', 'operator', $2, $3, 'accepted', NOW() + INTERVAL '72 hours')",
+      [alfa, crypto.createHash('sha256').update('accepted-without-time').digest('hex'), alfaMembership]
+    );
 
     function appFor(companyId, suffix) {
       const app = express();
@@ -121,7 +229,12 @@ async function main() {
       'PASS: Alfa and Beta see only their own cases.',
       'PASS: IDOR-style cross-tenant case update is denied.',
       'PASS: Cross-tenant customer reference on case creation is denied.',
-      'PASS: Denied write leaves Beta data unchanged.'
+      'PASS: Denied write leaves Beta data unchanged.',
+      'PASS: Session cannot reference another user membership.',
+      'PASS: Tenant context comes from the verified DB membership.',
+      'PASS: Membership revocation blocks the next request.',
+      'PASS: Audit rows enforce company, membership and user consistency.',
+      'PASS: Invitation uniqueness, token digest and status constraints are enforced.'
     ].join('\n') + '\n');
   } finally {
     if (alfaServer) await new Promise(resolve => alfaServer.server.close(resolve));
