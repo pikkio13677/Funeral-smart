@@ -107,7 +107,7 @@ async function main() {
         && constraintResult.rowCount === 8
         && Object.values(unassigned).every(count => count === 0)
     };
-    process.stdout.write(JSON.stringify(report, null, 2) + '\\n');
+    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     if (Object.values(crossTenantReferences).some(count => count > 0)) {
       throw new Error('Cross-tenant references found. Do not run a backfill or enable tenant routes.');
     }
@@ -126,6 +126,6 @@ async function main() {
 }
 
 main().catch(error => {
-  process.stderr.write((error.stack || error.message) + '\\n');
+  process.stderr.write((error.stack || error.message) + '\n');
   process.exitCode = 1;
 });
