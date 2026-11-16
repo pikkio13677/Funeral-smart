@@ -133,6 +133,49 @@ async function main() {
       assert.equal(failed, true, label);
     }
 
+    // Composite tenant foreign keys must reject cross-company references even if
+    // the referenced global UUID exists and the legacy single-column FK would accept it.
+    await expectDbFailure(
+      'A funeral case cannot reference another company customer',
+      "INSERT INTO funeral_cases (company_id, case_code, customer_id, deceased_first_name, deceased_last_name, service_type) VALUES ($1, 'IT-CROSS-CUSTOMER', $2, 'Test', 'Cross', 'burial')",
+      [alfa, betaCustomer]
+    );
+    await expectDbFailure(
+      'A stock movement cannot reference another company inventory item',
+      "INSERT INTO stock_movements (company_id, item_id, movement_type, quantity, reason) VALUES ($1, $2, 'in', 1, 'cross tenant')",
+      [alfa, itemBeta]
+    );
+    await expectDbFailure(
+      'A stock movement cannot reference another company case',
+      "INSERT INTO stock_movements (company_id, item_id, case_id, movement_type, quantity, reason) VALUES ($1, $2, $3, 'in', 1, 'cross tenant')",
+      [alfa, itemAlfa, betaCase]
+    );
+    await expectDbFailure(
+      'A task cannot reference another company case',
+      "INSERT INTO tasks (company_id, title, case_id) VALUES ($1, 'Cross case task', $2)",
+      [alfa, betaCase]
+    );
+    await expectDbFailure(
+      'A task cannot reference another company staff member',
+      "INSERT INTO tasks (company_id, title, assigned_to) VALUES ($1, 'Cross staff task', $2)",
+      [alfa, staffBeta]
+    );
+    await expectDbFailure(
+      'An invoice cannot reference another company case',
+      "INSERT INTO invoices (company_id, invoice_number, case_id, amount) VALUES ($1, 'INV-CROSS-CASE', $2, 10)",
+      [alfa, betaCase]
+    );
+    await expectDbFailure(
+      'An invoice cannot reference another company customer',
+      "INSERT INTO invoices (company_id, invoice_number, customer_id, amount) VALUES ($1, 'INV-CROSS-CUSTOMER', $2, 10)",
+      [alfa, betaCustomer]
+    );
+    await expectDbFailure(
+      'A payment cannot reference another company invoice',
+      "INSERT INTO payments (company_id, invoice_id, amount, method) VALUES ($1, $2, 1, 'test')",
+      [alfa, invoiceBeta]
+    );
+
     // Session membership must belong to the same authenticated user.
     const alfaToken = 'alfa-test-session-token-0123456789abcdef';
     const alfaTokenHash = crypto.createHash('sha256').update(alfaToken).digest('hex');
@@ -336,7 +379,10 @@ async function main() {
       'PASS: Invoices and payments are isolated between Alfa and Beta.',
       'PASS: Company membership and audit views are scoped to the active tenant.',
       'PASS: Tenant dashboard totals and outstanding balances do not mix companies.',
-      'PASS: Cross-tenant stock movement and invoice payment lookups return no data.'
+      'PASS: Cross-tenant stock movement and invoice payment lookups return no data.',
+      'PASS: Composite tenant foreign keys reject cross-company customer and case links.',
+      'PASS: Composite tenant foreign keys reject cross-company inventory and staff links.',
+      'PASS: Composite tenant foreign keys reject cross-company invoice and payment links.'
     ].join('\n') + '\n');
   } finally {
     if (alfaServer) await new Promise(resolve => alfaServer.server.close(resolve));
