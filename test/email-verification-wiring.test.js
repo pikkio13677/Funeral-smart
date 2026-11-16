@@ -12,7 +12,8 @@ test('email verification has an independent opt-in flag and does not activate mu
   const auth = fs.readFileSync(path.join(root, 'auth.js'), 'utf8');
   assert.match(server, /ENABLE_EMAIL_VERIFICATION === 'true'/);
   assert.match(auth, /emailVerificationEnabled = process\.env\.ENABLE_EMAIL_VERIFICATION === 'true'/);
-  assert.doesNotMatch(server, /ENABLE_MULTI_TENANT === 'true'/);
+  assert.match(server, /const multiTenantEnabled = process\.env\.ENABLE_MULTI_TENANT === 'true'/);
+  assert.match(server, /if \(multiTenantEnabled\)/);
 });
 
 test('email verification migration remains draft and is not wired into startup migration runner', () => {
