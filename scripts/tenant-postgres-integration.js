@@ -28,6 +28,10 @@ async function listen(app) {
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required; use disposable PostgreSQL only.');
   if (process.env.NODE_ENV === 'production') throw new Error('Refusing to run tenant integration tests in production.');
+  const databaseUrl = new URL(process.env.DATABASE_URL);
+  if (!['localhost', '127.0.0.1', '::1'].includes(databaseUrl.hostname)) {
+    throw new Error('Refusing to run tenant integration tests against a non-local database host.');
+  }
 
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
