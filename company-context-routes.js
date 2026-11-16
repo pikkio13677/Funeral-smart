@@ -3,8 +3,7 @@
 const express = require('express');
 const { z } = require('zod');
 
-// Dormant router: intentionally not mounted until migrations 005/006 are
-// tested on a restored database and the application integration is reviewed.
+// Mounted by server.js only when ENABLE_MULTI_TENANT=true, after startup schema preflight.
 module.exports = function createCompanyContextRouter(pool, authenticate, tokenHash, cookieName = 'fs_session') {
   if (!pool || typeof pool.connect !== 'function') {
     throw new TypeError('A PostgreSQL pool with connect() is required.');
