@@ -33,6 +33,10 @@ test('management UI supports explicit tenant company selection and tenant-scoped
   assert.match(html, /id="tenant-selector"/);
   assert.match(html, /\/api\/v1\/companies/);
   assert.match(html, /\/active-company/);
+  assert.match(html, /request\('\/active-company'/);
+  assert.doesNotMatch(html, /authRequest\('\/active-company'/);
+  assert.match(html, /row\.assigneeFirstName\|\|row\.staffFirstName/);
+
   assert.match(html, /tenantMode\?api\+'\/api\/v1'/);
   assert.match(html, /tenantRole/);
   assert.match(html, /\/company\/activity\?limit=100/);
