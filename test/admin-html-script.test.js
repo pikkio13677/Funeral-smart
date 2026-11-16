@@ -38,4 +38,7 @@ test('management UI supports explicit tenant company selection and tenant-scoped
   assert.match(html, /\/company\/activity\?limit=100/);
   assert.match(html, /request\(tenantMode\?'\/tasks\/'\+row\.id/);
   assert.match(html, /if\(active==='users'&&!tenantMode\)/);
+  assert.match(html, /tenantRole==='admin'\|\|currentUser\?\.role==='admin'\).*return \['security'\]/);
+  assert.match(html, /tenantCan\('tasks','read'\)\?Promise\.resolve\(\{data:\[\]\}\):request\('\/tasks'\)/);
+
 });
