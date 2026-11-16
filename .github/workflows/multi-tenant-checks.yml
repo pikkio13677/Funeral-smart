@@ -48,3 +48,7 @@ jobs:
         run: node migrate.js
       - name: Apply and verify draft tenant migrations on disposable PostgreSQL
         run: npm run test:migrations
+      - name: Check PostgreSQL tenant integration test syntax
+        run: node --check scripts/test-tenant-postgres.js
+      - name: Test Alfa/Beta tenant isolation on disposable PostgreSQL
+        run: node scripts/test-tenant-postgres.js
