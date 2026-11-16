@@ -248,5 +248,12 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Errore interno. Riprova più tardi.' });
 });
 
-async function startServer() {\n  if (multiTenantEnabled) await assertMultiTenantSchemaReady();\n  app.listen(port, () => console.log(`FUNERAL SMART API in ascolto sulla porta ${port}`));\n}\nstartServer().catch(error => {\n  console.error('[startup] Avvio non riuscito:', error.message);\n  process.exitCode = 1;\n});
+async function startServer() {
+  if (multiTenantEnabled) await assertMultiTenantSchemaReady();
+  app.listen(port, () => console.log(`FUNERAL SMART API in ascolto sulla porta ${port}`));
+}
+startServer().catch(error => {
+  console.error('[startup] Avvio non riuscito:', error.message);
+  process.exitCode = 1;
+});
 process.on('SIGTERM', async () => { await pool.end(); process.exit(0); });
