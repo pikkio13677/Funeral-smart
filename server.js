@@ -135,35 +135,6 @@ async function assertMultiTenantSchemaReady() {
   }
 }
 
-if (multiTenantEnabled) {
-  const createTenantContext = require('./tenant-context');
-  const tenantContext = createTenantContext(pool, auth.tokenHash);
-  const companyContext = require('./company-context-routes')(pool, auth.authenticate, auth.tokenHash);
-  const invitationRoutes = require('./tenant-invitation-routes')({
-    pool,
-    authenticate: auth.authenticate,
-    tenantContext,
-    sendInvitationEmail: createResendInvitationSender(),
-    publicAppUrl: process.env.PUBLIC_APP_URL
-  });
-
-  // Company selection and invitation acceptance must be available before a tenant is selected.
-  app.use('/api/v1', companyContext);
-  app.use('/api/v1', invitationRoutes);
-
-  // Every business module is protected by a database-derived active tenant context.
-  app.use('/api/v1', auth.authenticate, tenantContext,
-    require('./tenant-dashboard-routes')(pool),
-    require('./tenant-customers-cases-routes')(pool),
-    require('./tenant-staff-vehicles-routes')(pool),
-    require('./tenant-inventory-tasks-routes')(pool),
-    require('./tenant-invoices-payments-routes')(pool),
-    require('./tenant-company-admin-routes')(pool),
-    require('./tenant-audit-routes')(pool)
-  );
-}
-
-
 app.get('/api/health', async (_req, res) => {
   try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'funeral-smart-api', database: 'connected' }); }
   catch (_e) { res.status(503).json({ status: 'degraded', service: 'funeral-smart-api', database: 'unavailable' }); }
@@ -262,6 +233,35 @@ app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize
 
 // Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
 app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
+
+if (multiTenantEnabled) {
+  const createTenantContext = require('./tenant-context');
+  const tenantContext = createTenantContext(pool, auth.tokenHash);
+  const companyContext = require('./company-context-routes')(pool, auth.authenticate, auth.tokenHash);
+  const invitationRoutes = require('./tenant-invitation-routes')({
+    pool,
+    authenticate: auth.authenticate,
+    tenantContext,
+    sendInvitationEmail: createResendInvitationSender(),
+    publicAppUrl: process.env.PUBLIC_APP_URL
+  });
+
+  // Company selection and invitation acceptance must be available before a tenant is selected.
+  app.use('/api/v1', companyContext);
+  app.use('/api/v1', invitationRoutes);
+
+  // Every business module is protected by a database-derived active tenant context.
+  app.use('/api/v1', auth.authenticate, tenantContext,
+    require('./tenant-dashboard-routes')(pool),
+    require('./tenant-customers-cases-routes')(pool),
+    require('./tenant-staff-vehicles-routes')(pool),
+    require('./tenant-inventory-tasks-routes')(pool),
+    require('./tenant-invoices-payments-routes')(pool),
+    require('./tenant-company-admin-routes')(pool),
+    require('./tenant-audit-routes')(pool)
+  );
+}
+
 
 // Area gestionale web: disponibile sullo stesso servizio Render all'indirizzo /admin.
 app.get('/admin', (_req, res) => {
