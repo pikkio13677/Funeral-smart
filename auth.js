@@ -330,10 +330,10 @@ module.exports = function createAuth(pool, { sendVerificationEmail, emailVerific
     try {
       await client.query('BEGIN');
       const invitation = await client.query(
-        \`SELECT id, email, status, expires_at AS "expiresAt"
+        `SELECT id, email, status, expires_at AS "expiresAt"
          FROM company_invitations
          WHERE token_hash=$1
-         FOR UPDATE\`,
+         FOR UPDATE`,
         [tokenHash(parsed.data.token)]
       );
       if (!invitation.rowCount || invitation.rows[0].status !== 'pending') {
@@ -365,9 +365,9 @@ module.exports = function createAuth(pool, { sendVerificationEmail, emailVerific
 
       const passwordHash = await hashPassword(parsed.data.password);
       const inserted = await client.query(
-        \`INSERT INTO app_users(username, display_name, password_hash, role, email)
+        `INSERT INTO app_users(username, display_name, password_hash, role, email)
          VALUES($1,$2,$3,'operator',$4)
-         RETURNING id, username, display_name AS "displayName", email\`,
+         RETURNING id, username, display_name AS "displayName", email`,
         [parsed.data.username.toLowerCase(), parsed.data.displayName, passwordHash, invite.email.toLowerCase()]
       );
       user = inserted.rows[0];
