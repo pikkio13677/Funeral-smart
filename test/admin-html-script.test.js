@@ -27,3 +27,15 @@ test('email verification UI calls only the authenticated verification endpoints'
   assert.match(html, /\/email\/verification\/confirm/);
   assert.match(html, /currentUser\.emailVerificationEnabled/);
 });
+
+test('management UI supports explicit tenant company selection and tenant-scoped API routing', () => {
+  const html = fs.readFileSync(path.join(root, 'admin.html'), 'utf8');
+  assert.match(html, /id="tenant-selector"/);
+  assert.match(html, /\/api\/v1\/companies/);
+  assert.match(html, /\/active-company/);
+  assert.match(html, /tenantMode\?api\+'\/api\/v1'/);
+  assert.match(html, /tenantRole/);
+  assert.match(html, /\/company\/activity\?limit=100/);
+  assert.match(html, /request\(tenantMode\?'\/tasks\/'\+row\.id/);
+  assert.match(html, /if\(active==='users'&&!tenantMode\)/);
+});
