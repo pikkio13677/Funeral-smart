@@ -172,6 +172,10 @@ async function main() {
       "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, $4)",
       [alfaUser, alfa, alfa, alfaMembership]
     );
+    await client.query(
+      "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'beta_test_user', 'tenant.test', 'company', $2, $3, $4)",
+      [betaUser, beta, beta, betaMembership]
+    );
     await expectDbFailure(
       'Audit rows must not mix a company with another company membership',
       "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, $4)",
@@ -270,6 +274,19 @@ async function main() {
     await assertOnlyOwnRecord(alfaServer, '/admin/company/activity', (await client.query('SELECT id FROM audit_log WHERE company_id=$1', [alfa])).rows[0].id);
     await assertOnlyOwnRecord(betaServer, '/admin/company/activity', (await client.query('SELECT id FROM audit_log WHERE company_id=$1', [beta])).rows[0].id);
 
+    const alfaDashboard = await (await fetch(alfaServer.baseUrl + '/admin/dashboard')).json();
+    const betaDashboard = await (await fetch(betaServer.baseUrl + '/admin/dashboard')).json();
+    assert.equal(alfaDashboard.data.cases.total, 1);
+    assert.equal(betaDashboard.data.cases.total, 1);
+    assert.equal(alfaDashboard.data.customers.total, 1);
+    assert.equal(betaDashboard.data.customers.total, 1);
+    assert.equal(Number(alfaDashboard.data.outstandingEuro), 75);
+    assert.equal(Number(betaDashboard.data.outstandingEuro), 150);
+    const crossTenantMovements = await (await fetch(alfaServer.baseUrl + '/admin/inventory/' + itemBeta + '/movements')).json();
+    assert.deepEqual(crossTenantMovements.data, [], 'Alfa must not read Beta stock movements');
+    const crossTenantPayments = await (await fetch(alfaServer.baseUrl + '/admin/invoices/' + invoiceBeta + '/payments')).json();
+    assert.deepEqual(crossTenantPayments.data, [], 'Alfa must not read Beta invoice payments');
+
     const crossTenantUpdate = await fetch(alfaServer.baseUrl + '/admin/cases/' + betaCase + '/status', {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
@@ -313,7 +330,9 @@ async function main() {
       'PASS: Staff and vehicles are isolated between Alfa and Beta.',
       'PASS: Inventory, stock movements and tasks are isolated between Alfa and Beta.',
       'PASS: Invoices and payments are isolated between Alfa and Beta.',
-      'PASS: Company membership and audit views are scoped to the active tenant.'
+      'PASS: Company membership and audit views are scoped to the active tenant.',
+      'PASS: Tenant dashboard totals and outstanding balances do not mix companies.',
+      'PASS: Cross-tenant stock movement and invoice payment lookups return no data.'
     ].join('\n') + '\n');
   } finally {
     if (alfaServer) await new Promise(resolve => alfaServer.server.close(resolve));
