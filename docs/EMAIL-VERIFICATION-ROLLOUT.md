@@ -30,4 +30,4 @@ Do not enable these flags on production, apply migrations to the production data
 
 ## Remaining work
 
-The tenant invitation acceptance page and its static route still need to be wired to read the token from the URL fragment and submit it only in the authenticated request body. The API tenant routers are also not mounted in the current server entry point. Those are deliberate blockers, not completed features.
+The static invitation acceptance page now reads the bearer token from the URL fragment, removes it from the visible address, loads `public/api-config.js` before computing the backend URL, and sends the token only in the authenticated POST body. A regression test covers the API configuration and token handling. The acceptance API router and tenant routers are still not mounted in `server.js`; this remains a deliberate blocker until the draft migrations are validated on an isolated staging database and the complete authentication/tenant-context wiring is reviewed. The invitation page is therefore not yet an end-to-end working invitation flow.
