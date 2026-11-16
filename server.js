@@ -106,7 +106,6 @@ async function assertMultiTenantSchemaReady() {
     ];
     throw new Error('Migrazioni multi-azienda/verifica email mancanti: ' + objects.join(', '));
   }
-}
 
   const unassignedData = await pool.query(`
     SELECT 'customers' AS table_name, COUNT(*)::int AS total FROM customers WHERE company_id IS NULL
