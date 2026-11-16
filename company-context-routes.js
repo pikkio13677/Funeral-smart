@@ -3,8 +3,7 @@
 const express = require('express');
 const { z } = require('zod');
 
-// Dormant router: intentionally not mounted until migrations 005/006 are
-// tested on a restored database and the application integration is reviewed.
+// Mounted by server.js only when ENABLE_MULTI_TENANT=true, after startup schema preflight.
 module.exports = function createCompanyContextRouter(pool, authenticate, tokenHash, cookieName = 'fs_session') {
   if (!pool || typeof pool.connect !== 'function') {
     throw new TypeError('A PostgreSQL pool with connect() is required.');
@@ -17,9 +16,7 @@ module.exports = function createCompanyContextRouter(pool, authenticate, tokenHa
   }
 
   const router = express.Router();
-  router.use(authenticate);
-
-  router.get('/companies', async (req, res, next) => {
+  router.get('/companies', authenticate, async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Autenticazione richiesta.' });
     try {
       const result = await pool.query(
@@ -39,7 +36,7 @@ module.exports = function createCompanyContextRouter(pool, authenticate, tokenHa
     }
   });
 
-  router.post('/active-company', async (req, res, next) => {
+  router.post('/active-company', authenticate, async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Autenticazione richiesta.' });
 
     const parsed = z.object({ companyId: z.string().uuid() }).strict().safeParse(req.body);

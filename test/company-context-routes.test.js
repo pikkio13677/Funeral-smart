@@ -16,7 +16,7 @@ function response() {
 function routeHandler(router, path, method) {
   const layer = router.stack.find(item => item.route?.path === path && item.route.methods[method]);
   assert.ok(layer, 'expected route ' + method.toUpperCase() + ' ' + path);
-  return layer.route.stack[0].handle;
+  return layer.route.stack.at(-1).handle;
 }
 
 test('lists only active companies belonging to the authenticated user', async () => {

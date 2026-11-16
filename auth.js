@@ -26,6 +26,11 @@ function safeEqual(a, b) {
 function tokenHash(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
+function verificationCodeHash(code) {
+  const pepper = process.env.EMAIL_VERIFICATION_PEPPER || '';
+  if (Buffer.byteLength(pepper, 'utf8') < 32) throw new Error('EMAIL_VERIFICATION_PEPPER deve contenere almeno 32 byte.');
+  return crypto.createHmac('sha256', pepper).update(code, 'utf8').digest('hex');
+}
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16);
   const derived = await scrypt(password, salt, 64);
@@ -107,7 +112,7 @@ function cookieOptions() {
   return { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000 };
 }
 
-module.exports = function createAuth(pool) {
+module.exports = function createAuth(pool, { sendVerificationEmail, emailVerificationEnabled = process.env.ENABLE_EMAIL_VERIFICATION === 'true', invitationRegistrationEnabled = process.env.ENABLE_INVITATION_REGISTRATION === 'true' } = {}) {
   const router = express.Router();
 
   async function audit(user, req, action, resource = null, resourceId = null) {
@@ -122,7 +127,9 @@ module.exports = function createAuth(pool) {
       const token = req.cookies?.[SESSION_COOKIE] || null;
       if (token) {
         const found = await pool.query(
-          `SELECT u.id,u.username,u.display_name AS "displayName",u.role,u.active,(u.totp_enabled_at IS NOT NULL) AS "mfaEnabled"
+          `SELECT u.id,u.username,u.display_name AS "displayName",u.role,u.active,
+                  ${emailVerificationEnabled ? 'u.email,u.email_verified_at AS "emailVerifiedAt"' : 'NULL::varchar AS email,NULL::timestamptz AS "emailVerifiedAt"'},
+                  (u.totp_enabled_at IS NOT NULL) AS "mfaEnabled"
            FROM app_sessions s JOIN app_users u ON u.id=s.user_id
            WHERE s.token_hash=$1 AND s.expires_at>NOW() AND u.active=TRUE`,
           [tokenHash(token)]
@@ -303,6 +310,241 @@ module.exports = function createAuth(pool) {
     } catch (e) { next(e); }
   });
 
+  router.post('/invitation/register', async (req, res, next) => {
+    if (!invitationRegistrationEnabled || !emailVerificationEnabled) {
+      return res.status(404).json({ error: 'Registrazione tramite invito non ancora attiva.' });
+    }
+    const parsed = z.object({
+      token: z.string().min(32).max(200),
+      username: z.string().trim().min(3).max(60).regex(/^[a-zA-Z0-9._-]+$/),
+      displayName: z.string().trim().min(2).max(160),
+      password: z.string().min(12).max(200)
+    }).strict().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Dati non validi. Username 3-60 caratteri e password di almeno 12 caratteri.' });
+    }
+
+    const client = await pool.connect();
+    let sessionToken;
+    let user;
+    try {
+      await client.query('BEGIN');
+      const invitation = await client.query(
+        `SELECT id, email, status, expires_at AS "expiresAt"
+         FROM company_invitations
+         WHERE token_hash=$1
+         FOR UPDATE`,
+        [tokenHash(parsed.data.token)]
+      );
+      if (!invitation.rowCount || invitation.rows[0].status !== 'pending') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Invito non valido, revocato o già utilizzato.' });
+      }
+      const invite = invitation.rows[0];
+      if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+        await client.query(
+          "UPDATE company_invitations SET status='expired' WHERE id=$1 AND status='pending'",
+          [invite.id]
+        );
+        await client.query('COMMIT');
+        return res.status(410).json({ error: 'Invito scaduto. Chiedi all’amministratore di inviarne uno nuovo.' });
+      }
+
+      const existing = await client.query(
+        'SELECT id, email_verified_at AS "emailVerifiedAt" FROM app_users WHERE lower(email)=$1 OR username=$2 FOR UPDATE',
+        [invite.email.toLowerCase(), parsed.data.username.toLowerCase()]
+      );
+      if (existing.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: existing.rows[0].emailVerifiedAt
+            ? 'Esiste già un account verificato per questo indirizzo. Accedi con quell’account per accettare l’invito.'
+            : 'Esiste già un account con questo indirizzo o username. Accedi con l’account esistente e verifica l’email.'
+        });
+      }
+
+      const passwordHash = await hashPassword(parsed.data.password);
+      const inserted = await client.query(
+        `INSERT INTO app_users(username, display_name, password_hash, role, email)
+         VALUES($1,$2,$3,'operator',$4)
+         RETURNING id, username, display_name AS "displayName", email`,
+        [parsed.data.username.toLowerCase(), parsed.data.displayName, passwordHash, invite.email.toLowerCase()]
+      );
+      user = inserted.rows[0];
+      sessionToken = crypto.randomBytes(32).toString('base64url');
+      await client.query(
+        "INSERT INTO app_sessions(user_id, token_hash, expires_at) VALUES($1,$2,NOW()+($3 || ' days')::interval)",
+        [user.id, tokenHash(sessionToken), String(SESSION_DAYS)]
+      );
+      await client.query(
+        'INSERT INTO audit_log(user_id, username, action, resource, resource_id, ip_address) VALUES($1,$2,$3,$4,$5,$6)',
+        [user.id, user.username, 'auth.invitation_registered', 'company_invitation', invite.id, req.ip || null]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      if (error.code === '23505') return res.status(409).json({ error: 'Username o account già esistente. Accedi con l’account corretto.' });
+      return next(error);
+    } finally {
+      client.release();
+    }
+
+    res.cookie(SESSION_COOKIE, sessionToken, cookieOptions());
+    return res.status(201).json({
+      data: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, emailVerifiedAt: null },
+      message: 'Account creato. Verifica ora l’indirizzo email per completare l’accettazione dell’invito.'
+    });
+  });
+
+  router.post('/email/verification/request', authenticate, async (req, res, next) => {
+    if (!emailVerificationEnabled) return res.status(404).json({ error: 'Verifica email non ancora attiva.' });
+    if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account personale.' });
+    if (typeof sendVerificationEmail !== 'function') {
+      return res.status(503).json({ error: 'Verifica email non disponibile: servizio email non configurato.' });
+    }
+    if (Buffer.byteLength(process.env.EMAIL_VERIFICATION_PEPPER || '', 'utf8') < 32) {
+      return res.status(503).json({ error: 'Verifica email non disponibile: configurazione di sicurezza incompleta.' });
+    }
+    const parsed = z.object({ email: z.string().trim().email().max(254) }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Inserisci un indirizzo email valido.' });
+    const email = parsed.data.email.toLowerCase();
+    const client = await pool.connect();
+    let challengeId;
+    let code;
+    try {
+      await client.query('BEGIN');
+      const userResult = await client.query(
+        'SELECT id, email, email_verified_at AS "emailVerifiedAt" FROM app_users WHERE id=$1 AND active=TRUE FOR UPDATE',
+        [req.user.id]
+      );
+      if (!userResult.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Account non attivo.' });
+      }
+      const user = userResult.rows[0];
+      if (user.email && user.email.toLowerCase() !== email) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Per questo invito devi verificare esattamente l’indirizzo email a cui è stato inviato.' });
+      }
+      if (user.emailVerifiedAt) {
+        await client.query('ROLLBACK');
+        if (user.email === email) return res.json({ message: 'Questo indirizzo email è già verificato.' });
+        return res.status(409).json({ error: 'L’account ha già un indirizzo email verificato. Per modificarlo serve una procedura di recupero.' });
+      }
+      const rate = await client.query(
+        'SELECT COUNT(*)::int AS total FROM email_verification_challenges WHERE user_id=$1 AND created_at>NOW()-INTERVAL \'1 hour\'',
+        [req.user.id]
+      );
+      if (rate.rows[0].total >= 5) {
+        await client.query('ROLLBACK');
+        return res.status(429).json({ error: 'Hai richiesto troppi codici. Riprova più tardi.' });
+      }
+      await client.query(
+        'DELETE FROM email_verification_challenges WHERE user_id=$1 AND consumed_at IS NULL',
+        [req.user.id]
+      );
+      code = String(crypto.randomInt(100000, 1000000));
+      const inserted = await client.query(
+        'INSERT INTO email_verification_challenges(user_id,email,code_hash,expires_at) VALUES($1,$2,$3,NOW()+INTERVAL \'15 minutes\') RETURNING id',
+        [req.user.id, email, verificationCodeHash(code)]
+      );
+      challengeId = inserted.rows[0].id;
+      await client.query('COMMIT');
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      if (error.code === '23505') return res.status(409).json({ error: 'Indirizzo email già verificato su un altro account.' });
+      return next(error);
+    } finally {
+      client.release();
+    }
+
+    try {
+      await sendVerificationEmail({ to: email, code, expiresInMinutes: 15 });
+      return res.status(202).json({ message: 'Codice inviato. Controlla la posta e inseriscilo entro 15 minuti.' });
+    } catch (_error) {
+      try {
+        await pool.query(
+          'DELETE FROM email_verification_challenges WHERE id=$1 AND consumed_at IS NULL',
+          [challengeId]
+        );
+      } catch (_) {}
+      return res.status(503).json({ error: 'Invio del codice non riuscito. Riprova più tardi.' });
+    }
+  });
+
+  router.post('/email/verification/confirm', authenticate, async (req, res, next) => {
+    if (!emailVerificationEnabled) return res.status(404).json({ error: 'Verifica email non ancora attiva.' });
+    if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account personale.' });
+    const parsed = z.object({ code: z.string().trim().regex(/^\d{6}$/) }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Inserisci il codice a 6 cifre ricevuto via email.' });
+    if (Buffer.byteLength(process.env.EMAIL_VERIFICATION_PEPPER || '', 'utf8') < 32) {
+      return res.status(503).json({ error: 'Verifica email non disponibile: configurazione di sicurezza incompleta.' });
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const activeUser = await client.query(
+        'SELECT id FROM app_users WHERE id=$1 AND active=TRUE FOR UPDATE',
+        [req.user.id]
+      );
+      if (!activeUser.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ error: 'Account non attivo.' });
+      }
+      const challengeResult = await client.query(
+        `SELECT id, email, code_hash, attempts
+         FROM email_verification_challenges
+         WHERE user_id=$1 AND consumed_at IS NULL AND expires_at>NOW()
+         ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+        [req.user.id]
+      );
+      if (!challengeResult.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(410).json({ error: 'Codice scaduto o non disponibile. Richiedine uno nuovo.' });
+      }
+      const challenge = challengeResult.rows[0];
+      if (challenge.attempts >= 5) {
+        await client.query(
+          'UPDATE email_verification_challenges SET consumed_at=NOW() WHERE id=$1',
+          [challenge.id]
+        );
+        await client.query('COMMIT');
+        return res.status(429).json({ error: 'Troppi tentativi. Richiedi un nuovo codice.' });
+      }
+      if (!safeEqual(challenge.code_hash, verificationCodeHash(parsed.data.code))) {
+        await client.query(
+          'UPDATE email_verification_challenges SET attempts=attempts+1 WHERE id=$1',
+          [challenge.id]
+        );
+        await client.query('COMMIT');
+        return res.status(400).json({ error: 'Codice non corretto.' });
+      }
+      const updated = await client.query(
+        `UPDATE app_users
+         SET email=$1, email_verified_at=NOW(), updated_at=NOW()
+         WHERE id=$2 AND active=TRUE AND email_verified_at IS NULL
+         RETURNING id, email, email_verified_at AS "emailVerifiedAt"`,
+        [challenge.email, req.user.id]
+      );
+      if (!updated.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Indirizzo email già verificato o account non attivo.' });
+      }
+      await client.query(
+        'UPDATE email_verification_challenges SET consumed_at=NOW() WHERE id=$1',
+        [challenge.id]
+      );
+      await client.query('COMMIT');
+      return res.json({ data: updated.rows[0], message: 'Indirizzo email verificato correttamente.' });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      if (error.code === '23505') return res.status(409).json({ error: 'Questo indirizzo email è già verificato su un altro account.' });
+      return next(error);
+    } finally {
+      client.release();
+    }
+  });
+
   router.post('/logout', authenticate, async (req, res, next) => {
     try {
       const token = req.cookies?.[SESSION_COOKIE];
@@ -314,7 +556,7 @@ module.exports = function createAuth(pool) {
   });
 
   router.get('/me', authenticate, (req, res) => {
-    res.json({ data: { id: req.user.id, username: req.user.username, displayName: req.user.displayName, role: req.user.role, roleLabel: ROLE_LABELS[req.user.role] || 'Accesso temporaneo', mfaEnabled: Boolean(req.user.mfaEnabled) } });
+    res.json({ data: { id: req.user.id, username: req.user.username, displayName: req.user.displayName, role: req.user.role, roleLabel: ROLE_LABELS[req.user.role] || 'Accesso temporaneo', mfaEnabled: Boolean(req.user.mfaEnabled), email: req.user.email || null, emailVerifiedAt: req.user.emailVerifiedAt || null, emailVerificationEnabled } });
   });
 
   router.get('/users', authenticate, async (req, res, next) => {
@@ -359,5 +601,5 @@ module.exports = function createAuth(pool) {
     } catch (e) { next(e); }
   });
 
-  return { router, authenticate, authorize };
+  return { router, authenticate, authorize, tokenHash };
 };

@@ -1,7 +1,7 @@
 'use strict';
 
-// Isolated tenant-context middleware. Not mounted by server.js yet.
-// Requires migrations 005 and 006 on a TEST database before integration.
+// Tenant-context middleware, mounted only behind ENABLE_MULTI_TENANT=true.
+// server.js verifies the required schema and tenant backfill before listening.
 module.exports = function createTenantContext(pool, tokenHash, cookieName = 'fs_session') {
   if (!pool || typeof pool.query !== 'function') {
     throw new TypeError('A PostgreSQL-compatible pool is required.');

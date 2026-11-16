@@ -21,11 +21,12 @@ function hashToken(value) {
 }
 function createInvitationUrl(baseUrl, token) {
   const url = new URL('/invito/accetta', baseUrl);
-  url.searchParams.set('token', token);
+  // Keep bearer invitation tokens in the fragment: fragments are not sent in HTTP requests or Referer headers.
+  url.hash = new URLSearchParams({ token }).toString();
   return url.toString();
 }
 
-function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl } = {}) {
+function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl, authenticate, tenantContext } = {}) {
   if (!pool || typeof pool.query !== 'function' || typeof pool.connect !== 'function') {
     throw new TypeError('A PostgreSQL pool with query() and connect() is required.');
   }
@@ -33,7 +34,7 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
 
   // The acceptance endpoint requires a normal authenticated identity, but no
   // active tenant: an invited user may not be a member of the company yet.
-  router.post('/company/invitations/accept', async (req, res, next) => {
+  router.post('/company/invitations/accept', ...(typeof authenticate === 'function' ? [authenticate] : []), async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account prima di accettare l’invito.' });
     const parsed = acceptSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Link di invito non valido.' });
@@ -72,9 +73,13 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
       }
       const user = userResult.rows[0];
       const invitedEmail = normalizeEmail(invite.email);
-      if (user.email && normalizeEmail(user.email) !== invitedEmail && user.emailVerifiedAt) {
+      if (!user.emailVerifiedAt || !user.email) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Questo account è già associato a un altro indirizzo email verificato.' });
+        return res.status(403).json({ error: 'Verifica prima il tuo indirizzo email personale, poi accetta l’invito.' });
+      }
+      if (normalizeEmail(user.email) !== invitedEmail) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Accedi con l’account che ha verificato l’indirizzo email a cui è stato inviato l’invito.' });
       }
 
       const company = await client.query(
@@ -95,10 +100,6 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
         return res.status(409).json({ error: 'Questo account ha già una membership per l’azienda.' });
       }
 
-      await client.query(
-        'UPDATE app_users SET email = $1, email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW() WHERE id = $2',
-        [invitedEmail, req.user.id]
-      );
       const membership = await client.query(
         `INSERT INTO company_memberships(company_id, user_id, role, status)
          VALUES($1, $2, $3, 'active') RETURNING id`,
@@ -126,12 +127,20 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
     }
   });
 
-  router.use((req, res, next) => {
-    if (!req.tenant?.companyId || !req.tenant?.membershipId || !req.tenant?.role) {
-      return res.status(403).json({ error: 'Contesto aziendale verificato richiesto.' });
+  // Acceptance is intentionally registered before tenantContext: a new member
+  // must be able to accept an invitation before selecting their first company.
+  // Scope these middlewares to invitation-management endpoints only.
+  // The acceptance route above must run first and works before a tenant is selected.
+  router.use('/company/invitations',
+    ...(typeof authenticate === 'function' ? [authenticate] : []),
+    ...(typeof tenantContext === 'function' ? [tenantContext] : []),
+    (req, res, next) => {
+      if (!req.tenant?.companyId || !req.tenant?.membershipId || !req.tenant?.role) {
+        return res.status(403).json({ error: 'Contesto aziendale verificato richiesto.' });
+      }
+      return next();
     }
-    return next();
-  });
+  );
 
   router.post('/company/invitations', authorizeTenant('members', 'invite'), async (req, res, next) => {
     const parsed = inviteSchema.safeParse(req.body);
@@ -247,3 +256,4 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
 }
 
 module.exports = createTenantInvitationRouter;
+module.exports.createInvitationUrl = createInvitationUrl;

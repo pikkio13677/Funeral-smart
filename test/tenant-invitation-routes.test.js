@@ -14,6 +14,16 @@ function routeHandler(router, path, method) {
 }
 const tenant = { companyId: 'company-alpha', membershipId: 'member-alpha', role: 'admin' };
 
+test('invitation URL keeps the bearer token in the fragment, not the query string', () => {
+  const { createInvitationUrl } = require('../tenant-invitation-routes');
+  const value = createInvitationUrl('https://funeralsmart.example', 'secret-token');
+  const url = new URL(value);
+  assert.equal(url.origin, 'https://funeralsmart.example');
+  assert.equal(url.pathname, '/invito/accetta');
+  assert.equal(url.search, '');
+  assert.equal(new URLSearchParams(url.hash.slice(1)).get('token'), 'secret-token');
+});
+
 test('invitation creation is disabled when no email provider is configured', async () => {
   let connected = false;
   const router = createRouter({ pool: { query: async () => ({}), connect: async () => { connected = true; } } });
@@ -69,7 +79,7 @@ test('acceptance hashes the raw token and creates membership only in the invitat
       calls.push({ sql, args });
       if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
       if (sql.includes('FROM company_invitations')) return { rowCount: 1, rows: [{ id: 'invite-1', companyId: 'company-from-db', email: 'member@example.com', role: 'operator', status: 'pending', expiresAt: new Date(Date.now() + 60000) }] };
-      if (sql.includes('FROM app_users')) return { rowCount: 1, rows: [{ id: 'user-1', username: 'member', email: null, emailVerifiedAt: null, active: true }] };
+      if (sql.includes('FROM app_users')) return { rowCount: 1, rows: [{ id: 'user-1', username: 'member', email: 'member@example.com', emailVerifiedAt: new Date(), active: true }] };
       if (sql.includes('FROM companies')) return { rowCount: 1, rows: [{ id: 'company-from-db' }] };
       if (sql.includes('FROM company_memberships')) return { rowCount: 0, rows: [] };
       if (sql.includes('INSERT INTO company_memberships')) return { rowCount: 1, rows: [{ id: 'membership-new' }] };
@@ -87,6 +97,28 @@ test('acceptance hashes the raw token and creates membership only in the invitat
   const membershipInsert = calls.find(c => c.sql.includes('INSERT INTO company_memberships'));
   assert.deepEqual(membershipInsert.args, ['company-from-db', 'user-1', 'operator']);
   assert.ok(calls.some(c => c.sql === 'COMMIT'));
+  assert.equal(calls.some(c => c.sql.includes('UPDATE app_users SET email')), false);
+});
+
+test('invitation acceptance refuses an email address that has not been independently verified', async () => {
+  const calls = [];
+  const client = {
+    async query(sql) {
+      calls.push(sql);
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+      if (sql.includes('FROM company_invitations')) return { rowCount: 1, rows: [{ id: 'invite-1', companyId: 'company-alpha', email: 'member@example.com', role: 'operator', status: 'pending', expiresAt: new Date(Date.now() + 60000) }] };
+      if (sql.includes('FROM app_users')) return { rowCount: 1, rows: [{ id: 'user-1', username: 'member', email: null, emailVerifiedAt: null, active: true }] };
+      return { rowCount: 0, rows: [] };
+    },
+    release() {}
+  };
+  const router = createRouter({ pool: { query: async () => ({ rowCount: 1, rows: [] }), connect: async () => client } });
+  const res = response();
+  await routeHandler(router, '/company/invitations/accept', 'post')({ user: { id: 'user-1' }, body: { token: 't'.repeat(48) } }, res, e => { throw e; });
+  assert.equal(res.statusCode, 403);
+  assert.match(res.body.error, /Verifica prima il tuo indirizzo email/);
+  assert.ok(calls.includes('ROLLBACK'));
+  assert.equal(calls.some(sql => sql.includes('INSERT INTO company_memberships')), false);
 });
 
 test('invitation listing is always scoped to the verified tenant company', async () => {

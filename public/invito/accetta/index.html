@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#123b32">
+<title>Accetta invito — FUNERAL SMART</title>
+<style>
+:root{--g:#123b32;--g2:#1d5b4b;--gold:#c9ad78;--bg:#f3f6f2;--ink:#24312a;--muted:#68756e;--line:#dfe7df}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+header{background:linear-gradient(120deg,var(--g),var(--g2));color:white;padding:22px}header h1{margin:0;font-size:21px;letter-spacing:1px}
+main{max-width:560px;margin:28px auto;padding:0 16px}.panel{background:white;border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:14px}
+h2{margin:0 0 8px;font-size:19px}.muted{color:var(--muted)}.field{margin:14px 0}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:5px}
+input{width:100%;padding:12px;border:1px solid #ccd8ce;border-radius:9px;font:inherit}
+button{border:0;border-radius:9px;background:var(--g);color:white;padding:12px 16px;font-weight:700;cursor:pointer;width:100%}
+button:disabled{opacity:.55}.gold{background:var(--gold);color:#26392f}.hidden{display:none!important}
+.msg{padding:11px;border-radius:9px;background:#f8eeee;color:#8b2525;margin:12px 0}.msg.ok{background:#edf5ed;color:#245b38}
+.actions{display:grid;gap:10px;margin-top:14px}.divider{border:0;border-top:1px solid var(--line);margin:18px 0}
+</style>
+</head>
+<body>
+<header><h1>FUNERAL SMART</h1><div>Accesso sicuro all’azienda che ti ha invitato</div></header>
+<main>
+<section class="panel">
+<h2>Accetta il tuo invito</h2>
+<p class="muted">Crea un account oppure accedi con il tuo account personale. Per entrare nell’azienda dovrai verificare l’indirizzo email a cui è stato inviato l’invito.</p>
+<div id="message" class="msg hidden" role="status" aria-live="polite"></div>
+<div id="register">
+<h2>Crea un account</h2>
+<form id="register-form">
+<div class="field"><label for="display-name">Nome e cognome</label><input id="display-name" required minlength="2" maxlength="160" autocomplete="name"></div>
+<div class="field"><label for="username">Nome utente</label><input id="username" required minlength="3" maxlength="60" pattern="[A-Za-z0-9._-]+" autocomplete="username"></div>
+<div class="field"><label for="register-password">Password (almeno 12 caratteri)</label><input id="register-password" type="password" required minlength="12" maxlength="200" autocomplete="new-password"></div>
+<button class="gold" type="submit">Crea account e continua</button>
+</form>
+<hr class="divider">
+</div>
+<div id="login">
+<h2>Hai già un account?</h2>
+<form id="login-form">
+<div class="field"><label for="login-username">Nome utente</label><input id="login-username" required autocomplete="username"></div>
+<div class="field"><label for="login-password">Password</label><input id="login-password" type="password" required autocomplete="current-password"></div>
+<button type="submit">Accedi</button>
+</form>
+</div>
+<div id="mfa" class="hidden">
+<h2>Verifica in due passaggi</h2>
+<form id="mfa-form"><div class="field"><label for="mfa-code">Codice Authenticator</label><input id="mfa-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></div><button type="submit">Conferma accesso</button></form>
+</div>
+<div id="email-step" class="hidden">
+<h2>Verifica l’indirizzo email</h2>
+<p class="muted">Il codice viene inviato all’indirizzo associato all’invito. Non potrai accettare l’invito con un indirizzo diverso.</p>
+<form id="email-form"><div class="field"><label for="email">Indirizzo email dell’invito</label><input id="email" type="email" required maxlength="254" autocomplete="email"></div><button type="submit">Invia codice di verifica</button></form>
+<form id="code-form" class="hidden"><div class="field"><label for="code">Codice a 6 cifre</label><input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="one-time-code"></div><button class="gold" type="submit">Verifica e accetta invito</button></form>
+</div>
+<div id="done" class="hidden">
+<h2>Invito accettato</h2>
+<p>La tua iscrizione all’azienda è stata completata. Puoi ora accedere all’area gestionale.</p>
+</div>
+</section>
+<p class="muted" style="text-align:center;font-size:12px">Il link è personale e non deve essere condiviso. Se non riconosci l’invito, chiudi questa pagina.</p>
+</main>
+<script src="/api-config.js"></script>
+<script>
+'use strict';
+const API_BASE=(window.FUNERAL_SMART_API_URL||location.origin).replace(/\/+$/,'');
+const params=new URLSearchParams(location.hash.slice(1));
+const invitationToken=params.get('token')||'';
+if(location.hash)history.replaceState(null,'',location.pathname+location.search);
+const $=id=>document.getElementById(id);
+let currentUser=null;
+function message(value,ok=false){$('message').textContent=value;$('message').classList.remove('hidden');$('message').classList.toggle('ok',ok);}
+async function api(path,body){
+ const response=await fetch(API_BASE+'/api/v1/auth'+path,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const result=await response.json().catch(()=>({error:'Risposta non valida dal server.'}));
+ if(!response.ok)throw new Error(result.error||'Operazione non riuscita.');
+ return result;
+}
+async function acceptInvitation(){
+ const response=await fetch(API_BASE+'/api/v1/company/invitations/accept',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:invitationToken})});
+ const result=await response.json().catch(()=>({error:'Risposta non valida dal server.'}));
+ if(!response.ok)throw new Error(result.error||'Accettazione invito non riuscita.');
+ $('email-step').classList.add('hidden');$('register').classList.add('hidden');$('login').classList.add('hidden');$('mfa').classList.add('hidden');$('done').classList.remove('hidden');
+ message(result.message||'Invito accettato.',true);
+}
+async function beginEmailStep(){
+ const me=await fetch(API_BASE+'/api/v1/auth/me',{credentials:'include'}).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.error||'Sessione non valida.');return d.data;});
+ currentUser=me;
+ $('register').classList.add('hidden');$('login').classList.add('hidden');$('mfa').classList.add('hidden');$('email-step').classList.remove('hidden');
+ $('email').value=me.email||'';
+ if(me.emailVerifiedAt){$('email-form').classList.add('hidden');await acceptInvitation();}
+}
+$('register-form').addEventListener('submit',async event=>{
+ event.preventDefault();if(!invitationToken)return message('Link di invito mancante o non valido.');
+ const button=event.submitter;button.disabled=true;
+ try{
+  await api('/invitation/register',{token:invitationToken,username:$('username').value.trim(),displayName:$('display-name').value.trim(),password:$('register-password').value});
+  await beginEmailStep();message('Account creato. Ora verifica l’indirizzo email.',true);
+ }catch(error){message(error.message);}finally{button.disabled=false;}
+});
+$('login-form').addEventListener('submit',async event=>{
+ event.preventDefault();const button=event.submitter;button.disabled=true;
+ try{
+  const result=await api('/login',{username:$('login-username').value.trim(),password:$('login-password').value});
+  if(result.mfaRequired){$('login').classList.add('hidden');$('register').classList.add('hidden');$('mfa').classList.remove('hidden');$('mfa-code').focus();}
+  else await beginEmailStep();
+ }catch(error){message(error.message);}finally{button.disabled=false;}
+});
+$('mfa-form').addEventListener('submit',async event=>{
+ event.preventDefault();const button=event.submitter;button.disabled=true;
+ try{await api('/mfa/verify-login',{code:$('mfa-code').value.trim()});await beginEmailStep();}
+ catch(error){message(error.message);}finally{button.disabled=false;}
+});
+$('email-form').addEventListener('submit',async event=>{
+ event.preventDefault();const button=event.submitter;button.disabled=true;
+ try{
+  await api('/email/verification/request',{email:$('email').value.trim()});
+  $('email').readOnly=true;$('code-form').classList.remove('hidden');message('Codice inviato. Hai 15 minuti per inserirlo.',true);
+ }catch(error){message(error.message);}finally{button.disabled=false;}
+});
+$('code-form').addEventListener('submit',async event=>{
+ event.preventDefault();const button=event.submitter;button.disabled=true;
+ try{await api('/email/verification/confirm',{code:$('code').value.trim()});await acceptInvitation();}
+ catch(error){message(error.message);}finally{button.disabled=false;}
+});
+if(!invitationToken){$('register').classList.add('hidden');$('login').classList.add('hidden');message('Token di invito assente. Apri il link completo ricevuto via email.');}
+</script>
+</body>
+</html>

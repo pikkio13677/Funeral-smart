@@ -7,7 +7,8 @@ const { Client } = require('pg');
 const migrationFiles = [
   '005_multi_tenant_foundation.draft.sql',
   '006_session_active_membership.draft.sql',
-  '007_audit_invitations.draft.sql'
+  '007_audit_invitations.draft.sql',
+  '008_email_verification.draft.sql'
 ];
 
 async function main() {
@@ -55,6 +56,7 @@ async function main() {
       ['app_sessions.active_membership_id', 'app_sessions'],
       ['app_users.email', 'app_users'],
       ['app_users.email_verified_at', 'app_users'],
+      ['email_verification_challenges', 'email_verification_challenges'],
       ['audit_log.company_id', 'audit_log'],
       ['audit_log.membership_id', 'audit_log']
     ];
