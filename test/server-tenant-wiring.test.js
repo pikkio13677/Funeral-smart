@@ -31,7 +31,7 @@ test('multi-tenant startup fails closed unless verification flags and database s
 
 test('invitation acceptance is authenticated before tenant context is applied', () => {
   const acceptance = invitation.indexOf("router.post('/company/invitations/accept'");
-  const tenantMiddleware = invitation.indexOf('if (typeof tenantContext === \'function\') router.use(tenantContext)');
+  const tenantMiddleware = invitation.indexOf("router.use('/company/invitations'");
   assert.ok(acceptance >= 0);
   assert.ok(tenantMiddleware > acceptance);
   assert.match(invitation, /router\.post\('\/company\/invitations\/accept', \..*authenticate/);
