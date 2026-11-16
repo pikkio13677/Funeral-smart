@@ -86,7 +86,7 @@ test('invitation registration creates an unverified least-privilege account and 
   assert.notEqual(insert.args[2], 'correct horse battery');
   assert.match(insert.sql, /'operator'/);
   assert.ok(calls.some(call => call.sql.includes('INSERT INTO app_sessions')));
-  assert.ok(calls.some(call => call.sql.includes('auth.invitation_registered')));
+  assert.ok(calls.some(call => call.args.includes('auth.invitation_registered')));
   assert.equal(calls.some(call => call.sql.includes('INSERT INTO company_memberships')), false);
 });
 
