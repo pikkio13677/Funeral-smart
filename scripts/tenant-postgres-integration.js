@@ -9,6 +9,12 @@ const { Client } = require('pg');
 const crypto = require('node:crypto');
 const createTenantCustomersCasesRouter = require('../tenant-customers-cases-routes');
 const createTenantContext = require('../tenant-context');
+const createTenantStaffVehiclesRouter = require('../tenant-staff-vehicles-routes');
+const createTenantInventoryTasksRouter = require('../tenant-inventory-tasks-routes');
+const createTenantInvoicesPaymentsRouter = require('../tenant-invoices-payments-routes');
+const createTenantDashboardRouter = require('../tenant-dashboard-routes');
+const createTenantAuditRouter = require('../tenant-audit-routes');
+const createTenantCompanyAdminRouter = require('../tenant-company-admin-routes');
 
 async function listen(app) {
   const server = http.createServer(app);
@@ -65,6 +71,48 @@ async function main() {
     const betaMembership = (await client.query(
       "INSERT INTO company_memberships (company_id, user_id, role) VALUES ($1, $2, 'admin') RETURNING id",
       [beta, betaUser]
+    )).rows[0].id;
+
+    // Fixtures for read-isolation checks across every tenant-aware operational module.
+    const staffAlfa = (await client.query(
+      "INSERT INTO staff (company_id, first_name, last_name, role) VALUES ($1, 'Staff', 'Alfa', 'Operatore') RETURNING id", [alfa]
+    )).rows[0].id;
+    const staffBeta = (await client.query(
+      "INSERT INTO staff (company_id, first_name, last_name, role) VALUES ($1, 'Staff', 'Beta', 'Operatore') RETURNING id", [beta]
+    )).rows[0].id;
+    const vehicleAlfa = (await client.query(
+      "INSERT INTO vehicles (company_id, plate, make_model) VALUES ($1, 'TESTALFA1', 'Veicolo Alfa') RETURNING id", [alfa]
+    )).rows[0].id;
+    const vehicleBeta = (await client.query(
+      "INSERT INTO vehicles (company_id, plate, make_model) VALUES ($1, 'TESTBETA1', 'Veicolo Beta') RETURNING id", [beta]
+    )).rows[0].id;
+    const itemAlfa = (await client.query(
+      "INSERT INTO inventory_items (company_id, sku, name, category, quantity) VALUES ($1, 'SKU-ALFA-TEST', 'Articolo Alfa', 'Test', 8) RETURNING id", [alfa]
+    )).rows[0].id;
+    const itemBeta = (await client.query(
+      "INSERT INTO inventory_items (company_id, sku, name, category, quantity) VALUES ($1, 'SKU-BETA-TEST', 'Articolo Beta', 'Test', 9) RETURNING id", [beta]
+    )).rows[0].id;
+    await client.query(
+      "INSERT INTO stock_movements (company_id, item_id, movement_type, quantity, reason) VALUES ($1, $2, 'in', 2, 'Test Alfa'), ($3, $4, 'in', 3, 'Test Beta')",
+      [alfa, itemAlfa, beta, itemBeta]
+    );
+    const taskAlfa = (await client.query(
+      "INSERT INTO tasks (company_id, title, status, assigned_to) VALUES ($1, 'Attività Alfa', 'open', $2) RETURNING id", [alfa, staffAlfa]
+    )).rows[0].id;
+    const taskBeta = (await client.query(
+      "INSERT INTO tasks (company_id, title, status, assigned_to) VALUES ($1, 'Attività Beta', 'open', $2) RETURNING id", [beta, staffBeta]
+    )).rows[0].id;
+    const invoiceAlfa = (await client.query(
+      "INSERT INTO invoices (company_id, invoice_number, amount, status) VALUES ($1, 'INV-ALFA-TEST', 100.00, 'issued') RETURNING id", [alfa]
+    )).rows[0].id;
+    const invoiceBeta = (await client.query(
+      "INSERT INTO invoices (company_id, invoice_number, amount, status) VALUES ($1, 'INV-BETA-TEST', 200.00, 'issued') RETURNING id", [beta]
+    )).rows[0].id;
+    const paymentAlfa = (await client.query(
+      "INSERT INTO payments (company_id, invoice_id, amount, method) VALUES ($1, $2, 25.00, 'test') RETURNING id", [alfa, invoiceAlfa]
+    )).rows[0].id;
+    const paymentBeta = (await client.query(
+      "INSERT INTO payments (company_id, invoice_id, amount, method) VALUES ($1, $2, 50.00, 'test') RETURNING id", [beta, invoiceBeta]
     )).rows[0].id;
 
     async function expectDbFailure(label, sql, values) {
@@ -157,24 +205,26 @@ async function main() {
       [alfa, crypto.createHash('sha256').update('accepted-without-time').digest('hex'), alfaMembership]
     );
 
-    function appFor(companyId, suffix) {
+    function appFor(companyId, membershipId) {
       const app = express();
       app.use(express.json());
       // Test-only identity injection. Production identity comes from verified session membership.
       app.use((req, _res, next) => {
-        req.tenant = {
-          companyId,
-          membershipId: '00000000-0000-4000-8000-' + suffix.padStart(12, '0'),
-          role: 'admin'
-        };
+        req.tenant = { companyId, membershipId, role: 'admin' };
         next();
       });
       app.use('/admin', createTenantCustomersCasesRouter(client));
+      app.use('/admin', createTenantStaffVehiclesRouter(client));
+      app.use('/admin', createTenantInventoryTasksRouter(client));
+      app.use('/admin', createTenantInvoicesPaymentsRouter(client));
+      app.use('/admin', createTenantDashboardRouter(client));
+      app.use('/admin', createTenantAuditRouter(client));
+      app.use('/admin', createTenantCompanyAdminRouter(client));
       return app;
     }
 
-    alfaServer = await listen(appFor(alfa, '1'));
-    betaServer = await listen(appFor(beta, '2'));
+    alfaServer = await listen(appFor(alfa, alfaMembership));
+    betaServer = await listen(appFor(beta, betaMembership));
 
     const alfaCustomersResponse = await fetch(alfaServer.baseUrl + '/admin/customers');
     assert.equal(alfaCustomersResponse.status, 200);
@@ -194,6 +244,31 @@ async function main() {
     const betaCases = await (await fetch(betaServer.baseUrl + '/admin/cases')).json();
     assert.deepEqual(betaCases.data.map(row => row.id), [betaCase],
       'Beta must see only Beta cases');
+
+    async function assertOnlyOwnRecord(server, path, expectedId, idField = 'id') {
+      const response = await fetch(server.baseUrl + path);
+      assert.equal(response.status, 200, path + ' should be available to tenant admin');
+      const payload = await response.json();
+      assert.deepEqual(payload.data.map(row => row[idField]), [expectedId], path + ' must expose only this tenant\'s rows');
+    }
+    await assertOnlyOwnRecord(alfaServer, '/admin/staff', staffAlfa);
+    await assertOnlyOwnRecord(betaServer, '/admin/staff', staffBeta);
+    await assertOnlyOwnRecord(alfaServer, '/admin/vehicles', vehicleAlfa);
+    await assertOnlyOwnRecord(betaServer, '/admin/vehicles', vehicleBeta);
+    await assertOnlyOwnRecord(alfaServer, '/admin/inventory', itemAlfa);
+    await assertOnlyOwnRecord(betaServer, '/admin/inventory', itemBeta);
+    await assertOnlyOwnRecord(alfaServer, '/admin/tasks', taskAlfa);
+    await assertOnlyOwnRecord(betaServer, '/admin/tasks', taskBeta);
+    await assertOnlyOwnRecord(alfaServer, '/admin/invoices', invoiceAlfa);
+    await assertOnlyOwnRecord(betaServer, '/admin/invoices', invoiceBeta);
+    await assertOnlyOwnRecord(alfaServer, '/admin/inventory/' + itemAlfa + '/movements', (await client.query('SELECT id FROM stock_movements WHERE item_id=$1', [itemAlfa])).rows[0].id);
+    await assertOnlyOwnRecord(betaServer, '/admin/inventory/' + itemBeta + '/movements', (await client.query('SELECT id FROM stock_movements WHERE item_id=$1', [itemBeta])).rows[0].id);
+    await assertOnlyOwnRecord(alfaServer, '/admin/invoices/' + invoiceAlfa + '/payments', paymentAlfa);
+    await assertOnlyOwnRecord(betaServer, '/admin/invoices/' + invoiceBeta + '/payments', paymentBeta);
+    await assertOnlyOwnRecord(alfaServer, '/admin/company/members', alfaMembership, 'membershipId');
+    await assertOnlyOwnRecord(betaServer, '/admin/company/members', betaMembership, 'membershipId');
+    await assertOnlyOwnRecord(alfaServer, '/admin/company/activity', (await client.query('SELECT id FROM audit_log WHERE company_id=$1', [alfa])).rows[0].id);
+    await assertOnlyOwnRecord(betaServer, '/admin/company/activity', (await client.query('SELECT id FROM audit_log WHERE company_id=$1', [beta])).rows[0].id);
 
     const crossTenantUpdate = await fetch(alfaServer.baseUrl + '/admin/cases/' + betaCase + '/status', {
       method: 'PATCH',
@@ -234,7 +309,11 @@ async function main() {
       'PASS: Tenant context comes from the verified DB membership.',
       'PASS: Membership revocation blocks the next request.',
       'PASS: Audit rows enforce company, membership and user consistency.',
-      'PASS: Invitation uniqueness, token digest and status constraints are enforced.'
+      'PASS: Invitation uniqueness, token digest and status constraints are enforced.',
+      'PASS: Staff and vehicles are isolated between Alfa and Beta.',
+      'PASS: Inventory, stock movements and tasks are isolated between Alfa and Beta.',
+      'PASS: Invoices and payments are isolated between Alfa and Beta.',
+      'PASS: Company membership and audit views are scoped to the active tenant.'
     ].join('\n') + '\n');
   } finally {
     if (alfaServer) await new Promise(resolve => alfaServer.server.close(resolve));
