@@ -95,7 +95,7 @@ function allowedTabs(){
  if(r==='accounting')return ['invoices','security'];
  return[];
 }
-function renderTabs(){const nav=$('tabs');nav.replaceChildren();const ids=allowedTabs();if(!ids.includes(active))active=ids[0]||'cases';ids.forEach(id=>{const b=document.createElement('button');b.className='tab'+(id===active?' active':'');b.textContent=id==='users'?'Utenti':id==='security'?'Sicurezza MFA':id==='audit'?'Registro attività':definitions[id].label;b.onclick=()=>{active=id;renderTabs();renderModule();};nav.append(b);});}
+function renderTabs(){const nav=$('tabs');nav.replaceChildren();const ids=allowedTabs();if(!ids.includes(active))active=ids[0]||'cases';ids.forEach(id=>{const b=document.createElement('button');b.className='tab'+(id===active?' active':'');b.textContent=id==='users'?'Utenti':id==='security'?'Sicurezza MFA':id==='audit'?'Registro attività':id==='company'?'Azienda':id==='members'?'Membri e inviti':definitions[id].label;b.onclick=()=>{active=id;renderTabs();renderModule();};nav.append(b);});}
 
 function renderTenantSelector(message=''){
  const host=$('tenant-selector');host.replaceChildren();host.classList.remove('hidden');
@@ -245,7 +245,7 @@ async function renderTenantCompanyModule(host){
   const result=await request('/company/profile'),company=result.data;panel.replaceChildren();
   const fields=[['legalName','Ragione sociale','text'],['vatNumber','Partita IVA','text'],['address','Indirizzo','text'],['city','Comune','text'],['province','Provincia','text'],['email','Email','email'],['phone','Telefono','tel']];
   const form=document.createElement('form'),grid=document.createElement('div');grid.className='grid';
-  fields.forEach(([key,label,type])=>{const wrap=document.createElement('div');wrap.className='field';const caption=document.createElement('label');caption.textContent=label;const input=document.createElement('input');input.name=key;input.type=type;input.value=safe(company[key]);input.disabled=!tenantCan('company','update');wrap.append(caption,input);grid.append(wrap);});
+  fields.forEach(([key,label,type])=>{const wrap=document.createElement('div');wrap.className='field';const caption=document.createElement('label');caption.textContent=label;const input=document.createElement('input');input.name=key;input.type=type;input.value=safe(company[key]);if(key==='legalName'){input.required=true;input.minLength=2;}input.disabled=!tenantCan('company','update');wrap.append(caption,input);grid.append(wrap);});
   form.append(grid);
   if(tenantCan('company','update')){
    const save=document.createElement('button');save.type='submit';save.className='btn gold form-actions';save.textContent='Salva dati aziendali';form.append(save);
