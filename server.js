@@ -108,6 +108,34 @@ async function assertMultiTenantSchemaReady() {
   }
 }
 
+  const unassignedData = await pool.query(`
+    SELECT 'customers' AS table_name, COUNT(*)::int AS total FROM customers WHERE company_id IS NULL
+    UNION ALL SELECT 'funeral_cases', COUNT(*)::int FROM funeral_cases WHERE company_id IS NULL
+    UNION ALL SELECT 'staff', COUNT(*)::int FROM staff WHERE company_id IS NULL
+    UNION ALL SELECT 'vehicles', COUNT(*)::int FROM vehicles WHERE company_id IS NULL
+    UNION ALL SELECT 'inventory_items', COUNT(*)::int FROM inventory_items WHERE company_id IS NULL
+    UNION ALL SELECT 'stock_movements', COUNT(*)::int FROM stock_movements WHERE company_id IS NULL
+    UNION ALL SELECT 'tasks', COUNT(*)::int FROM tasks WHERE company_id IS NULL
+    UNION ALL SELECT 'invoices', COUNT(*)::int FROM invoices WHERE company_id IS NULL
+    UNION ALL SELECT 'payments', COUNT(*)::int FROM payments WHERE company_id IS NULL
+  `);
+  const unassigned = unassignedData.rows.filter(row => row.total > 0);
+  if (unassigned.length) {
+    throw new Error('Backfill aziendale incompleto: ' + unassigned.map(row => row.table_name + '=' + row.total).join(', '));
+  }
+  const activeTenant = await pool.query(`
+    SELECT 1
+    FROM companies c
+    JOIN company_memberships m ON m.company_id = c.id
+    JOIN app_users u ON u.id = m.user_id
+    WHERE c.status = 'active' AND m.status = 'active' AND u.active = TRUE
+    LIMIT 1
+  `);
+  if (!activeTenant.rowCount) {
+    throw new Error('Nessuna azienda attiva con un membro attivo: completare il bootstrap tenant sul database di staging.');
+  }
+}
+
 if (multiTenantEnabled) {
   const createTenantContext = require('./tenant-context');
   const tenantContext = createTenantContext(pool, auth.tokenHash);
