@@ -65,6 +65,12 @@ async function assertTenantSchemaReady(pool) {
   const missingColumns = REQUIRED_COLUMNS.map(([table, column]) => table + '.' + column).filter(name => !foundColumns.has(name));
   if (missingColumns.length) throw new Error('Tenant cutover blocked: missing columns: ' + missingColumns.join(', '));
 
+  const nullableCompanyIds = await pool.query(
+    "SELECT table_name AS name FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'company_id' AND table_name = ANY($1::text[]) AND is_nullable = 'YES'",
+    [TENANT_TABLES]
+  );
+  if (nullableCompanyIds.rowCount) throw new Error('Tenant cutover blocked: company_id must be NOT NULL on: ' + nullableCompanyIds.rows.map(row => row.name).join(', '));
+
   const missingConstraints = await pool.query(
     'SELECT name FROM unnest($1::text[]) AS name WHERE NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = name AND contype = \'f\')',
     [REQUIRED_FOREIGN_KEYS]
