@@ -12,7 +12,7 @@ function handler(router, path, method) {
   assert.ok(layer, 'missing ' + method + ' ' + path);
   return layer.route.stack.at(-1).handle;
 }
-const tenant = { companyId: 'company-alpha', membershipId: 'member-alpha', role: 'admin' };
+const tenant = { companyId: 'company-alpha', membershipId: 'member-alpha', role: 'admin' };\nconst actor = { id: 'user-admin', username: 'admin.alfa' };
 const memberId = '11111111-1111-4111-8111-111111111111';
 
 test('company profile read is restricted to the active company', async () => {
@@ -69,7 +69,7 @@ test('membership update returns not found for a member outside the active compan
   const router = createRouter({ query: async () => ({ rows: [] }), connect: async () => client });
   const res = response();
   await handler(router, '/company/members/:membershipId', 'patch')({
-    tenant, params: { membershipId: memberId }, body: { role: 'manager' }
+    tenant, user: actor, ip: '127.0.0.1', params: { membershipId: memberId }, body: { role: 'manager' }
   }, res, e => { throw e; });
   assert.equal(res.statusCode, 404);
   assert.ok(calls.includes('ROLLBACK'));
@@ -115,4 +115,46 @@ test('membership role update is company-scoped and serialized on company row', a
   assert.match(update.sql, /WHERE id = \$2 AND company_id = \$3/);
   assert.equal(update.args[2], 'company-alpha');
   assert.ok(calls.some(x => x.sql === 'COMMIT'));
+});
+
+\ntest('membership permission changes are recorded in tenant audit within the same transaction', async () => {
+  const calls = [];
+  const client = { query: async (sql, args) => {
+    calls.push({ sql, args });
+    if (sql.startsWith('SELECT id FROM companies')) return { rowCount: 1, rows: [{ id: 'company-alpha' }] };
+    if (sql.startsWith('SELECT id, role, status')) return { rowCount: 1, rows: [{ id: memberId, role: 'operator', status: 'active' }] };
+    if (sql.startsWith('UPDATE company_memberships')) return { rowCount: 1, rows: [{ membershipId: memberId, userId: 'user-target', role: 'manager', status: 'active' }] };
+    return { rowCount: 1, rows: [] };
+  }, release() {} };
+  const router = createRouter({ query: async () => ({ rows: [] }), connect: async () => client });
+  const res = response();
+  await handler(router, '/company/members/:membershipId', 'patch')({
+    tenant, user: actor, ip: '127.0.0.1', params: { membershipId: memberId }, body: { role: 'manager' }
+  }, res, e => { throw e; });
+  const audit = calls.find(x => x.sql.startsWith('INSERT INTO audit_log'));
+  assert.ok(audit);
+  assert.deepEqual(audit.args, ['user-admin', 'admin.alfa', memberId, 'company-alpha', 'member-alpha', '127.0.0.1']);
+  assert.ok(calls.findIndex(x => x.sql.startsWith('INSERT INTO audit_log')) < calls.findIndex(x => x.sql === 'COMMIT'));
+  assert.equal(res.statusCode, 200);
+});
+
+test('membership permission update rolls back when its audit record cannot be written', async () => {
+  const calls = [];
+  const client = { query: async (sql) => {
+    calls.push(sql);
+    if (sql.startsWith('SELECT id FROM companies')) return { rowCount: 1, rows: [{ id: 'company-alpha' }] };
+    if (sql.startsWith('SELECT id, role, status')) return { rowCount: 1, rows: [{ id: memberId, role: 'operator', status: 'active' }] };
+    if (sql.startsWith('UPDATE company_memberships')) return { rowCount: 1, rows: [{ membershipId: memberId, role: 'manager', status: 'active' }] };
+    if (sql.startsWith('INSERT INTO audit_log')) throw new Error('audit unavailable');
+    return { rowCount: 1, rows: [] };
+  }, release() {} };
+  const router = createRouter({ query: async () => ({ rows: [] }), connect: async () => client });
+  const res = response();
+  let forwarded;
+  await handler(router, '/company/members/:membershipId', 'patch')({
+    tenant, user: actor, params: { membershipId: memberId }, body: { role: 'manager' }
+  }, res, error => { forwarded = error; });
+  assert.match(forwarded.message, /audit unavailable/);
+  assert.ok(calls.includes('ROLLBACK'));
+  assert.equal(calls.includes('COMMIT'), false);
 });
