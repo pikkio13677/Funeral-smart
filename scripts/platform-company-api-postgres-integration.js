@@ -74,6 +74,10 @@ async function main() {
   });
 
   await withServer(ownerRouter, async base => {
+    const beforeMfa = await fetch(base + '/api/v1/platform/companies');
+    assert.equal(beforeMfa.status, 403, 'platform owner without MFA is denied');
+    await pool.query('UPDATE app_users SET totp_enabled_at=NOW() WHERE id=$1', [ownerId]);
+
     const list = await fetch(base + '/api/v1/platform/companies?q=' + encodeURIComponent('API Integration ' + suffix));
     assert.equal(list.status, 200, 'active platform owner can list companies');
     const listBody = await list.json();
