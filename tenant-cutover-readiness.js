@@ -97,7 +97,11 @@ async function assertTenantSchemaReady(pool) {
   }
 
   const roleConstraint = await pool.query(
-    "SELECT 1 FROM pg_constraint WHERE conname = 'app_users_role_check' AND pg_get_constraintdef(oid) LIKE '%platform_owner%'"
+    "SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid " +
+    "JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public' " +
+    "AND t.relname='app_users' AND c.conname='app_users_role_check' " +
+    "AND c.contype='c' AND c.convalidated " +
+    "AND pg_get_constraintdef(c.oid) LIKE '%platform_owner%'"
   );
   if (!roleConstraint.rowCount) throw new Error('Tenant cutover blocked: platform_owner role constraint is missing.');
 
