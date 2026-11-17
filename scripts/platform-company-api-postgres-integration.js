@@ -117,11 +117,11 @@ async function main() {
 
     await pool.query(`
       CREATE OR REPLACE FUNCTION test_platform_audit_reject_insert()
-      RETURNS trigger LANGUAGE plpgsql AS $
+      RETURNS trigger LANGUAGE plpgsql AS $fn$
       BEGIN
         RAISE EXCEPTION 'intentional disposable integration-test audit failure';
       END;
-      $;
+      $fn$;
     `);
     await pool.query(`
       CREATE TRIGGER test_platform_audit_reject_insert
