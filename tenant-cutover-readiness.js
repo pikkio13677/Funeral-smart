@@ -53,7 +53,7 @@ async function assertTenantSchemaReady(pool) {
   if (!pool || typeof pool.query !== 'function') throw new TypeError('A PostgreSQL pool is required.');
 
   const tableResult = await pool.query(
-    'SELECT name FROM unnest($1::text[]) AS items(name) WHERE to_regclass(\\'public.\\' || items.name) IS NOT NULL',
+    'SELECT name FROM unnest($1::text[]) AS items(name) WHERE to_regclass(\'public.\' || items.name) IS NOT NULL',
     [REQUIRED_TABLES]
   );
   const foundTables = new Set(tableResult.rows.map(row => row.name));
@@ -61,7 +61,7 @@ async function assertTenantSchemaReady(pool) {
   if (missingTables.length) throw new Error('Tenant cutover blocked: missing tables: ' + missingTables.join(', '));
 
   const columnResult = await pool.query(
-    'SELECT table_name AS "tableName", column_name AS "columnName" FROM information_schema.columns WHERE table_schema = \\'public\\' AND (table_name, column_name) IN (' +
+    'SELECT table_name AS "tableName", column_name AS "columnName" FROM information_schema.columns WHERE table_schema = \'public\' AND (table_name, column_name) IN (' +
     REQUIRED_COLUMNS.map((_, index) => '(' + '$' + (index * 2 + 1) + ', $' + (index * 2 + 2) + ')').join(', ') + ')',
     REQUIRED_COLUMNS.flat()
   );
@@ -80,8 +80,8 @@ async function assertTenantSchemaReady(pool) {
   const missingConstraints = await pool.query(
     'SELECT required.name FROM (VALUES ' + foreignKeyPairs + ') AS required(name, table_name) ' +
     'WHERE NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid ' +
-    'JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=\\'public\\' ' +
-    'AND t.relname=required.table_name AND c.conname=required.name AND c.contype=\\'f\\' AND c.convalidated)',
+    'JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=\'public\' ' +
+    'AND t.relname=required.table_name AND c.conname=required.name AND c.contype=\'f\' AND c.convalidated)',
     foreignKeyValues
   );
   if (missingConstraints.rowCount) throw new Error('Tenant cutover blocked: composite foreign keys are incomplete or unvalidated: ' + missingConstraints.rows.map(row => row.name).join(', '));
