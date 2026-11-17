@@ -115,6 +115,13 @@ async function main() {
     });
     assert.equal(reactivate.status, 200);
 
+    const auditList = await fetch(base + '/api/v1/platform/audit?resource=company&resourceId=' + companyId + '&limit=10');
+    assert.equal(auditList.status, 200, 'active platform owner can read platform audit');
+    const auditListBody = await auditList.json();
+    assert.equal(auditListBody.data.length, 2, 'audit endpoint returns suspension and reactivation events');
+    assert.ok(auditListBody.data.every(event => event.resourceId === companyId));
+    assert.equal('ipAddress' in auditListBody.data[0], false);
+
     await pool.query(`
       CREATE OR REPLACE FUNCTION test_platform_audit_reject_insert()
       RETURNS trigger LANGUAGE plpgsql AS $fn$
