@@ -206,7 +206,7 @@ module.exports = function createAuth(pool) {
       }
       const passwordHash = await hashPassword(parsed.data.password);
       const created = await client.query(
-        "INSERT INTO app_users(username,display_name,password_hash,role) VALUES($1,$2,$3,'platform_owner') RETURNING id,username,display_name AS \\"displayName\\",role",
+        `INSERT INTO app_users(username,display_name,password_hash,role) VALUES($1,$2,$3,'platform_owner') RETURNING id,username,display_name AS "displayName",role`,
         [parsed.data.username.toLowerCase(), parsed.data.displayName, passwordHash]
       );
       await client.query(
