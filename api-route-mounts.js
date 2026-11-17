@@ -4,12 +4,15 @@ const express = require('express');
 const createTenantApi = require('./tenant-api-router');
 const createPlatformAccess = require('./platform-access');
 const createPlatformCompanyRouter = require('./platform-company-routes');
+const assertTenantCutoverReady = require('./tenant-cutover-guard');
 
 function mountApiRouters({ app, pool, auth, emailNotifications, env = process.env, rateLimit }) {
   if (!app || typeof app.use !== 'function') throw new TypeError('An Express application is required.');
   if (!auth || !auth.router || typeof auth.authenticate !== 'function') throw new TypeError('The authentication module is required.');
   if (typeof rateLimit !== 'function') throw new TypeError('The rate-limit middleware factory is required.');
 
+  // Defense in depth: never mount tenant routes unless both cutover switches agree.
+  assertTenantCutoverReady(env);
   const multiTenantEnabled = env.ENABLE_MULTI_TENANT === 'true';
   const authRouter = express.Router();
 
@@ -20,7 +23,7 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
       let normalizedPath;
       try { normalizedPath = decodeURIComponent(req.path); }
       catch (_error) { return res.status(400).json({ error: 'Percorso non valido.' }); }
-      if (/^\/users(?:\/|$)/i.test(normalizedPath)) {
+      if (/^\\/users(?:\\/|$)/i.test(normalizedPath)) {
         return res.status(404).json({ error: 'La gestione globale degli utenti non è disponibile in modalità multi-azienda.' });
       }
       return next();
