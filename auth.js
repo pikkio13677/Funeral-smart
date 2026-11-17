@@ -361,3 +361,5 @@ module.exports = function createAuth(pool) {
 
   return { router, authenticate, authorize };
 };
+
+module.exports.hashPassword = hashPassword;
