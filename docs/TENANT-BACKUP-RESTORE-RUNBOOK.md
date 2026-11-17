@@ -60,7 +60,7 @@ La proprietà dei dati legacy è stata indicata come una sola impresa. Sul clone
 - collegare le sessioni esistenti alla membership dello stesso utente;
 - lasciare invariati gli eventi storici di audit, che possono rimanere senza contesto aziendale.
 
-Il nuovo script `scripts/backfill-single-company.js` è **dry-run per impostazione predefinita**. Funziona solo su PostgreSQL locale, richiede un `COMPANY_ID` esistente e verifica che esista esattamente una sola azienda. Per il dry-run:
+Lo script `scripts/backfill-single-company.js` è **dry-run per impostazione predefinita**. Funziona solo su PostgreSQL locale, richiede un `COMPANY_ID` esistente e verifica che esista esattamente una sola azienda. Per il dry-run:
 
 ```bash
 NODE_ENV=test DATABASE_URL=postgres://localhost/funeral_smart_tenant_rehearsal \
@@ -87,23 +87,31 @@ La migrazione 012 rimuove i vincoli globali su codice pratica, targa, SKU e nume
 
 Se i conteggi non coincidono, una relazione è ambigua, manca una membership, un indice o una FK non è validata, fermarsi e non abilitare il multi-tenant. Nessuna variabile Render deve essere modificata in questa fase.
 
-## 8. Integrità del backup cifrato e prova di ripristino
+## 8. Evidenze del backup cifrato e restore test
 
-Questa sezione è una lista di controllo, non una dichiarazione che il backup cifrato sia già stato verificato.
+**Test storico completato il 15 novembre 2026, in ambiente locale/temporaneo isolato:**
 
+- Backup del 12 novembre identificato come cifrato con AES-256-CBC, salt e PBKDF2 a 200.000 iterazioni.
+- Decrittografia della copia cifrata completata con esito riportato come `VERIFICA SUPERATA`; la password è rimasta privata e non è inclusa nel repository o in questo documento.
+- `pg_restore --list` ha riconosciuto correttamente l'archivio PostgreSQL.
+- Il restore locale temporaneo è stato riportato come riuscito, con controllo su 20 tabelle.
+- Il database originale/di produzione non è stato modificato.
+
+**Limite delle evidenze conservate:** non sono disponibili in questo report i comandi esatti, gli hash SHA-256, i conteggi riga per riga, il dettaglio delle sequenze o un confronto puntuale tra il dump e il database ripristinato. Pertanto il test storico dimostra la riuscita della decrittografia, il riconoscimento dell'archivio e il restore delle 20 tabelle, ma non documenta ancora un confronto completo dei dati.
+
+Per un prossimo controllo ripetibile:
 1. Conservare intatto il file cifrato originale e lavorare su una copia.
-2. Calcolare e registrare SHA-256 del file cifrato prima di qualsiasi operazione; ripetere il calcolo sulla copia e verificare che coincida.
-3. Identificare il formato e il metodo di cifratura effettivamente usati per quel file. Non indovinare algoritmo, opzioni o formato e non salvare chiavi/passphrase nel repository, nei log o nella cronologia della shell.
+2. Calcolare SHA-256 del file cifrato e della copia e verificare che coincidano.
+3. Identificare il formato e il metodo di cifratura effettivamente usati; non indovinare opzioni o formato.
 4. Decifrare soltanto una copia in una cartella locale con permessi riservati. La chiave deve essere fornita localmente tramite il metodo sicuro previsto dallo strumento, mai incollata in chat o in GitHub.
 5. Verificare il dump decifrato con `pg_restore --list`. Se il comando non riconosce l'archivio o segnala errori, fermarsi: non tentare un restore parziale.
-6. Ripristinare il dump in un secondo database PostgreSQL locale, vuoto e usa-e-getta, distinto dal database usato per la migrazione.
-7. Confrontare i conteggi delle tabelle e le sequenze con la fotografia iniziale; eseguire i controlli di integrità e i test applicativi previsti.
+6. Se serve una nuova prova, ripristinare il dump in un database PostgreSQL locale, vuoto e usa-e-getta.
+7. Confrontare conteggi delle tabelle, sequenze e integrità referenziale con una fotografia di riferimento, senza esportare dati personali.
 8. Registrare soltanto esito, data, versione dello schema e conteggi aggregati. Non condividere dump, dati personali, chiavi o passphrase.
 
 ## 9. Limiti del collaudo automatico e attività ancora aperte
 
-- I workflow GitHub che passano su PostgreSQL usa-e-getta verificano schema, migrazioni draft, isolamento Alfa/Beta, bootstrap e API. **Non dimostrano** che un dump reale, né la sua copia cifrata, siano stati decifrati e ripristinati correttamente.
-- La documentazione del repository indica ancora come attività da realizzare i backup automatici, la retention e i test periodici di ripristino. Non considerare quindi già disponibile un servizio automatico di backup solo perché il database è ospitato su Render.
-- Il restore-test del backup effettivo, il controllo della copia cifrata e la verifica delle regole di conservazione restano gate separati. Devono essere eseguiti e documentati prima di qualsiasi cutover.
+- I workflow GitHub su PostgreSQL usa-e-getta verificano schema, migrazioni draft, isolamento Alfa/Beta, bootstrap e API. **Non sostituiscono** il restore test del backup effettivo.
+- La documentazione del repository indica ancora come attività da realizzare i backup automatici, la retention e i test periodici di ripristino. Non considerare quindi già disponibile un servizio automatico completo solo perché il database è ospitato su Render.
+- Il restore storico del backup cifrato è riuscito; restano da produrre evidenze ripetibili su hash, conteggi, sequenze e confronto completo dei dati.
 - Nessun test descritto in questa procedura autorizza l'uso del database di produzione, la modifica di Render, l'attivazione di flag tenant, il merge o il deploy.
-
