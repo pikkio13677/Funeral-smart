@@ -55,6 +55,11 @@ test('tenant startup preflight accepts a complete, backfilled schema', async () 
   const roleCheck = pool.queries.find(sql => sql.includes("t.relname='app_users'"));
   assert.match(roleCheck, /c\.convalidated/);
   assert.match(roleCheck, /c\.contype='c'/);
+  const foreignKeyCheck = pool.queries.find(sql => sql.includes('pg_constraint c') && sql.includes('required.referenced_table'));
+  assert.match(foreignKeyCheck, /c\\.conkey/);
+  assert.match(foreignKeyCheck, /c\\.confkey/);
+  assert.match(foreignKeyCheck, /source_table\\.relname=required\\.table_name/);
+  assert.match(foreignKeyCheck, /target_table\\.relname=required\\.referenced_table/);
   const uniqueCheck = pool.queries.find(sql => sql.includes('FROM (VALUES') && sql.includes('pg_index'));
   assert.match(uniqueCheck, /i\.indisunique/);
   assert.match(uniqueCheck, /i\.indisvalid/);
@@ -72,6 +77,17 @@ test('tenant startup preflight blocks missing composite foreign keys', async () 
     () => assertTenantSchemaReady(readyPool({ missingConstraint: true })),
     /composite foreign keys are incomplete/
   );
+});
+
+test('tenant startup preflight blocks a same-named foreign key with wrong columns or target', async () => {
+  const pool = readyPool({ missingConstraint: true });
+  await assert.rejects(
+    () => assertTenantSchemaReady(pool),
+    /composite foreign keys are incomplete or unvalidated/
+  );
+  const foreignKeyCheck = pool.queries.find(sql => sql.includes('required.referenced_table'));
+  assert.match(foreignKeyCheck, /string_to_array\\(required\\.local_columns/);
+  assert.match(foreignKeyCheck, /string_to_array\\(required\\.referenced_columns/);
 });
 
 test('tenant startup preflight blocks nullable company_id columns', async () => {
