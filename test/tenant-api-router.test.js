@@ -60,3 +60,12 @@ test('company selection uses the same SHA-256 session token digest as tenant con
     require('node:crypto').createHash('sha256').update('example-session-token').digest('hex')
   );
 });
+
+
+test('invitation registration is exposed separately for a strict public auth mount', () => {
+  const api = createTenantApi({ pool: fakePool(), authenticate: (_req, _res, next) => next() });
+  const paths = api.invitationRegistrationRouter.stack
+    .filter(layer => layer.route)
+    .map(layer => layer.route.path);
+  assert.deepEqual(paths, ['/invitation/register']);
+});
