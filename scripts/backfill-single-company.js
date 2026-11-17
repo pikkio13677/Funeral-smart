@@ -89,10 +89,14 @@ async function backfillSingleCompany(client, companyId, { apply = false } = {}) 
       if (existing.rows.some(row => row.role !== user.role)) {
         throw new Error('An existing membership role differs from the legacy account role. Stop for manual review.');
       }
+      const expectedStatus = user.active ? 'active' : 'suspended';
+      if (existing.rows.some(row => row.status !== expectedStatus)) {
+        throw new Error('An existing membership status differs from the legacy account state. Stop for manual review.');
+      }
       if (!existing.rowCount) membershipsToCreate.push({
         userId: user.id,
         role: user.role,
-        status: user.active ? 'active' : 'suspended'
+        status: expectedStatus
       });
     }
 
