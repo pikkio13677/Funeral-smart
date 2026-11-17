@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - "feat/**"
+      - "test/**"
   push:
     branches:
       - feat/multi-azienda-foundation
