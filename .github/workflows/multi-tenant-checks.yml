@@ -53,5 +53,7 @@ jobs:
         run: node --check scripts/tenant-postgres-integration.js
       - name: Test Alfa/Beta tenant isolation on disposable PostgreSQL
         run: node scripts/tenant-postgres-integration.js
+      - name: Test one-time platform owner bootstrap on disposable PostgreSQL
+        run: node scripts/platform-owner-bootstrap-integration.js
       - name: Check and run read-only tenant backfill preflight
         run: node --check scripts/tenant-backfill-preflight.js && node scripts/tenant-backfill-preflight.js
