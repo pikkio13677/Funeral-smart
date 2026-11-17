@@ -26,6 +26,10 @@ function readyPool({ unassignedTable = null, missingConstraint = false, nullable
         const rows = missingUniqueIndex ? [{ name: values[0] }] : [];
         return { rows, rowCount: rows.length };
       }
+      if (sql.includes('FROM (VALUES') && sql.includes('required.referenced_table')) {
+        const rows = missingConstraint ? [{ name: values[0] }] : [];
+        return { rows, rowCount: rows.length };
+      }
       if (sql.includes('FROM (VALUES') && sql.includes('JOIN pg_constraint c')) {
         const rows = remainingGlobalUnique ? [{ name: values[0] }] : [];
         return { rows, rowCount: rows.length };
@@ -56,10 +60,10 @@ test('tenant startup preflight accepts a complete, backfilled schema', async () 
   assert.match(roleCheck, /c\.convalidated/);
   assert.match(roleCheck, /c\.contype='c'/);
   const foreignKeyCheck = pool.queries.find(sql => sql.includes('pg_constraint c') && sql.includes('required.referenced_table'));
-  assert.match(foreignKeyCheck, /c\\.conkey/);
-  assert.match(foreignKeyCheck, /c\\.confkey/);
-  assert.match(foreignKeyCheck, /source_table\\.relname=required\\.table_name/);
-  assert.match(foreignKeyCheck, /target_table\\.relname=required\\.referenced_table/);
+  assert.ok(foreignKeyCheck.includes('c.conkey'));
+  assert.ok(foreignKeyCheck.includes('c.confkey'));
+  assert.ok(foreignKeyCheck.includes('source_table.relname=required.table_name'));
+  assert.ok(foreignKeyCheck.includes('target_table.relname=required.referenced_table'));
   const uniqueCheck = pool.queries.find(sql => sql.includes('FROM (VALUES') && sql.includes('pg_index'));
   assert.match(uniqueCheck, /i\.indisunique/);
   assert.match(uniqueCheck, /i\.indisvalid/);
@@ -86,8 +90,8 @@ test('tenant startup preflight blocks a same-named foreign key with wrong column
     /composite foreign keys are incomplete or unvalidated/
   );
   const foreignKeyCheck = pool.queries.find(sql => sql.includes('required.referenced_table'));
-  assert.match(foreignKeyCheck, /string_to_array\\(required\\.local_columns/);
-  assert.match(foreignKeyCheck, /string_to_array\\(required\\.referenced_columns/);
+  assert.ok(foreignKeyCheck.includes('string_to_array(required.local_columns'));
+  assert.ok(foreignKeyCheck.includes('string_to_array(required.referenced_columns'));
 });
 
 test('tenant startup preflight blocks nullable company_id columns', async () => {
