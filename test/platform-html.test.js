@@ -5,14 +5,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'platform.html'), 'utf8');
-const scripts = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)].map(match => match[1]);
+const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1]);
 
 test('platform console contains one syntactically valid application script', () => {
   assert.equal(scripts.length, 1);
   assert.doesNotThrow(() => new vm.Script(scripts[0], { filename: 'platform.html:inline-script' }));
 });
 
-test('platform console uses same-origin cookie sessions and the owner-only API', () => {
+test('platform console uses same-origin cookie sessions and owner-only API endpoints', () => {
   assert.match(scripts[0], /credentials:'same-origin'/);
   assert.match(scripts[0], /\/platform\/companies/);
   assert.match(scripts[0], /\/platform\/audit/);
