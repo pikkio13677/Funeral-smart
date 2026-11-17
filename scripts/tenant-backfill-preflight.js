@@ -96,6 +96,42 @@ async function main() {
       ORDER BY conname
     `);
 
+    const companyForeignKeyNames = [
+      'customers_company_id_fkey', 'funeral_cases_company_id_fkey', 'staff_company_id_fkey',
+      'vehicles_company_id_fkey', 'inventory_items_company_id_fkey', 'stock_movements_company_id_fkey',
+      'tasks_company_id_fkey', 'invoices_company_id_fkey', 'payments_company_id_fkey'
+    ];
+    const companyConstraintResult = await client.query(
+      "SELECT c.conname FROM pg_constraint c JOIN pg_class r ON r.oid=c.confrelid " +
+      "JOIN pg_namespace n ON n.oid=r.relnamespace WHERE c.conname=ANY($1::text[]) " +
+      "AND c.contype='f' AND c.convalidated AND n.nspname='public' AND r.relname='companies'",
+      [companyForeignKeyNames]
+    );
+
+    const uniqueIndexNames = [
+      'uq_funeral_cases_company_case_code', 'uq_vehicles_company_plate',
+      'uq_inventory_items_company_sku', 'uq_invoices_company_invoice_number'
+    ];
+    const uniqueIndexResult = await client.query(
+      'SELECT idx.relname FROM pg_class idx JOIN pg_index i ON i.indexrelid=idx.oid ' +
+      'WHERE idx.relname=ANY($1::text[]) AND i.indisunique AND i.indisvalid',
+      [uniqueIndexNames]
+    );
+    const nullableCompanyIds = await client.query(
+      "SELECT table_name FROM information_schema.columns WHERE table_schema='public' " +
+      "AND column_name='company_id' AND table_name=ANY($1::text[]) AND is_nullable='YES'",
+      [tenantTables]
+    );
+    const legacyGlobalUnique = await client.query(
+      "SELECT conname FROM pg_constraint WHERE conname=ANY($1::text[])",
+      [['funeral_cases_case_code_key','vehicles_plate_key','inventory_items_sku_key','invoices_invoice_number_key']]
+    );
+    const unassignedUsers = await client.query(
+      "SELECT COUNT(*)::int AS count FROM app_users u WHERE u.active=TRUE AND u.role<>'platform_owner' " +
+      "AND NOT EXISTS (SELECT 1 FROM company_memberships m WHERE m.user_id=u.id AND m.status='active') " +
+      "AND NOT EXISTS (SELECT 1 FROM platform_access pa WHERE pa.user_id=u.id AND pa.status='active')"
+    );
+
     const report = {
       mode: 'read-only',
       databaseHost: url.hostname,
@@ -103,16 +139,38 @@ async function main() {
       crossTenantReferences,
       compositeForeignKeysFound: constraintResult.rows.map(row => row.conname),
       compositeForeignKeysExpected: 8,
-      backfillReady: Object.values(crossTenantReferences).every(count => count === 0)
+      companyForeignKeysFound: companyConstraintResult.rows.map(row => row.conname),
+      companyForeignKeysExpected: companyForeignKeyNames.length,
+      companyUniqueIndexesFound: uniqueIndexResult.rows.map(row => row.relname),
+      companyUniqueIndexesExpected: uniqueIndexNames.length,
+      nullableCompanyIdTables: nullableCompanyIds.rows.map(row => row.table_name),
+      remainingGlobalUniqueConstraints: legacyGlobalUnique.rows.map(row => row.conname),
+      activeUsersWithoutMembership: unassignedUsers.rows[0].count,
+      backfillReady: Object.values(crossTenantReferences).every(count => Number(count) === 0)
         && constraintResult.rowCount === 8
-        && Object.values(unassigned).every(count => count === 0)
+        && companyConstraintResult.rowCount === companyForeignKeyNames.length
+        && uniqueIndexResult.rowCount === uniqueIndexNames.length
+        && nullableCompanyIds.rowCount === 0
+        && legacyGlobalUnique.rowCount === 0
+        && Number(unassignedUsers.rows[0].count) === 0
+        && Object.values(unassigned).every(count => Number(count) === 0)
     };
+
     process.stdout.write(JSON.stringify(report, null, 2) + '\n');
     if (Object.values(crossTenantReferences).some(count => count > 0)) {
       throw new Error('Cross-tenant references found. Do not run a backfill or enable tenant routes.');
     }
     if (constraintResult.rowCount !== 8) {
       throw new Error('Composite tenant foreign keys are incomplete.');
+    }
+    if (companyConstraintResult.rowCount !== companyForeignKeyNames.length) {
+      throw new Error('Validated company ownership foreign keys are incomplete.');
+    }
+    if (uniqueIndexResult.rowCount !== uniqueIndexNames.length || nullableCompanyIds.rowCount || legacyGlobalUnique.rowCount) {
+      throw new Error('Company-scoped uniqueness or NOT NULL finalization is incomplete.');
+    }
+    if (Number(unassignedUsers.rows[0].count) !== 0) {
+      throw new Error('Active users without an active company membership remain.');
     }
     if (Object.values(unassigned).some(count => count > 0)) {
       process.stdout.write('PRECHECK: company_id backfill is still required; no data was changed.\\n');
