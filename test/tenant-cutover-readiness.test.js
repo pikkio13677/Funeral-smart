@@ -31,7 +31,7 @@ function readyPool({ unassignedTable = null, missingConstraint = false, nullable
         return { rows: [{ count: table === unassignedTable ? 2 : 0 }], rowCount: 1 };
       }
       if (sql.includes('SELECT COUNT(*)::int AS count FROM')) return { rows: [{ count: 0 }], rowCount: 1 };
-      if (sql.includes('FROM pg_constraint')) return { rows: [{ ok: 1 }], rowCount: 1 };
+      if (sql.includes('FROM pg_constraint c') && sql.includes("t.relname='app_users'")) return { rows: [{ ok: 1 }], rowCount: 1 };
       if (sql.includes('FROM platform_bootstrap_state')) return { rows: [{ singleton: true }], rowCount: 1 };
       if (sql.includes('FROM app_users u')) return { rows: [{ count: 0 }], rowCount: 1 };
       throw new Error('Unexpected readiness query: ' + sql);
