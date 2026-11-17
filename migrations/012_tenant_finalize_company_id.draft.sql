@@ -46,6 +46,30 @@ BEGIN
     RAISE EXCEPTION 'Tenant finalization blocked: expected 8 validated composite foreign keys, found %',
       required_fk_count;
   END IF;
+
+  SELECT COUNT(*) INTO required_fk_count
+  FROM pg_constraint c
+  JOIN pg_class t ON t.oid = c.conrelid
+  JOIN pg_namespace n ON n.oid = t.relnamespace
+  WHERE n.nspname = 'public'
+    AND c.contype = 'f'
+    AND c.convalidated
+    AND c.confrelid = 'public.companies'::regclass
+    AND (t.relname, c.conname) IN (
+      ('customers', 'customers_company_id_fkey'),
+      ('funeral_cases', 'funeral_cases_company_id_fkey'),
+      ('staff', 'staff_company_id_fkey'),
+      ('vehicles', 'vehicles_company_id_fkey'),
+      ('inventory_items', 'inventory_items_company_id_fkey'),
+      ('stock_movements', 'stock_movements_company_id_fkey'),
+      ('tasks', 'tasks_company_id_fkey'),
+      ('invoices', 'invoices_company_id_fkey'),
+      ('payments', 'payments_company_id_fkey')
+    );
+  IF required_fk_count <> 9 THEN
+    RAISE EXCEPTION 'Tenant finalization blocked: expected 9 validated company foreign keys, found %',
+      required_fk_count;
+  END IF;
 END $$;
 
 -- Prima si creano gli indici sostitutivi: i vecchi vincoli globali restano
