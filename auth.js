@@ -217,8 +217,11 @@ module.exports = function createAuth(pool) {
         'UPDATE platform_bootstrap_state SET consumed_at = NOW(), consumed_by = $1 WHERE singleton = TRUE',
         [created.rows[0].id]
       );
+      await client.query(
+        'INSERT INTO audit_log(user_id, username, action, resource, resource_id, ip_address) VALUES($1,$2,$3,$4,$5,$6)',
+        [created.rows[0].id, created.rows[0].username, 'platform.owner.bootstrap.created', 'platform_access', created.rows[0].id, req.ip || null]
+      );
       await client.query('COMMIT');
-      await audit(created.rows[0], req, 'platform.owner.bootstrap.created', 'platform_access', created.rows[0].id);
       res.status(201).json({ data: created.rows[0], message: 'Proprietario della piattaforma creato. Accedi e attiva subito la verifica in due passaggi.' });
     } catch (e) {
       try { await client.query('ROLLBACK'); } catch (_rollbackError) {}
