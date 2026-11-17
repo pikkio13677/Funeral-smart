@@ -11,8 +11,7 @@ const assertTenantCutoverReady = require('./tenant-cutover-guard');
 const assertTenantSchemaReady = require('./tenant-cutover-readiness');
 const mountApiRouters = require('./api-route-mounts');
 
-// The tenant API is deliberately not mounted in this release candidate.
-// Fail closed if someone enables the feature flag before the complete cutover.
+// Tenant routes require a separate approval flag and a read-only database preflight before the listener opens.
 assertTenantCutoverReady(process.env);
 
 const app = express();
