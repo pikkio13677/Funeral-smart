@@ -173,6 +173,14 @@ app.get('/invito/accetta', (_req, res) => {
   res.sendFile(require('path').join(__dirname, 'invitation.html'));
 });
 
+// Console proprietario piattaforma: separata dall'area gestionale delle singole imprese.
+app.get('/platform', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  res.sendFile(require('path').join(__dirname, 'platform.html'));
+});
+
 // Area gestionale web: disponibile sullo stesso servizio Render all'indirizzo /admin.
 app.get('/admin', (_req, res) => {
   // La pagina gestionale usa script e stili inline: abilitarli solo su questa pagina.
