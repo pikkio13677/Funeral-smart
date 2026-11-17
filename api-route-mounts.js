@@ -17,7 +17,10 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
   // use the membership-scoped routes under /api/v1/admin instead.
   if (multiTenantEnabled) {
     authRouter.use((req, res, next) => {
-      if (/^\\/users(?:\\/|$)/.test(req.path)) {
+      let normalizedPath;
+      try { normalizedPath = decodeURIComponent(req.path); }
+      catch (_error) { return res.status(400).json({ error: 'Percorso non valido.' }); }
+      if (/^\\/users(?:\\/|$)/i.test(normalizedPath)) {
         return res.status(404).json({ error: 'La gestione globale degli utenti non è disponibile in modalità multi-azienda.' });
       }
       return next();
