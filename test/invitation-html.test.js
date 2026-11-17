@@ -10,7 +10,7 @@ const rootPage = fs.readFileSync(path.join(__dirname, '..', 'invitation.html'), 
 const publicPage = fs.readFileSync(path.join(__dirname, '..', 'public', 'invito', 'accetta', 'index.html'), 'utf8');
 
 function scripts(html) {
-  return [...html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)].map(match => match[1]);
+  return [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(match => match[1]);
 }
 
 test('invitation acceptance page has syntactically valid inline JavaScript', () => {
