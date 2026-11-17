@@ -33,7 +33,9 @@ const REQUIRED_FOREIGN_KEYS = Object.freeze([
   'fk_tasks_tenant_staff',
   'fk_invoices_tenant_case',
   'fk_invoices_tenant_customer',
-  'fk_payments_tenant_invoice'
+  'fk_payments_tenant_invoice',
+  'fk_company_invitations_company',
+  'fk_company_invitations_inviter_membership'
 ]);
 
 const RELATION_CHECKS = Object.freeze([
