@@ -35,3 +35,10 @@ test('tenant UI uses authenticated company selection and verified tenant members
 test('tenant task completion uses the tenant API PATCH contract', () => {
   assert.match(scripts[0], /'\/tasks\/'\+row\.id\+\(TENANT_API_ENABLED\?'':'\/status'\)/);
 });
+
+
+test('tenant admin UI requires MFA and provides an explicit company-scoped logout', () => {
+  assert.match(scripts[0], /effectiveRole\(\)==='admin'&&!currentUser\.mfaEnabled/);
+  assert.match(scripts[0], /authRequest\('\/logout'/);
+  assert.match(scripts[0], /function canCreateInActiveTenant/);
+});
