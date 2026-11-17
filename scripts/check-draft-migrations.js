@@ -9,7 +9,8 @@ const migrationFiles = [
   '006_session_active_membership.draft.sql',
   '007_audit_invitations.draft.sql',
   '008_tenant_composite_foreign_keys.draft.sql',
-  '009_platform_access.draft.sql'
+  '009_platform_access.draft.sql',
+  '010_platform_owner_bootstrap.draft.sql'
 ];
 
 async function main() {
@@ -44,6 +45,7 @@ async function main() {
     const checks = [
       ['companies', 'companies'],
       ['platform_access', 'platform_access'],
+      ['platform_bootstrap_state', 'platform_bootstrap_state'],
       ['company_memberships', 'company_memberships'],
       ['company_invitations', 'company_invitations'],
       ['customers.company_id', 'customers'],
@@ -75,6 +77,23 @@ async function main() {
           );
       if (!result.rowCount) throw new Error('Expected database object missing: ' + label);
     }
+
+    const ownerRoleConstraint = await client.query(
+      "SELECT 1 FROM pg_constraint WHERE conname = 'app_users_role_check' AND pg_get_constraintdef(oid) LIKE '%platform_owner%'"
+    );
+    if (!ownerRoleConstraint.rowCount) throw new Error('Platform owner app_users role constraint missing.');
+
+    const bootstrapState = await client.query(
+      'SELECT singleton, consumed_at FROM platform_bootstrap_state WHERE singleton = TRUE'
+    );
+    if (bootstrapState.rowCount !== 1 || bootstrapState.rows[0].consumed_at !== null) {
+      throw new Error('Platform bootstrap state must contain one unused singleton row in the disposable database.');
+    }
+
+    const ownerIndex = await client.query(
+      "SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_platform_access_single_active_owner'"
+    );
+    if (!ownerIndex.rowCount) throw new Error('Single active platform owner index missing.');
 
     const compositeConstraints = [
       'fk_funeral_cases_tenant_customer',
