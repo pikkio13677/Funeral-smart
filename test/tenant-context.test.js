@@ -90,3 +90,36 @@ test('forwards database errors to Express error handling', async () => {
   );
   assert.equal(received, expected);
 });
+
+
+test('requires MFA before granting tenant administrator context', async () => {
+  const middleware = createTenantContext({
+    query: async () => ({
+      rowCount: 1,
+      rows: [{ membershipId: 'membership-admin', companyId: 'company-admin', role: 'admin' }]
+    })
+  }, hashToken);
+  const req = { user: { id: 'user-admin', mfaEnabled: false }, cookies: { fs_session: 'd'.repeat(40) } };
+  const res = response();
+  let nextCalled = false;
+  await middleware(req, res, () => { nextCalled = true; });
+  assert.equal(res.statusCode, 403);
+  assert.equal(nextCalled, false);
+  assert.equal(req.tenant, undefined);
+  assert.match(res.body.error, /verifica in due passaggi/);
+});
+
+test('allows tenant administrator context after MFA has been verified', async () => {
+  const middleware = createTenantContext({
+    query: async () => ({
+      rowCount: 1,
+      rows: [{ membershipId: 'membership-admin', companyId: 'company-admin', role: 'admin' }]
+    })
+  }, hashToken);
+  const req = { user: { id: 'user-admin', mfaEnabled: true }, cookies: { fs_session: 'e'.repeat(40) } };
+  const res = response();
+  let nextCalled = false;
+  await middleware(req, res, () => { nextCalled = true; });
+  assert.equal(nextCalled, true);
+  assert.equal(req.tenant.role, 'admin');
+});
