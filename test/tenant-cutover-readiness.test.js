@@ -22,8 +22,8 @@ function readyPool({ unassignedTable = null, missingConstraint = false, nullable
         for (let i = 0; i < values.length; i += 2) columns.push({ tableName: values[i], columnName: values[i + 1] });
         return { rows: columns, rowCount: columns.length };
       }
-      if (sql.includes('FROM unnest($1::text[]) AS items(name) WHERE NOT EXISTS')) {
-        const rows = missingConstraint ? [{ name: values[0][0] }] : [];
+      if (sql.includes('FROM (VALUES')) {
+        const rows = missingConstraint ? [{ name: values[0] }] : [];
         return { rows, rowCount: rows.length };
       }
       if (/SELECT COUNT\(\*\)::int AS count FROM [a-z_]+ WHERE company_id IS NULL/.test(sql)) {
