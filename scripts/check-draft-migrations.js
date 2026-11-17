@@ -57,6 +57,20 @@ async function main() {
       "INSERT INTO app_users(id,username,display_name,password_hash,role,active) VALUES($1,$2,$3,$4,'admin',TRUE)",
       [userId, 'single_backfill_' + suffix, 'Single Company Test', 'test-only-not-a-real-password-hash']
     );
+    await client.query(
+      'INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL \'1 day\')',
+      [userId, crypto.randomBytes(32).toString('hex')]
+    );
+    const dryRunReport = await backfillSingleCompany(client, companyId, { apply: false });
+    if (dryRunReport.membershipsToCreate !== 1) {
+      throw new Error('Single-company backfill dry-run did not identify the expected membership.');
+    }
+    const dryRunMembershipCheck = await client.query(
+      'SELECT 1 FROM company_memberships WHERE company_id=$1 AND user_id=$2',
+      [companyId, userId]
+    );
+    if (dryRunMembershipCheck.rowCount) throw new Error('Single-company dry-run changed membership data.');
+
     const backfillReport = await backfillSingleCompany(client, companyId, { apply: true });
     if (backfillReport.membershipsCreated !== 1) {
       throw new Error('Single-company backfill did not create the expected initial admin membership.');
@@ -66,6 +80,12 @@ async function main() {
       [companyId, userId]
     );
     if (!membershipCheck.rowCount) throw new Error('Single-company backfill membership verification failed.');
+
+    const sessionCheck = await client.query(
+      'SELECT 1 FROM app_sessions s JOIN company_memberships m ON m.id=s.active_membership_id AND m.user_id=s.user_id WHERE s.user_id=$1 AND m.company_id=$2',
+      [userId, companyId]
+    );
+    if (!sessionCheck.rowCount) throw new Error('Single-company backfill did not link the existing session to its membership.');
 
     const finalizationSql = await fs.readFile(
       path.join(__dirname, '..', 'migrations', '012_tenant_finalize_company_id.draft.sql'),
