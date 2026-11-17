@@ -9,6 +9,17 @@ const tenantTables = [
   'stock_movements', 'tasks', 'invoices', 'payments'
 ];
 
+const compositeForeignKeys = [
+  ['funeral_cases', 'fk_funeral_cases_tenant_customer'],
+  ['stock_movements', 'fk_stock_movements_tenant_item'],
+  ['stock_movements', 'fk_stock_movements_tenant_case'],
+  ['tasks', 'fk_tasks_tenant_case'],
+  ['tasks', 'fk_tasks_tenant_staff'],
+  ['invoices', 'fk_invoices_tenant_case'],
+  ['invoices', 'fk_invoices_tenant_customer'],
+  ['payments', 'fk_payments_tenant_invoice']
+];
+
 const relationChecks = [
   ['funeral_cases.customer_id -> customers', `
     SELECT COUNT(*)::int AS count
