@@ -13,6 +13,7 @@ const createTenantInvoicesPaymentsRouter = require('./tenant-invoices-payments-r
 const createTenantCompanyAdminRouter = require('./tenant-company-admin-routes');
 const createTenantAuditRouter = require('./tenant-audit-routes');
 const createTenantInvitationRouter = require('./tenant-invitation-routes');
+const createTenantInvitationRegistrationRouter = require('./tenant-invitation-registration-routes');
 
 function hashSessionToken(token) {
   return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
@@ -46,6 +47,7 @@ module.exports = function createTenantApi({
   const router = express.Router();
   const tokenHash = hashSessionToken;
   const tenantContext = createTenantContext(pool, tokenHash, cookieName);
+  const invitationRegistrationRouter = createTenantInvitationRegistrationRouter({ pool });
   const invitations = createTenantInvitationRouter({
     pool,
     sendInvitationEmail,
@@ -78,7 +80,7 @@ module.exports = function createTenantApi({
     cookieName
   );
 
-  return { router, companyContextRouter };
+  return { router, companyContextRouter, invitationRegistrationRouter };
 };
 
 module.exports.hashSessionToken = hashSessionToken;
