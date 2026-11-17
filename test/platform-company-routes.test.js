@@ -81,7 +81,7 @@ test('status update and reason audit commit in the same transaction', async () =
     });
     assert.equal(response.status, 200); assert.equal(statements[0].sql, 'BEGIN');
     const audit = statements.find(item => item.sql.startsWith('INSERT INTO platform_audit_log'));
-    assert.ok(audit); assert.equal(audit.args[4], 'Richiesta amministrativa verificata');
+    assert.ok(audit); assert.equal(audit.args[5], 'Richiesta amministrativa verificata');
     assert.equal(statements.at(-1).sql, 'COMMIT');
   });
 });
