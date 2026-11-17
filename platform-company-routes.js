@@ -3,6 +3,7 @@ const express = require('express');
 const { z } = require('zod');
 const UUID = z.string().uuid();
 const STATUS = z.enum(['active', 'suspended']);
+const FILTER_STATUS = z.enum(['active', 'suspended', 'closed']);
 
 function encodeCursor(row) {
   return Buffer.from(JSON.stringify({ createdAt: row.createdAt, id: row.id }), 'utf8').toString('base64url');
@@ -25,7 +26,7 @@ module.exports = function createPlatformCompanyRouter(pool, options = {}) {
 
   router.get('/companies', async (req, res, next) => {
     const parsed = z.object({
-      status: STATUS.optional(), q: z.string().trim().min(1).max(100).optional(),
+      status: FILTER_STATUS.optional(), q: z.string().trim().min(1).max(100).optional(),
       cursor: z.string().max(512).optional(), limit: z.coerce.number().int().min(1).max(100).default(25)
     }).safeParse(req.query);
     if (!parsed.success) return res.status(400).json({ error: 'Filtri o paginazione non validi.' });
@@ -81,8 +82,9 @@ module.exports = function createPlatformCompanyRouter(pool, options = {}) {
     if (!UUID.safeParse(req.params.companyId).success) return res.status(400).json({ error: 'Identificativo azienda non valido.' });
     const parsed = z.object({ status: STATUS, reason: z.string().trim().min(10).max(500) }).strict().safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Stato o motivazione non validi. La motivazione deve contenere almeno 10 caratteri.' });
-    const client = await pool.connect();
+    let client;
     try {
+      client = await pool.connect();
       await client.query('BEGIN');
       const current = await client.query('SELECT id,status FROM companies WHERE id=$1 FOR UPDATE', [req.params.companyId]);
       if (!current.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Azienda non trovata.' }); }
@@ -101,7 +103,7 @@ module.exports = function createPlatformCompanyRouter(pool, options = {}) {
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch (_rollbackError) {}
       next(error);
-    } finally { client.release(); }
+    } finally { if (client) client.release(); }
   });
   return router;
 };
