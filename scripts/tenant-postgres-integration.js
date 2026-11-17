@@ -198,7 +198,7 @@ async function main() {
     // The middleware derives tenant identity from the database, and checks revocation live.
     const contextApp = express();
     contextApp.use((req, _res, next) => {
-      req.user = { id: alfaUser };
+      req.user = { id: alfaUser, mfaEnabled: true };
       req.cookies = { fs_session: alfaToken };
       next();
     });
