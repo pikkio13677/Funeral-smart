@@ -200,7 +200,60 @@ async function main() {
     // tenant middleware together. Only the disposable test user's password is set here.
     const testPassword = 'tenant-integration-test-password';
     const testSalt = crypto.randomBytes(16);
-    const testPasswordHash = 'scrypt
+    const testPasswordHash = 'scrypt' + String.fromCharCode(36) + testSalt.toString('hex') + String.fromCharCode(36) +
+      crypto.scryptSync(testPassword, testSalt, 64).toString('hex');
+    await client.query("UPDATE app_users SET password_hash = $1, role = 'operator' WHERE id = $2", [testPasswordHash, alfaUser]);
+
+    const contextApp = express();
+    contextApp.use((req, _res, next) => {
+      const raw = req.headers.cookie || '';
+      req.cookies = Object.fromEntries(raw.split(';').map(part => {
+        const index = part.indexOf('=');
+        return index < 0 ? ['', ''] : [part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim())];
+      }).filter(([key]) => key));
+      next();
+    });
+    contextApp.use(express.json());
+    const auth = createAuth(client);
+    contextApp.use('/auth', auth.router);
+    contextApp.use('/tenant', auth.authenticate, createTenantContext(client, value => crypto.createHash('sha256').update(value).digest('hex')));
+    contextApp.get('/tenant', (req, res) => res.json({ user: req.user, tenant: req.tenant }));
+    const contextServer = await listen(contextApp);
+    try {
+      const noSession = await fetch(contextServer.baseUrl + '/tenant');
+      assert.equal(noSession.status, 401, 'Tenant route must reject a request without a real authenticated session');
+
+      const loginResponse = await fetch(contextServer.baseUrl + '/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: 'alfa_test_user', password: testPassword })
+      });
+      assert.equal(loginResponse.status, 200, 'Real login route must accept the disposable test account');
+      const setCookie = loginResponse.headers.get('set-cookie');
+      assert.ok(setCookie, 'Successful login must issue a session cookie');
+      const sessionCookie = setCookie.split(';', 1)[0];
+      const sessionToken = decodeURIComponent(sessionCookie.slice('fs_session='.length));
+      await client.query(
+        'UPDATE app_sessions SET active_membership_id = $1 WHERE token_hash = $2',
+        [alfaMembership, crypto.createHash('sha256').update(sessionToken).digest('hex')]
+      );
+
+      const activeContext = await fetch(contextServer.baseUrl + '/tenant', { headers: { cookie: sessionCookie } });
+      assert.equal(activeContext.status, 200, 'A real login session and active membership must establish tenant context');
+      const activePayload = await activeContext.json();
+      assert.equal(activePayload.user.id, alfaUser, 'Authentication middleware must identify the user from the session');
+      assert.equal(activePayload.user.role, 'operator', 'Global legacy role must remain distinct from tenant membership role');
+      assert.equal(activePayload.tenant.companyId, alfa);
+      assert.equal(activePayload.tenant.membershipId, alfaMembership);
+      assert.equal(activePayload.tenant.role, 'admin');
+
+      await client.query("UPDATE company_memberships SET status = 'revoked' WHERE id = $1", [alfaMembership]);
+      const revokedContext = await fetch(contextServer.baseUrl + '/tenant', { headers: { cookie: sessionCookie } });
+      assert.equal(revokedContext.status, 403, 'A revoked membership must lose access on the next authenticated request');
+      await client.query("UPDATE company_memberships SET status = 'active' WHERE id = $1", [alfaMembership]);
+    } finally {
+      await new Promise(resolve => contextServer.server.close(resolve));
+    }
 
     // Audit rows must carry a membership that matches both company and user.
     await client.query(
