@@ -18,11 +18,64 @@ function decodeCursor(value) {
   } catch (_error) { return undefined; }
 }
 
+
+function encodeAuditCursor(row) {
+  return Buffer.from(JSON.stringify({ createdAt: row.createdAt, id: String(row.id) }), 'utf8').toString('base64url');
+}
+function decodeAuditCursor(value) {
+  if (!value) return null;
+  if (typeof value !== 'string' || value.length > 512) return undefined;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+    const valid = z.object({
+      createdAt: z.string().datetime({ offset: true }),
+      id: z.string().regex(/^[1-9][0-9]{0,18}$/)
+    }).safeParse(parsed);
+    return valid.success ? valid.data : undefined;
+  } catch (_error) { return undefined; }
+}
+
 module.exports = function createPlatformCompanyRouter(pool, options = {}) {
   if (!pool || typeof pool.query !== 'function' || typeof pool.connect !== 'function') throw new TypeError('A PostgreSQL pool with query/connect is required.');
   if (typeof options.authenticate !== 'function' || typeof options.requirePlatformRole !== 'function') throw new TypeError('Authentication and platform-role middleware are required.');
   const router = express.Router();
   router.use(options.authenticate, options.requirePlatformRole('owner'));
+
+
+  router.get('/audit', async (req, res, next) => {
+    const parsed = z.object({
+      action: z.enum(['platform.company.suspended', 'platform.company.reactivated']).optional(),
+      resource: z.literal('company').optional(),
+      resourceId: UUID.optional(),
+      cursor: z.string().max(512).optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(25)
+    }).safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'Filtri o paginazione audit non validi.' });
+    const cursor = decodeAuditCursor(parsed.data.cursor);
+    if (cursor === undefined) return res.status(400).json({ error: 'Cursore audit non valido.' });
+    const values = [];
+    const where = [];
+    if (parsed.data.action) { values.push(parsed.data.action); where.push('action = $' + values.length); }
+    if (parsed.data.resource) { values.push(parsed.data.resource); where.push('resource = $' + values.length); }
+    if (parsed.data.resourceId) { values.push(parsed.data.resourceId); where.push('resource_id = $' + values.length); }
+    if (cursor) {
+      values.push(cursor.createdAt); const timestampParam = '$' + values.length;
+      values.push(cursor.id); const idParam = '$' + values.length;
+      where.push('(created_at < ' + timestampParam + '::timestamptz OR (created_at = ' + timestampParam + '::timestamptz AND id < ' + idParam + '::bigint))');
+    }
+    values.push(parsed.data.limit + 1);
+    const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+    try {
+      const result = await pool.query(
+        'SELECT id, actor_user_id AS "actorUserId", actor_username AS "actorUsername", action, resource, resource_id AS "resourceId", reason, created_at AS "createdAt" ' +
+        'FROM platform_audit_log ' + whereSql + ' ORDER BY created_at DESC,id DESC LIMIT $' + values.length,
+        values
+      );
+      const hasMore = result.rows.length > parsed.data.limit;
+      const rows = hasMore ? result.rows.slice(0, parsed.data.limit) : result.rows;
+      res.json({ data: rows, page: { limit: parsed.data.limit, hasMore, nextCursor: hasMore && rows.length ? encodeAuditCursor(rows[rows.length - 1]) : null } });
+    } catch (error) { next(error); }
+  });
 
   router.get('/companies', async (req, res, next) => {
     const parsed = z.object({
@@ -109,3 +162,6 @@ module.exports = function createPlatformCompanyRouter(pool, options = {}) {
 };
 module.exports.encodeCursor = encodeCursor;
 module.exports.decodeCursor = decodeCursor;
+
+module.exports.encodeAuditCursor = encodeAuditCursor;
+module.exports.decodeAuditCursor = decodeAuditCursor;

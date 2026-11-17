@@ -120,3 +120,26 @@ test('status endpoint rejects malformed id and missing reason', async () => {
     assert.equal(noReason.status, 400);
   });
 });
+
+test('audit endpoint returns minimized records with bounded filters and cursor pagination', async () => {
+  let query;
+  const rows = [
+    { id: '12', actorUserId: 'u1', actorUsername: 'owner', action: 'platform.company.suspended', resource: 'company', resourceId: COMPANY_ID, reason: 'Motivo verificato', createdAt: '2026-01-03T10:00:00.000Z' },
+    { id: '11', actorUserId: 'u1', actorUsername: 'owner', action: 'platform.company.reactivated', resource: 'company', resourceId: COMPANY_ID, reason: 'Ripristino verificato', createdAt: '2026-01-02T10:00:00.000Z' },
+    { id: '10', actorUserId: 'u1', actorUsername: 'owner', action: 'platform.company.suspended', resource: 'company', resourceId: COMPANY_ID, reason: 'Altro motivo verificato', createdAt: '2026-01-01T10:00:00.000Z' }
+  ];
+  const pool = { query: async (sql, values) => { query = { sql, values }; return { rowCount: 3, rows }; }, connect: async () => { throw new Error('unexpected'); } };
+  await withServer(createRouter(pool, authOptions()), async base => {
+    const response = await fetch(base + '/api/v1/platform/audit?action=platform.company.suspended&resource=company&resourceId=' + COMPANY_ID + '&limit=2');
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.data.length, 2);
+    assert.equal(body.page.hasMore, true);
+    assert.ok(body.page.nextCursor);
+    assert.ok(query.sql.includes('ORDER BY created_at DESC,id DESC'));
+    assert.deepEqual(query.values.slice(0, 3), ['platform.company.suspended', 'company', COMPANY_ID]);
+    assert.equal('ipAddress' in body.data[0], false);
+    assert.equal((await fetch(base + '/api/v1/platform/audit?action=unknown')).status, 400);
+    assert.equal((await fetch(base + '/api/v1/platform/audit?resourceId=bad')).status, 400);
+  });
+});
