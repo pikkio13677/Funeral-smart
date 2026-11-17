@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#123b32">
+<title>FUNERAL SMART — Accetta invito</title>
+<style>
+:root{--green:#123b32;--green2:#1d5b4b;--gold:#c9ad78;--bg:#f3f6f2;--ink:#24312a;--muted:#68756e;--line:#dfe7df}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+header{background:linear-gradient(120deg,var(--green),var(--green2));color:white;padding:22px}
+main{max-width:650px;margin:28px auto;padding:0 15px}.panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:15px}
+h1{font-size:20px;margin:0}.sub{font-size:13px;color:#d8e6dc}h2{font-size:19px;margin:0 0 10px}
+p{color:var(--muted)}.field{margin:12px 0}.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px}
+input{width:100%;padding:12px;border:1px solid #d3ddd4;border-radius:9px;font:inherit}
+button{border:0;border-radius:9px;background:var(--green);color:white;padding:12px 16px;font-weight:700;cursor:pointer}
+button.alt{background:#edf3ed;color:var(--green);border:1px solid var(--line)}
+button:disabled{opacity:.55;cursor:wait}.row{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}
+.msg{padding:12px;border-radius:9px;background:#fff4df;color:#624e27;margin-top:12px;white-space:pre-wrap}
+.msg.ok{background:#eaf5ed;color:#245b3c}.hidden{display:none!important}.hint{font-size:12px}
+</style>
+</head>
+<body>
+<header><h1>FUNERAL SMART</h1><div class="sub">Invito a entrare in un’azienda</div></header>
+<main>
+<section class="panel">
+<h2>Accetta il tuo invito</h2>
+<p>Usa il link ricevuto via email. Se hai già un account, accedi. Altrimenti puoi creare un account personale: l’indirizzo email è quello a cui è stato inviato l’invito.</p>
+<div id="token-error" class="msg hidden"></div>
+<div id="session-panel" class="hidden">
+<p id="session-label"></p>
+<button id="accept-existing" type="button">Accetta invito</button>
+</div>
+<form id="login-form" class="hidden">
+<h2>Hai già un account?</h2>
+<div class="field"><label for="login-username">Username</label><input id="login-username" autocomplete="username" required></div>
+<div class="field"><label for="login-password">Password</label><input id="login-password" type="password" autocomplete="current-password" required></div>
+<button type="submit">Accedi e accetta</button>
+</form>
+<form id="mfa-form" class="hidden">
+<h2>Verifica in due passaggi</h2>
+<p>Inserisci il codice dell’app Authenticator o un codice di recupero.</p>
+<div class="field"><label for="mfa-code">Codice</label><input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" required></div>
+<button type="submit">Verifica e accetta</button>
+</form>
+<form id="register-form" class="hidden">
+<h2>Non hai ancora un account?</h2>
+<div class="field"><label for="register-username">Scegli uno username</label><input id="register-username" minlength="3" maxlength="60" pattern="[A-Za-z0-9._-]+" autocomplete="username" required></div>
+<div class="field"><label for="register-name">Nome e cognome</label><input id="register-name" minlength="2" maxlength="160" autocomplete="name" required></div>
+<div class="field"><label for="register-password">Crea una password (almeno 12 caratteri)</label><input id="register-password" type="password" minlength="12" maxlength="200" autocomplete="new-password" required></div>
+<button type="submit">Crea account e accetta invito</button>
+<p class="hint">Il link dimostra che hai accesso all’indirizzo email invitato. Non condividere questo link con altre persone.</p>
+</form>
+<div id="message" class="msg hidden" role="status" aria-live="polite"></div>
+</section>
+</main>
+<script>
+'use strict';
+const token = new URLSearchParams(window.location.search).get('token') || '';
+const apiBase = window.location.origin;
+const $ = id => document.getElementById(id);
+let pendingLogin = null;
+
+function message(text, ok=false) {
+  $('message').textContent = text;
+  $('message').className = 'msg' + (ok ? ' ok' : '');
+  $('message').classList.remove('hidden');
+}
+async function call(path, options={}) {
+  const response = await fetch(apiBase + path, {
+    credentials: 'same-origin',
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+  });
+  const data = await response.json().catch(() => ({ error: 'Risposta non valida dal server.' }));
+  if (!response.ok) throw new Error(data.error || 'Operazione non riuscita.');
+  return data;
+}
+function showLoginForms() {
+  $('login-form').classList.remove('hidden');
+  $('register-form').classList.remove('hidden');
+}
+async function acceptInvitation() {
+  if (!token || token.length < 32) throw new Error('Il link di invito è incompleto o non valido.');
+  const result = await call('/api/v1/admin/company/invitations/accept', {
+    method: 'POST', body: JSON.stringify({ token })
+  });
+  message(result.message || 'Invito accettato.', true);
+  $('session-panel').classList.add('hidden');
+  $('login-form').classList.add('hidden');
+  $('register-form').classList.add('hidden');
+  $('mfa-form').classList.add('hidden');
+  setTimeout(() => { window.location.assign('/admin'); }, 1800);
+}
+async function loginAndAccept(username, password) {
+  const result = await call('/api/v1/auth/login', {
+    method: 'POST', body: JSON.stringify({ username, password })
+  });
+  if (result.mfaRequired) {
+    pendingLogin = { username, password };
+    $('login-form').classList.add('hidden');
+    $('register-form').classList.add('hidden');
+    $('mfa-form').classList.remove('hidden');
+    $('mfa-code').focus();
+    message('Inserisci il codice MFA per completare l’accesso.');
+    return;
+  }
+  await acceptInvitation();
+}
+$('login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('login-form').querySelector('button'); button.disabled = true;
+  try { await loginAndAccept($('login-username').value.trim(), $('login-password').value); }
+  catch (error) { message(error.message); }
+  finally { button.disabled = false; }
+});
+$('mfa-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('mfa-form').querySelector('button'); button.disabled = true;
+  try {
+    await call('/api/v1/auth/mfa/verify-login', {
+      method: 'POST', body: JSON.stringify({ code: $('mfa-code').value.trim() })
+    });
+    pendingLogin = null;
+    await acceptInvitation();
+  } catch (error) { message(error.message); }
+  finally { button.disabled = false; }
+});
+$('register-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = $('register-form').querySelector('button'); button.disabled = true;
+  const username = $('register-username').value.trim();
+  const password = $('register-password').value;
+  try {
+    const result = await call('/api/v1/auth/invitation/register', {
+      method: 'POST',
+      body: JSON.stringify({ token, username, displayName: $('register-name').value.trim(), password })
+    });
+    message(result.message || 'Account creato. Accesso in corso.', true);
+    $('login-username').value = username;
+    $('login-password').value = password;
+    $('register-form').classList.add('hidden');
+    await loginAndAccept(username, password);
+  } catch (error) { message(error.message); }
+  finally { button.disabled = false; }
+});
+$('accept-existing').addEventListener('click', async () => {
+  const button = $('accept-existing'); button.disabled = true;
+  try { await acceptInvitation(); }
+  catch (error) { message(error.message); }
+  finally { button.disabled = false; }
+});
+(async function init() {
+  if (!token || token.length < 32) {
+    $('token-error').textContent = 'Link di invito non valido. Chiedi all’azienda di inviare un nuovo invito.';
+    $('token-error').classList.remove('hidden');
+    return;
+  }
+  try {
+    const result = await call('/api/v1/auth/me');
+    $('session-label').textContent = 'Hai già effettuato l’accesso come ' + (result.data.displayName || result.data.username) + '.';
+    $('session-panel').classList.remove('hidden');
+  } catch (_) {
+    showLoginForms();
+  }
+})();
+</script>
+</body>
+</html>
