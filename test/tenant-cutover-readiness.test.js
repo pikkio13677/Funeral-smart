@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const assertTenantSchemaReady = require('../tenant-cutover-readiness');
 
-function readyPool({ unassignedTable = null, missingConstraint = false } = {}) {
+function readyPool({ unassignedTable = null, missingConstraint = false, nullableCompanyId = false } = {}) {
   const queries = [];
   return {
     queries,
@@ -13,12 +13,15 @@ function readyPool({ unassignedTable = null, missingConstraint = false } = {}) {
       if (sql.includes('FROM unnest($1::text[]) AS items(name) WHERE to_regclass')) {
         return { rows: values[0].map(name => ({ name })), rowCount: values[0].length };
       }
+      if (sql.includes('FROM information_schema.columns') && sql.includes("is_nullable = 'YES'")) {
+        const rows = nullableCompanyId ? [{ name: 'customers' }] : [];
+        return { rows, rowCount: rows.length };
+      }
       if (sql.includes('FROM information_schema.columns')) {
         const columns = [];
         for (let i = 0; i < values.length; i += 2) columns.push({ tableName: values[i], columnName: values[i + 1] });
-        return { rows: columns.map(row => ({ ...row, isNullable: 'NO' })), rowCount: columns.length };
-      }
-      if (sql.includes('FROM information_schema.columns') && sql.includes("is_nullable = 'YES'")) return { rows: [], rowCount: 0 };\n      if (sql.includes('FROM unnest($1::text[]) AS items(name) WHERE NOT EXISTS')) {
+        return { rows: columns, rowCount: columns.length };
+      }\n      if (sql.includes('FROM unnest($1::text[]) AS items(name) WHERE NOT EXISTS')) {
         const rows = missingConstraint ? [{ name: values[0][0] }] : [];
         return { rows, rowCount: rows.length };
       }
@@ -53,5 +56,13 @@ test('tenant startup preflight blocks missing composite foreign keys', async () 
   await assert.rejects(
     () => assertTenantSchemaReady(readyPool({ missingConstraint: true })),
     /composite foreign keys are incomplete/
+  );
+});
+
+
+test('tenant startup preflight blocks nullable company_id columns', async () => {
+  await assert.rejects(
+    () => assertTenantSchemaReady(readyPool({ nullableCompanyId: true })),
+    /company_id must be NOT NULL on: customers/
   );
 });
