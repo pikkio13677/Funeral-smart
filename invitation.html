@@ -80,6 +80,14 @@ function showLoginForms() {
   $('login-form').classList.remove('hidden');
   $('register-form').classList.remove('hidden');
 }
+function finishAcceptedInvite(text) {
+  message(text, true);
+  $('session-panel').classList.add('hidden');
+  $('login-form').classList.add('hidden');
+  $('register-form').classList.add('hidden');
+  $('mfa-form').classList.add('hidden');
+  setTimeout(() => { window.location.assign('/admin'); }, 1800);
+}
 async function acceptInvitation() {
   if (!token || token.length < 32) throw new Error('Il link di invito è incompleto o non valido.');
   const result = await call('/api/v1/admin/company/invitations/accept', {
@@ -121,8 +129,13 @@ $('mfa-form').addEventListener('submit', async event => {
     await call('/api/v1/auth/mfa/verify-login', {
       method: 'POST', body: JSON.stringify({ code: $('mfa-code').value.trim() })
     });
-    pendingLogin = null;
-    await acceptInvitation();
+    if (pendingLogin?.invitationAccepted) {
+      pendingLogin = null;
+      finishAcceptedInvite('Account creato e invito accettato. Accesso completato.');
+    } else {
+      pendingLogin = null;
+      await acceptInvitation();
+    }
   } catch (error) { message(error.message); }
   finally { button.disabled = false; }
 });
@@ -136,11 +149,21 @@ $('register-form').addEventListener('submit', async event => {
       method: 'POST',
       body: JSON.stringify({ token, username, displayName: $('register-name').value.trim(), password })
     });
-    message(result.message || 'Account creato. Accesso in corso.', true);
+    message(result.message || 'Account creato e invito accettato. Accesso in corso.', true);
     $('login-username').value = username;
     $('login-password').value = password;
     $('register-form').classList.add('hidden');
-    await loginAndAccept(username, password);
+    pendingLogin = { invitationAccepted: true };
+    const loginResult = await call('/api/v1/auth/login', {
+      method: 'POST', body: JSON.stringify({ username, password })
+    });
+    if (loginResult.mfaRequired) {
+      $('mfa-form').classList.remove('hidden');
+      $('mfa-code').focus();
+    } else {
+      pendingLogin = null;
+      finishAcceptedInvite('Account creato e invito accettato. Accesso completato.');
+    }
   } catch (error) { message(error.message); }
   finally { button.disabled = false; }
 });
