@@ -38,6 +38,20 @@ const REQUIRED_FOREIGN_KEYS = Object.freeze([
   { name: 'fk_company_invitations_inviter_membership', table: 'company_invitations' }
 ]);
 
+const REQUIRED_UNIQUE_INDEXES = Object.freeze([
+  { name: 'uq_funeral_cases_company_case_code', table: 'funeral_cases', keyColumns: '(company_id, case_code)' },
+  { name: 'uq_vehicles_company_plate', table: 'vehicles', keyColumns: '(company_id, plate)' },
+  { name: 'uq_inventory_items_company_sku', table: 'inventory_items', keyColumns: '(company_id, sku)' },
+  { name: 'uq_invoices_company_invoice_number', table: 'invoices', keyColumns: '(company_id, invoice_number)' }
+]);
+
+const LEGACY_GLOBAL_UNIQUE_CONSTRAINTS = Object.freeze([
+  { name: 'funeral_cases_case_code_key', table: 'funeral_cases' },
+  { name: 'vehicles_plate_key', table: 'vehicles' },
+  { name: 'inventory_items_sku_key', table: 'inventory_items' },
+  { name: 'invoices_invoice_number_key', table: 'invoices' }
+]);
+
 const RELATION_CHECKS = Object.freeze([
   ['funeral_cases.customer_id', 'SELECT COUNT(*)::int AS count FROM funeral_cases c JOIN customers p ON p.id=c.customer_id WHERE c.company_id IS DISTINCT FROM p.company_id'],
   ['stock_movements.item_id', 'SELECT COUNT(*)::int AS count FROM stock_movements c JOIN inventory_items p ON p.id=c.item_id WHERE c.company_id IS DISTINCT FROM p.company_id'],
@@ -85,6 +99,214 @@ async function assertTenantSchemaReady(pool) {
     foreignKeyValues
   );
   if (missingConstraints.rowCount) throw new Error('Tenant cutover blocked: composite foreign keys are incomplete or unvalidated: ' + missingConstraints.rows.map(row => row.name).join(', '));
+
+  const uniqueIndexValues = REQUIRED_UNIQUE_INDEXES.flatMap(item => [item.name, item.table, item.keyColumns]);
+  const uniqueIndexTuples = REQUIRED_UNIQUE_INDEXES.map((_, index) =>
+    '(
+  for (const table of TENANT_TABLES) {
+    const result = await pool.query('SELECT COUNT(*)::int AS count FROM ' + table + ' WHERE company_id IS NULL');
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: ' + table + ' still contains rows without company_id.');
+  }
+
+  for (const [label, sql] of RELATION_CHECKS) {
+    const result = await pool.query(sql);
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: cross-company relation found in ' + label + '.');
+  }
+
+  const roleConstraint = await pool.query(
+    "SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid " +
+    "JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public' " +
+    "AND t.relname='app_users' AND c.conname='app_users_role_check' " +
+    "AND c.contype='c' AND c.convalidated " +
+    "AND pg_get_constraintdef(c.oid) LIKE '%platform_owner%'"
+  );
+  if (!roleConstraint.rowCount) throw new Error('Tenant cutover blocked: platform_owner role constraint is missing.');
+
+  const bootstrap = await pool.query('SELECT singleton FROM platform_bootstrap_state WHERE singleton = TRUE');
+  if (bootstrap.rowCount !== 1) throw new Error('Tenant cutover blocked: platform bootstrap singleton is missing.');
+
+  const unassignedUsers = await pool.query(
+    "SELECT COUNT(*)::int AS count FROM app_users u WHERE u.active = TRUE AND u.role <> 'platform_owner' AND NOT EXISTS (SELECT 1 FROM company_memberships m WHERE m.user_id=u.id AND m.status='active') AND NOT EXISTS (SELECT 1 FROM platform_access pa WHERE pa.user_id=u.id AND pa.status='active')"
+  );
+  if (Number(unassignedUsers.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: active non-platform users without an active company membership remain.');
+
+  return { ready: true, checkedTables: TENANT_TABLES.length, checkedForeignKeys: REQUIRED_FOREIGN_KEYS.length, checkedUniqueIndexes: REQUIRED_UNIQUE_INDEXES.length };
+}
+
+module.exports = assertTenantSchemaReady;
+module.exports.TENANT_TABLES = TENANT_TABLES;
+module.exports.REQUIRED_TABLES = REQUIRED_TABLES;
+module.exports.REQUIRED_COLUMNS = REQUIRED_COLUMNS;
+module.exports.REQUIRED_FOREIGN_KEYS = REQUIRED_FOREIGN_KEYS;
+module.exports.REQUIRED_UNIQUE_INDEXES = REQUIRED_UNIQUE_INDEXES;
+module.exports.LEGACY_GLOBAL_UNIQUE_CONSTRAINTS = LEGACY_GLOBAL_UNIQUE_CONSTRAINTS;
+ + (index * 3 + 1) + '::text, 
+  for (const table of TENANT_TABLES) {
+    const result = await pool.query('SELECT COUNT(*)::int AS count FROM ' + table + ' WHERE company_id IS NULL');
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: ' + table + ' still contains rows without company_id.');
+  }
+
+  for (const [label, sql] of RELATION_CHECKS) {
+    const result = await pool.query(sql);
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: cross-company relation found in ' + label + '.');
+  }
+
+  const roleConstraint = await pool.query(
+    "SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid " +
+    "JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public' " +
+    "AND t.relname='app_users' AND c.conname='app_users_role_check' " +
+    "AND c.contype='c' AND c.convalidated " +
+    "AND pg_get_constraintdef(c.oid) LIKE '%platform_owner%'"
+  );
+  if (!roleConstraint.rowCount) throw new Error('Tenant cutover blocked: platform_owner role constraint is missing.');
+
+  const bootstrap = await pool.query('SELECT singleton FROM platform_bootstrap_state WHERE singleton = TRUE');
+  if (bootstrap.rowCount !== 1) throw new Error('Tenant cutover blocked: platform bootstrap singleton is missing.');
+
+  const unassignedUsers = await pool.query(
+    "SELECT COUNT(*)::int AS count FROM app_users u WHERE u.active = TRUE AND u.role <> 'platform_owner' AND NOT EXISTS (SELECT 1 FROM company_memberships m WHERE m.user_id=u.id AND m.status='active') AND NOT EXISTS (SELECT 1 FROM platform_access pa WHERE pa.user_id=u.id AND pa.status='active')"
+  );
+  if (Number(unassignedUsers.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: active non-platform users without an active company membership remain.');
+
+  return { ready: true, checkedTables: TENANT_TABLES.length, checkedForeignKeys: REQUIRED_FOREIGN_KEYS.length };
+}
+
+module.exports = assertTenantSchemaReady;
+module.exports.TENANT_TABLES = TENANT_TABLES;
+module.exports.REQUIRED_TABLES = REQUIRED_TABLES;
+module.exports.REQUIRED_COLUMNS = REQUIRED_COLUMNS;
+module.exports.REQUIRED_FOREIGN_KEYS = REQUIRED_FOREIGN_KEYS;
+ + (index * 3 + 2) + '::text, 
+  for (const table of TENANT_TABLES) {
+    const result = await pool.query('SELECT COUNT(*)::int AS count FROM ' + table + ' WHERE company_id IS NULL');
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: ' + table + ' still contains rows without company_id.');
+  }
+
+  for (const [label, sql] of RELATION_CHECKS) {
+    const result = await pool.query(sql);
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: cross-company relation found in ' + label + '.');
+  }
+
+  const roleConstraint = await pool.query(
+    "SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid " +
+    "JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public' " +
+    "AND t.relname='app_users' AND c.conname='app_users_role_check' " +
+    "AND c.contype='c' AND c.convalidated " +
+    "AND pg_get_constraintdef(c.oid) LIKE '%platform_owner%'"
+  );
+  if (!roleConstraint.rowCount) throw new Error('Tenant cutover blocked: platform_owner role constraint is missing.');
+
+  const bootstrap = await pool.query('SELECT singleton FROM platform_bootstrap_state WHERE singleton = TRUE');
+  if (bootstrap.rowCount !== 1) throw new Error('Tenant cutover blocked: platform bootstrap singleton is missing.');
+
+  const unassignedUsers = await pool.query(
+    "SELECT COUNT(*)::int AS count FROM app_users u WHERE u.active = TRUE AND u.role <> 'platform_owner' AND NOT EXISTS (SELECT 1 FROM company_memberships m WHERE m.user_id=u.id AND m.status='active') AND NOT EXISTS (SELECT 1 FROM platform_access pa WHERE pa.user_id=u.id AND pa.status='active')"
+  );
+  if (Number(unassignedUsers.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: active non-platform users without an active company membership remain.');
+
+  return { ready: true, checkedTables: TENANT_TABLES.length, checkedForeignKeys: REQUIRED_FOREIGN_KEYS.length };
+}
+
+module.exports = assertTenantSchemaReady;
+module.exports.TENANT_TABLES = TENANT_TABLES;
+module.exports.REQUIRED_TABLES = REQUIRED_TABLES;
+module.exports.REQUIRED_COLUMNS = REQUIRED_COLUMNS;
+module.exports.REQUIRED_FOREIGN_KEYS = REQUIRED_FOREIGN_KEYS;
+ + (index * 3 + 3) + '::text)'
+  ).join(', ');
+  const missingUniqueIndexes = await pool.query(
+    'SELECT required.name FROM (VALUES ' + uniqueIndexTuples + ') AS required(name, table_name, key_columns) ' +
+    'WHERE NOT EXISTS (SELECT 1 FROM pg_class idx JOIN pg_index i ON i.indexrelid=idx.oid ' +
+    'JOIN pg_class t ON t.oid=i.indrelid JOIN pg_namespace n ON n.oid=t.relnamespace ' +
+    'WHERE n.nspname=\'public\' AND t.relname=required.table_name AND idx.relname=required.name ' +
+    'AND i.indisunique AND i.indisvalid AND pg_get_indexdef(i.indexrelid) LIKE \'%\' || required.key_columns || \'%\')',
+    uniqueIndexValues
+  );
+  if (missingUniqueIndexes.rowCount) throw new Error('Tenant cutover blocked: company-scoped unique indexes are missing or invalid: ' + missingUniqueIndexes.rows.map(row => row.name).join(', '));
+
+  const legacyUniqueValues = LEGACY_GLOBAL_UNIQUE_CONSTRAINTS.flatMap(item => [item.name, item.table]);
+  const legacyUniqueTuples = LEGACY_GLOBAL_UNIQUE_CONSTRAINTS.map((_, index) =>
+    '(
+  for (const table of TENANT_TABLES) {
+    const result = await pool.query('SELECT COUNT(*)::int AS count FROM ' + table + ' WHERE company_id IS NULL');
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: ' + table + ' still contains rows without company_id.');
+  }
+
+  for (const [label, sql] of RELATION_CHECKS) {
+    const result = await pool.query(sql);
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: cross-company relation found in ' + label + '.');
+  }
+
+  const roleConstraint = await pool.query(
+    "SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid " +
+    "JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public' " +
+    "AND t.relname='app_users' AND c.conname='app_users_role_check' " +
+    "AND c.contype='c' AND c.convalidated " +
+    "AND pg_get_constraintdef(c.oid) LIKE '%platform_owner%'"
+  );
+  if (!roleConstraint.rowCount) throw new Error('Tenant cutover blocked: platform_owner role constraint is missing.');
+
+  const bootstrap = await pool.query('SELECT singleton FROM platform_bootstrap_state WHERE singleton = TRUE');
+  if (bootstrap.rowCount !== 1) throw new Error('Tenant cutover blocked: platform bootstrap singleton is missing.');
+
+  const unassignedUsers = await pool.query(
+    "SELECT COUNT(*)::int AS count FROM app_users u WHERE u.active = TRUE AND u.role <> 'platform_owner' AND NOT EXISTS (SELECT 1 FROM company_memberships m WHERE m.user_id=u.id AND m.status='active') AND NOT EXISTS (SELECT 1 FROM platform_access pa WHERE pa.user_id=u.id AND pa.status='active')"
+  );
+  if (Number(unassignedUsers.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: active non-platform users without an active company membership remain.');
+
+  return { ready: true, checkedTables: TENANT_TABLES.length, checkedForeignKeys: REQUIRED_FOREIGN_KEYS.length };
+}
+
+module.exports = assertTenantSchemaReady;
+module.exports.TENANT_TABLES = TENANT_TABLES;
+module.exports.REQUIRED_TABLES = REQUIRED_TABLES;
+module.exports.REQUIRED_COLUMNS = REQUIRED_COLUMNS;
+module.exports.REQUIRED_FOREIGN_KEYS = REQUIRED_FOREIGN_KEYS;
+ + (index * 2 + 1) + '::text, 
+  for (const table of TENANT_TABLES) {
+    const result = await pool.query('SELECT COUNT(*)::int AS count FROM ' + table + ' WHERE company_id IS NULL');
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: ' + table + ' still contains rows without company_id.');
+  }
+
+  for (const [label, sql] of RELATION_CHECKS) {
+    const result = await pool.query(sql);
+    if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: cross-company relation found in ' + label + '.');
+  }
+
+  const roleConstraint = await pool.query(
+    "SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid " +
+    "JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public' " +
+    "AND t.relname='app_users' AND c.conname='app_users_role_check' " +
+    "AND c.contype='c' AND c.convalidated " +
+    "AND pg_get_constraintdef(c.oid) LIKE '%platform_owner%'"
+  );
+  if (!roleConstraint.rowCount) throw new Error('Tenant cutover blocked: platform_owner role constraint is missing.');
+
+  const bootstrap = await pool.query('SELECT singleton FROM platform_bootstrap_state WHERE singleton = TRUE');
+  if (bootstrap.rowCount !== 1) throw new Error('Tenant cutover blocked: platform bootstrap singleton is missing.');
+
+  const unassignedUsers = await pool.query(
+    "SELECT COUNT(*)::int AS count FROM app_users u WHERE u.active = TRUE AND u.role <> 'platform_owner' AND NOT EXISTS (SELECT 1 FROM company_memberships m WHERE m.user_id=u.id AND m.status='active') AND NOT EXISTS (SELECT 1 FROM platform_access pa WHERE pa.user_id=u.id AND pa.status='active')"
+  );
+  if (Number(unassignedUsers.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: active non-platform users without an active company membership remain.');
+
+  return { ready: true, checkedTables: TENANT_TABLES.length, checkedForeignKeys: REQUIRED_FOREIGN_KEYS.length };
+}
+
+module.exports = assertTenantSchemaReady;
+module.exports.TENANT_TABLES = TENANT_TABLES;
+module.exports.REQUIRED_TABLES = REQUIRED_TABLES;
+module.exports.REQUIRED_COLUMNS = REQUIRED_COLUMNS;
+module.exports.REQUIRED_FOREIGN_KEYS = REQUIRED_FOREIGN_KEYS;
+ + (index * 2 + 2) + '::text)'
+  ).join(', ');
+  const remainingGlobalUnique = await pool.query(
+    'SELECT c.conname AS name FROM (VALUES ' + legacyUniqueTuples + ') AS required(name, table_name) ' +
+    'JOIN pg_constraint c ON c.conname=required.name JOIN pg_class t ON t.oid=c.conrelid ' +
+    'JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=\'public\' AND t.relname=required.table_name',
+    legacyUniqueValues
+  );
+  if (remainingGlobalUnique.rowCount) throw new Error('Tenant cutover blocked: legacy global unique constraints remain: ' + remainingGlobalUnique.rows.map(row => row.name).join(', '));
 
   for (const table of TENANT_TABLES) {
     const result = await pool.query('SELECT COUNT(*)::int AS count FROM ' + table + ' WHERE company_id IS NULL');
