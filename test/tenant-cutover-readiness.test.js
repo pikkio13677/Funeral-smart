@@ -10,15 +10,15 @@ function readyPool({ unassignedTable = null, missingConstraint = false } = {}) {
     queries,
     async query(sql, values = []) {
       queries.push(sql);
-      if (sql.includes('FROM unnest($1::text[]) AS name WHERE to_regclass')) {
+      if (sql.includes('FROM unnest($1::text[]) AS items(name) WHERE to_regclass')) {
         return { rows: values[0].map(name => ({ name })), rowCount: values[0].length };
       }
       if (sql.includes('FROM information_schema.columns')) {
         const columns = [];
         for (let i = 0; i < values.length; i += 2) columns.push({ tableName: values[i], columnName: values[i + 1] });
-        return { rows: columns, rowCount: columns.length };
+        return { rows: columns.map(row => ({ ...row, isNullable: 'NO' })), rowCount: columns.length };
       }
-      if (sql.includes('FROM unnest($1::text[]) AS name WHERE NOT EXISTS')) {
+      if (sql.includes('FROM information_schema.columns') && sql.includes("is_nullable = 'YES'")) return { rows: [], rowCount: 0 };\n      if (sql.includes('FROM unnest($1::text[]) AS items(name) WHERE NOT EXISTS')) {
         const rows = missingConstraint ? [{ name: values[0][0] }] : [];
         return { rows, rowCount: rows.length };
       }
