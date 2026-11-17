@@ -108,6 +108,7 @@ app.get('/api/v1/price-lists', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+if (!multiTenantEnabled) {
 app.post('/api/v1/inquiries', async (req, res, next) => {
   const parsed = inquirySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
@@ -147,6 +148,8 @@ app.post('/api/v1/provider-applications', async (req, res, next) => {
     res.status(201).json({ data: rows[0], message: 'Candidatura ricevuta: l’impresa non è ancora pubblicata né verificata.' });
   } catch (e) { if (e.code === '23505') return res.status(409).json({ error: 'Partita IVA già presente in una candidatura.' }); next(e); }
 });
+
+}
 
 if (!multiTenantEnabled) {
   app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, async (_req, res, next) => {
