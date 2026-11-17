@@ -42,7 +42,7 @@
 <div id="company-context-message" class="msg hidden" role="status"></div>
 </section>
 <section id="app" class="hidden">
-<div id="tenant-toolbar" class="panel hidden"><strong id="active-company-name"></strong><button class="btn alt" id="change-company" type="button">Cambia azienda</button></div>
+<div id="tenant-toolbar" class="panel hidden"><strong id="active-company-name"></strong><button class="btn alt" id="change-company" type="button">Cambia azienda</button><button class="btn alt" id="tenant-logout" type="button">Esci</button></div>
 <div class="stats" id="stats"></div>
 <div class="overview" id="overview"></div>
 <nav class="tabs" id="tabs"></nav>
@@ -81,10 +81,10 @@ function allowedTabs(){
  const r=effectiveRole();
  if(TENANT_API_ENABLED){
   if(r==='admin')return Object.keys(definitions).concat(['company','security','audit']);
-  if(r==='manager')return Object.keys(definitions).concat(['security','audit']);
+  if(r==='manager')return ['cases','customers','staff','vehicles','inventory','tasks','invoices','security','audit'];
   if(r==='operator')return ['cases','customers','tasks','security'];
-  if(r==='warehouse')return ['inventory','security'];
-  if(r==='accounting')return ['invoices','security','audit'];
+  if(r==='warehouse')return ['cases','inventory','tasks','security'];
+  if(r==='accounting')return ['cases','customers','invoices','security','audit'];
   return [];
  }
  if(r==='admin'&&!currentUser.mfaEnabled)return ['security'];
@@ -95,6 +95,16 @@ function allowedTabs(){
  return[];
 }
 function renderTabs(){const nav=$('tabs');nav.replaceChildren();const ids=allowedTabs();if(!ids.includes(active))active=ids[0]||'cases';ids.forEach(id=>{const b=document.createElement('button');b.className='tab'+(id===active?' active':'');b.textContent=id==='users'?'Utenti':id==='company'?'Azienda e membri':id==='security'?'Sicurezza MFA':id==='audit'?'Registro attività':definitions[id].label;b.onclick=()=>{active=id;renderTabs();renderModule();};nav.append(b);});}
+function canCreateInActiveTenant(){
+ if(!TENANT_API_ENABLED)return effectiveRole()!=='manager';
+ const role=effectiveRole();
+ if(role==='admin')return true;
+ if(role==='manager')return ['cases','customers','inventory','tasks'].includes(active);
+ if(role==='operator')return ['cases','customers','tasks'].includes(active);
+ if(role==='warehouse')return active==='inventory';
+ if(role==='accounting')return active==='invoices';
+ return false;
+}
 function fieldNode(f){const [name,label,type,extra]=f;const wrap=document.createElement('div');wrap.className='field';const l=document.createElement('label');l.textContent=label;const isSelect=type==='select'||type==='reference';const el=type==='textarea'?document.createElement('textarea'):isSelect?document.createElement('select'):document.createElement('input');if(type==='select'){(extra||[]).forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=displayValue(v);el.append(o);});}else if(type==='reference'){const o=document.createElement('option');o.value='';o.textContent='Nessuna selezione / None';el.append(o);el.dataset.reference=JSON.stringify(extra);}else el.type=type==='datetime-local'?'datetime-local':type;el.name=name;if(extra===true)el.required=true;if(type==='number'){el.step='0.01';el.min='0';}l.htmlFor='f-'+name;el.id='f-'+name;wrap.append(l,el);return wrap;}
 async function populateReferences(form,fields){for(const f of fields.filter(x=>x[2]==='reference')){const el=form.elements.namedItem(f[0]);if(!el)continue;try{const cfg=f[3],result=await request('/'+cfg.endpoint);(result.data||[]).forEach(item=>{const o=document.createElement('option');o.value=item.id;o.textContent=cfg.label.map(k=>safe(item[k])).filter(Boolean).join(' · ');el.append(o);});}catch(e){const o=document.createElement('option');o.value='';o.textContent='Elenco non disponibile / List unavailable';el.append(o);}}}
 async function renderUsersModule(host){
@@ -243,7 +253,7 @@ function renderAuditModule(host){
   table.append(body);box.append(table);
  }).catch(error=>{box.textContent='Errore caricamento registro: '+error.message;});
 }
-function renderModule(){const host=$('modules');host.replaceChildren();if(active==='company'){renderCompanyModule(host);return;}if(active==='audit'){renderAuditModule(host);return;}if(active==='security'){renderSecurityModule(host);return;}if(active==='users'){renderUsersModule(host);return;}const d=definitions[active],section=document.createElement('section');section.className='module active';const h=document.createElement('h2');h.textContent=d.label;const p=document.createElement('p');p.className='hint';p.textContent='I dati sono visibili solo dopo autenticazione amministrativa.';const form=document.createElement('form');form.className='panel';if(effectiveRole()==='manager')form.classList.add('hidden');form.append(Object.assign(document.createElement('h2'),{textContent:'Nuovo inserimento'}));const grid=document.createElement('div');grid.className='grid';d.fields.forEach(f=>grid.append(fieldNode(f)));const submit=document.createElement('button');submit.className='btn form-actions';submit.textContent='Salva';form.append(grid,submit);form.onsubmit=async e=>{e.preventDefault();const data={};new FormData(form).forEach((v,k)=>{if(v!==''){const f=d.fields.find(x=>x[0]===k);data[k]=f&&f[2]==='number'?Number(v):v;}});try{await request('/'+d.endpoint,{method:'POST',body:JSON.stringify(data)});form.reset();await loadModule();showMessage('Dato salvato correttamente.',true);}catch(err){showMessage(err.message);}};const tableBox=document.createElement('div');tableBox.className='panel table-wrap';tableBox.id='table-'+active;section.append(h,p,form,tableBox);host.append(section);populateReferences(form,d.fields);loadModule();}
+function renderModule(){const host=$('modules');host.replaceChildren();if(active==='company'){renderCompanyModule(host);return;}if(active==='audit'){renderAuditModule(host);return;}if(active==='security'){renderSecurityModule(host);return;}if(active==='users'){renderUsersModule(host);return;}const d=definitions[active],section=document.createElement('section');section.className='module active';const h=document.createElement('h2');h.textContent=d.label;const p=document.createElement('p');p.className='hint';p.textContent='I dati sono visibili solo dopo autenticazione amministrativa.';const form=document.createElement('form');form.className='panel';if(!canCreateInActiveTenant())form.classList.add('hidden');form.append(Object.assign(document.createElement('h2'),{textContent:'Nuovo inserimento'}));const grid=document.createElement('div');grid.className='grid';d.fields.forEach(f=>grid.append(fieldNode(f)));const submit=document.createElement('button');submit.className='btn form-actions';submit.textContent='Salva';form.append(grid,submit);form.onsubmit=async e=>{e.preventDefault();const data={};new FormData(form).forEach((v,k)=>{if(v!==''){const f=d.fields.find(x=>x[0]===k);data[k]=f&&f[2]==='number'?Number(v):v;}});try{await request('/'+d.endpoint,{method:'POST',body:JSON.stringify(data)});form.reset();await loadModule();showMessage('Dato salvato correttamente.',true);}catch(err){showMessage(err.message);}};const tableBox=document.createElement('div');tableBox.className='panel table-wrap';tableBox.id='table-'+active;section.append(h,p,form,tableBox);host.append(section);populateReferences(form,d.fields);loadModule();}
 async function loadModule(){
  const d=definitions[active],box=$('table-'+active);if(!box)return;
  box.textContent='Caricamento...';
@@ -331,6 +341,12 @@ async function showCompanyPicker(){
  }catch(error){message.textContent='Elenco aziende non disponibile: '+error.message;message.classList.remove('hidden');}
 }
 async function startAuthenticatedApp(){if(!TENANT_API_ENABLED){await enterApp();return;}await showCompanyPicker();}
+$('tenant-logout').onclick=async()=>{
+ const button=$('tenant-logout');button.disabled=true;
+ try{await authRequest('/logout',{method:'POST',body:JSON.stringify({})});currentUser=null;$('app').classList.add('hidden');$('company-context').classList.add('hidden');$('connection').classList.remove('hidden');$('login-password').value='';$('mfa-login-code').value='';showMessage('Sessione terminata correttamente.',true);}
+ catch(error){showMessage('Uscita non riuscita: '+error.message);}
+ finally{button.disabled=false;}
+};
 $('company-confirm').onclick=async()=>{
  const companyId=$('company-select').value;if(!companyId){$('company-context-message').textContent='Seleziona un’azienda per continuare.';$('company-context-message').classList.remove('hidden');return;}
  const button=$('company-confirm');button.disabled=true;
