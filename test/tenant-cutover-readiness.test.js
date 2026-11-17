@@ -50,7 +50,7 @@ function readyPool({ unassignedTable = null, missingConstraint = false, nullable
 test('tenant startup preflight accepts a complete, backfilled schema', async () => {
   const pool = readyPool();
   const result = await assertTenantSchemaReady(pool);
-  assert.deepEqual(result, { ready: true, checkedTables: 9, checkedForeignKeys: 12, checkedUniqueIndexes: 4 });
+  assert.deepEqual(result, { ready: true, checkedTables: 9, checkedForeignKeys: 21, checkedUniqueIndexes: 4 });
   assert.ok(pool.queries.every(sql => !/^\s*(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|BEGIN)\b/i.test(sql)));
   const roleCheck = pool.queries.find(sql => sql.includes("t.relname='app_users'"));
   assert.match(roleCheck, /c\.convalidated/);
