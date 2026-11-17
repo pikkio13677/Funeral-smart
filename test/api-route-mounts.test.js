@@ -64,3 +64,15 @@ test('tenant mode leaves ordinary authentication endpoints reachable', () => {
   guard({ path: '/login' }, {}, () => { continued = true; });
   assert.equal(continued, true);
 });
+
+
+test('tenant mode blocks URL-encoded global user administration paths', () => {
+  const { result } = fixtures(true);
+  const guard = result.authRouter.stack[0].handle;
+  let statusCode;
+  guard({ path: '/us%65rs' }, {
+    status(code) { statusCode = code; return this; },
+    json() { return this; }
+  }, () => assert.fail('encoded global user route should be blocked'));
+  assert.equal(statusCode, 404);
+});
