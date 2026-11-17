@@ -119,18 +119,24 @@ async function main() {
       "INSERT INTO payments (company_id, invoice_id, amount, method) VALUES ($1, $2, 50.00, 'test') RETURNING id", [beta, invoiceBeta]
     )).rows[0].id;
 
-    async function expectDbFailure(label, sql, values) {
+    async function expectDbFailure(label, sql, values, expectedSqlState) {
+      assert.match(expectedSqlState, /^23[0-9A-Z]{3}$/, label + ': expected SQLSTATE must be a class-23 constraint code');
       await client.query('SAVEPOINT expected_constraint_failure');
-      let failed = false;
+      let dbError;
       try {
         await client.query(sql, values);
       } catch (error) {
-        failed = true;
+        dbError = error;
       } finally {
         await client.query('ROLLBACK TO SAVEPOINT expected_constraint_failure');
         await client.query('RELEASE SAVEPOINT expected_constraint_failure');
       }
-      assert.equal(failed, true, label);
+      assert.ok(dbError, label + ': expected a database constraint violation');
+      assert.equal(
+        dbError.code,
+        expectedSqlState,
+        label + ': expected SQLSTATE ' + expectedSqlState + ' but received ' + (dbError.code || 'no SQLSTATE')
+      );
     }
 
     // Composite tenant foreign keys must reject cross-company references even if
@@ -138,42 +144,42 @@ async function main() {
     await expectDbFailure(
       'A funeral case cannot reference another company customer',
       "INSERT INTO funeral_cases (company_id, case_code, customer_id, deceased_first_name, deceased_last_name, service_type) VALUES ($1, 'IT-CROSS-CUSTOMER', $2, 'Test', 'Cross', 'burial')",
-      [alfa, betaCustomer]
+      [alfa, betaCustomer], '23503'
     );
     await expectDbFailure(
       'A stock movement cannot reference another company inventory item',
       "INSERT INTO stock_movements (company_id, item_id, movement_type, quantity, reason) VALUES ($1, $2, 'in', 1, 'cross tenant')",
-      [alfa, itemBeta]
+      [alfa, itemBeta], '23503'
     );
     await expectDbFailure(
       'A stock movement cannot reference another company case',
       "INSERT INTO stock_movements (company_id, item_id, case_id, movement_type, quantity, reason) VALUES ($1, $2, $3, 'in', 1, 'cross tenant')",
-      [alfa, itemAlfa, betaCase]
+      [alfa, itemAlfa, betaCase], '23503'
     );
     await expectDbFailure(
       'A task cannot reference another company case',
       "INSERT INTO tasks (company_id, title, case_id) VALUES ($1, 'Cross case task', $2)",
-      [alfa, betaCase]
+      [alfa, betaCase], '23503'
     );
     await expectDbFailure(
       'A task cannot reference another company staff member',
       "INSERT INTO tasks (company_id, title, assigned_to) VALUES ($1, 'Cross staff task', $2)",
-      [alfa, staffBeta]
+      [alfa, staffBeta], '23503'
     );
     await expectDbFailure(
       'An invoice cannot reference another company case',
       "INSERT INTO invoices (company_id, invoice_number, case_id, amount) VALUES ($1, 'INV-CROSS-CASE', $2, 10)",
-      [alfa, betaCase]
+      [alfa, betaCase], '23503'
     );
     await expectDbFailure(
       'An invoice cannot reference another company customer',
       "INSERT INTO invoices (company_id, invoice_number, customer_id, amount) VALUES ($1, 'INV-CROSS-CUSTOMER', $2, 10)",
-      [alfa, betaCustomer]
+      [alfa, betaCustomer], '23503'
     );
     await expectDbFailure(
       'A payment cannot reference another company invoice',
       "INSERT INTO payments (company_id, invoice_id, amount, method) VALUES ($1, $2, 1, 'test')",
-      [alfa, invoiceBeta]
+      [alfa, invoiceBeta], '23503'
     );
 
     // Session membership must belong to the same authenticated user.
@@ -186,7 +192,7 @@ async function main() {
     await expectDbFailure(
       'A session must not reference another user\'s membership',
       "INSERT INTO app_sessions (user_id, token_hash, expires_at, active_membership_id) VALUES ($1, $2, NOW() + INTERVAL '1 hour', $3)",
-      [betaUser, crypto.createHash('sha256').update('beta-invalid-session-token-0123456789').digest('hex'), alfaMembership]
+      [betaUser, crypto.createHash('sha256').update('beta-invalid-session-token-0123456789').digest('hex'), alfaMembership], '23503'
     );
 
     // The middleware derives tenant identity from the database, and checks revocation live.
@@ -226,12 +232,12 @@ async function main() {
     await expectDbFailure(
       'Audit rows must not mix a company with another company membership',
       "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, $4)",
-      [alfaUser, beta, beta, alfaMembership]
+      [alfaUser, beta, beta, alfaMembership], '23503'
     );
     await expectDbFailure(
       'Tenant audit context must include company, membership and user together',
       "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, NULL)",
-      [alfaUser, alfa, alfa]
+      [alfaUser, alfa, alfa], '23514'
     );
 
     // Invitation constraints: normalized address, digest-only token, consistent status timestamps.
@@ -243,17 +249,17 @@ async function main() {
     await expectDbFailure(
       'Only one pending invitation per company and normalized email is allowed',
       "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, expires_at) VALUES ($1, 'nuovo@alfa.example', 'operator', $2, $3, NOW() + INTERVAL '72 hours')",
-      [alfa, crypto.createHash('sha256').update('duplicate-invitation-token').digest('hex'), alfaMembership]
+      [alfa, crypto.createHash('sha256').update('duplicate-invitation-token').digest('hex'), alfaMembership], '23505'
     );
     await expectDbFailure(
       'Invitation token_hash must be a SHA-256 hex digest',
       "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, expires_at) VALUES ($1, 'hash@alfa.example', 'operator', 'not-a-digest', $2, NOW() + INTERVAL '72 hours')",
-      [alfa, alfaMembership]
+      [alfa, alfaMembership], '23514'
     );
     await expectDbFailure(
       'Accepted invitation status requires accepted_at',
       "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, status, expires_at) VALUES ($1, 'accepted@alfa.example', 'operator', $2, $3, 'accepted', NOW() + INTERVAL '72 hours')",
-      [alfa, crypto.createHash('sha256').update('accepted-without-time').digest('hex'), alfaMembership]
+      [alfa, crypto.createHash('sha256').update('accepted-without-time').digest('hex'), alfaMembership], '23514'
     );
 
     function appFor(companyId, membershipId) {
