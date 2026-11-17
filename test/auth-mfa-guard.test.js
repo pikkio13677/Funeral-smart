@@ -88,3 +88,45 @@ test('allows only the documented MFA setup and account recovery paths before MFA
     assert.equal(continued, true, path + ' should pass authentication');
   }
 });
+
+
+test('requires MFA for the separate platform-owner identity', async () => {
+  const pool = authPool({ id: 'owner-1', username: 'owner', role: 'platform_owner', mfaEnabled: false });
+  const auth = createAuth(pool);
+  const res = response();
+  let continued = false;
+  await auth.authenticate({
+    cookies: { fs_session: 'session-token-value-1234567890123456' },
+    path: '/platform',
+    method: 'GET'
+  }, res, () => { continued = true; });
+  assert.equal(res.statusCode, 403);
+  assert.equal(continued, false);
+});
+
+test('platform owner cannot use legacy company-admin authorization', async () => {
+  const auth = createAuth({ query: async () => ({ rowCount: 0, rows: [] }) });
+  const res = response();
+  let continued = false;
+  auth.authorize(
+    { user: { id: 'owner-2', role: 'platform_owner' }, method: 'GET', path: '/dashboard' },
+    res,
+    () => { continued = true; }
+  );
+  assert.equal(res.statusCode, 403);
+  assert.equal(continued, false);
+});
+
+test('platform owner can reach only the documented MFA setup paths before MFA is enabled', async () => {
+  const pool = authPool({ id: 'owner-3', username: 'owner3', role: 'platform_owner', mfaEnabled: false });
+  const auth = createAuth(pool);
+  const res = response();
+  let continued = false;
+  await auth.authenticate({
+    cookies: { fs_session: 'session-token-value-1234567890123456' },
+    path: '/mfa/setup',
+    method: 'POST'
+  }, res, () => { continued = true; });
+  assert.equal(res.statusCode, 200);
+  assert.equal(continued, true);
+});
