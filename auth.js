@@ -12,7 +12,8 @@ const ROLE_LABELS = {
   manager: 'Responsabile',
   operator: 'Operatore',
   warehouse: 'Magazziniere',
-  accounting: 'Amministrazione'
+  accounting: 'Amministrazione',
+  platform_owner: 'Proprietario piattaforma'
 };
 const SESSION_COOKIE = 'fs_session';
 const SESSION_DAYS = 8;
@@ -129,7 +130,7 @@ module.exports = function createAuth(pool) {
         );
         if (found.rowCount) {
           req.user = found.rows[0];
-          if (req.user.role === 'admin' && !req.user.mfaEnabled && !['/mfa/setup','/mfa/enable','/me','/logout'].includes(req.path)) return res.status(403).json({ error: 'Per proteggere l’account amministratore, configura prima la verifica in due passaggi.' });
+          if (['admin', 'platform_owner'].includes(req.user.role) && !req.user.mfaEnabled && !['/mfa/setup','/mfa/enable','/me','/logout'].includes(req.path)) return res.status(403).json({ error: 'Per proteggere l’account amministratore, configura prima la verifica in due passaggi.' });
           await pool.query('UPDATE app_sessions SET last_seen_at=NOW() WHERE token_hash=$1', [tokenHash(token)]);
           return next();
         }
@@ -186,22 +187,44 @@ module.exports = function createAuth(pool) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('LOCK TABLE app_users IN EXCLUSIVE MODE');
-      const count = await client.query('SELECT COUNT(*)::int AS total FROM app_users');
-      if (count.rows[0].total > 0) {
+      // The singleton state row serializes attempts and makes the bootstrap one-time,
+      // even when legacy company users already exist.
+      await client.query('LOCK TABLE platform_bootstrap_state IN EXCLUSIVE MODE');
+      const state = await client.query(
+        'SELECT consumed_at FROM platform_bootstrap_state WHERE singleton = TRUE FOR UPDATE'
+      );
+      if (!state.rowCount || state.rows[0].consumed_at) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Amministratore iniziale già creato. Usa il login.' });
+        return res.status(409).json({ error: 'Bootstrap proprietario già utilizzato. Accesso iniziale disabilitato.' });
+      }
+      const existingOwner = await client.query(
+        "SELECT 1 FROM platform_access WHERE role = 'owner' AND status = 'active' LIMIT 1"
+      );
+      if (existingOwner.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Esiste già un proprietario attivo della piattaforma.' });
       }
       const passwordHash = await hashPassword(parsed.data.password);
       const created = await client.query(
-        "INSERT INTO app_users(username,display_name,password_hash,role) VALUES($1,$2,$3,'admin') RETURNING id,username,display_name AS \"displayName\",role",
+        "INSERT INTO app_users(username,display_name,password_hash,role) VALUES($1,$2,$3,'platform_owner') RETURNING id,username,display_name AS \\"displayName\\",role",
         [parsed.data.username.toLowerCase(), parsed.data.displayName, passwordHash]
       );
+      await client.query(
+        "INSERT INTO platform_access(user_id,role,status) VALUES($1,'owner','active')",
+        [created.rows[0].id]
+      );
+      await client.query(
+        'UPDATE platform_bootstrap_state SET consumed_at = NOW(), consumed_by = $1 WHERE singleton = TRUE',
+        [created.rows[0].id]
+      );
       await client.query('COMMIT');
-      await audit(created.rows[0], req, 'bootstrap.admin.created', 'user', created.rows[0].id);
-      res.status(201).json({ data: created.rows[0], message: 'Amministratore creato. Ora accedi con username e password.' });
-    } catch (e) { await client.query('ROLLBACK'); if (e.code === '23505') return res.status(409).json({ error: 'Username già utilizzato.' }); next(e); }
-    finally { client.release(); }
+      await audit(created.rows[0], req, 'platform.owner.bootstrap.created', 'platform_access', created.rows[0].id);
+      res.status(201).json({ data: created.rows[0], message: 'Proprietario della piattaforma creato. Accedi e attiva subito la verifica in due passaggi.' });
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_rollbackError) {}
+      if (e.code === '23505') return res.status(409).json({ error: 'Username già utilizzato oppure proprietario già presente.' });
+      next(e);
+    } finally { client.release(); }
   });
 
 
