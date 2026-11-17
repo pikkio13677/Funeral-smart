@@ -22,7 +22,7 @@ function readyPool({ unassignedTable = null, missingConstraint = false } = {}) {
         const rows = missingConstraint ? [{ name: values[0][0] }] : [];
         return { rows, rowCount: rows.length };
       }
-      if (/SELECT COUNT\(\)::int AS count FROM [a-z_]+ WHERE company_id IS NULL/.test(sql)) {
+      if (/SELECT COUNT\(\*\)::int AS count FROM [a-z_]+ WHERE company_id IS NULL/.test(sql)) {
         const table = sql.match(/FROM ([a-z_]+)/)[1];
         return { rows: [{ count: table === unassignedTable ? 2 : 0 }], rowCount: 1 };
       }
