@@ -50,16 +50,24 @@ NODE_ENV=test DATABASE_URL=postgres://localhost/funeral_smart_tenant_rehearsal \
 
 Il report deve essere conservato insieme ai conteggi iniziali. Le colonne `company_id` sono ancora nullable in questa fase.
 
-## 5. Mappatura esplicita e backfill
+## 5. Mappatura esplicita e backfill per una sola impresa
 
-Prima di qualsiasi UPDATE:
-- identificare l'azienda o le aziende proprietarie dei dati legacy;
-- associare ogni utente attivo alla membership corretta;
-- definire una mappatura esplicita per ciascuna tabella gestionale;
-- non dedurre la proprietà da nomi, ID casuali o partita IVA di provider marketplace;
-- verificare tutte le relazioni cliente/pratica/personale/articolo/fattura/pagamento.
+La proprietà dei dati legacy è stata indicata come una sola impresa. Sul clone ripristinato:
+- creare/verificare una sola riga in `companies`, usando denominazione legale e dati aziendali corretti; il backfill non inventa la denominazione né la partita IVA;
+- verificare che tutti i dati gestionali storici appartengano a quella stessa impresa;
+- mantenere i ruoli legacy riconosciuti (`admin`, `manager`, `operator`, `warehouse`, `accounting`) e creare una membership per ciascun account; gli account inattivi ricevono membership sospesa;
+- gli account `platform_owner` restano separati e non ricevono membership aziendale;
+- collegare le sessioni esistenti alla membership dello stesso utente;
+- lasciare invariati gli eventi storici di audit, che possono rimanere senza contesto aziendale.
 
-Il backfill va eseguito in una sola transazione sul clone, con conteggi prima/dopo e rollback automatico in caso di qualsiasi mismatch. Non esiste un mapping approvato incorporato in questo repository: la migrazione non deve inventarlo.
+Il nuovo script `scripts/backfill-single-company.js` è **dry-run per impostazione predefinita**. Funziona solo su PostgreSQL locale, richiede un `COMPANY_ID` esistente e verifica che esista esattamente una sola azienda. Per il dry-run:
+
+```bash
+NODE_ENV=test DATABASE_URL=postgres://localhost/funeral_smart_tenant_rehearsal \
+  COMPANY_ID=UUID_AZIENDA node scripts/backfill-single-company.js --dry-run
+```
+
+Solo dopo aver esaminato il report, su un clone usa-e-getta, il backfill può essere provato con `--apply` e `CONFIRM_SINGLE_COMPANY_BACKFILL=YES`. Non usare mai un URL Render o un database remoto. L'operazione è transazionale e verifica i risultati prima del commit.
 
 ## 6. Verifica e finalizzazione
 
