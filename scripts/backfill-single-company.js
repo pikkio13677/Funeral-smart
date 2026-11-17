@@ -31,6 +31,11 @@ async function backfillSingleCompany(client, companyId, { apply = false } = {}) 
 
   await client.query(apply ? 'BEGIN' : 'BEGIN TRANSACTION READ ONLY');
   try {
+    if (apply) {
+      for (const table of ['companies', ...TENANT_TABLES, 'app_users', 'company_memberships', 'app_sessions']) {
+        await client.query('LOCK TABLE ' + table + ' IN SHARE ROW EXCLUSIVE MODE');
+      }
+    }
     const company = await client.query(
       "SELECT id, status FROM companies WHERE id=$1",
       [companyId]
