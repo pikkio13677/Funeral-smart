@@ -10,7 +10,8 @@ const migrationFiles = [
   '007_audit_invitations.draft.sql',
   '008_tenant_composite_foreign_keys.draft.sql',
   '009_platform_access.draft.sql',
-  '010_platform_owner_bootstrap.draft.sql'
+  '010_platform_owner_bootstrap.draft.sql',
+  '011_platform_audit_log.draft.sql'
 ];
 
 async function main() {
@@ -46,6 +47,7 @@ async function main() {
       ['companies', 'companies'],
       ['platform_access', 'platform_access'],
       ['platform_bootstrap_state', 'platform_bootstrap_state'],
+      ['platform_audit_log', 'platform_audit_log'],
       ['company_memberships', 'company_memberships'],
       ['company_invitations', 'company_invitations'],
       ['customers.company_id', 'customers'],
