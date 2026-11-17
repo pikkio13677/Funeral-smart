@@ -8,8 +8,10 @@ function response() {
   return {
     statusCode: 200,
     body: null,
+    clearedCookies: [],
     status(code) { this.statusCode = code; return this; },
-    json(body) { this.body = body; return this; }
+    json(body) { this.body = body; return this; },
+    clearCookie(name) { this.clearedCookies.push(name); return this; }
   };
 }
 
