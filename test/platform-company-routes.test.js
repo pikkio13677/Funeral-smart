@@ -143,3 +143,13 @@ test('audit endpoint returns minimized records with bounded filters and cursor p
     assert.equal((await fetch(base + '/api/v1/platform/audit?resourceId=bad')).status, 400);
   });
 });
+
+
+test('audit cursor rejects BIGSERIAL overflow and unexpected fields', () => {
+  const { decodeAuditCursor } = require('../platform-company-routes');
+  const encode = value => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
+  const valid = { createdAt: '2026-01-03T10:00:00.000Z', id: '9223372036854775807' };
+  assert.deepEqual(decodeAuditCursor(encode(valid)), valid);
+  assert.equal(decodeAuditCursor(encode({ ...valid, id: '9223372036854775808' })), undefined);
+  assert.equal(decodeAuditCursor(encode({ ...valid, extra: 'ignored-before-hardening' })), undefined);
+});
