@@ -12,7 +12,8 @@ function handler(router, path, method) {
   assert.ok(layer, 'missing ' + method + ' ' + path);
   return layer.route.stack.at(-1).handle;
 }
-const tenant = { companyId: 'company-alpha', membershipId: 'member-alpha', role: 'admin' };\nconst actor = { id: 'user-admin', username: 'admin.alfa' };
+const tenant = { companyId: 'company-alpha', membershipId: 'member-alpha', role: 'admin' };
+const actor = { id: 'user-admin', username: 'admin.alfa' };
 const memberId = '11111111-1111-4111-8111-111111111111';
 
 test('company profile read is restricted to the active company', async () => {
@@ -117,7 +118,8 @@ test('membership role update is company-scoped and serialized on company row', a
   assert.ok(calls.some(x => x.sql === 'COMMIT'));
 });
 
-\ntest('membership permission changes are recorded in tenant audit within the same transaction', async () => {
+
+test('membership permission changes are recorded in tenant audit within the same transaction', async () => {
   const calls = [];
   const client = { query: async (sql, args) => {
     calls.push({ sql, args });
