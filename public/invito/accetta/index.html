@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#123b32">
+<title>FUNERAL SMART — Apertura invito</title>
+<style>
+body{font:16px/1.5 system-ui,sans-serif;background:#f3f6f2;color:#24312a;display:grid;place-items:center;min-height:100vh;margin:0;padding:20px}
+main{max-width:480px;background:#fff;border:1px solid #dfe7df;border-radius:16px;padding:24px}
+h1{font-size:20px;color:#123b32}p{color:#68756e}
+</style>
+<script src="../../api-config.js"></script>
+</head>
+<body>
+<main>
+<h1>FUNERAL SMART</h1>
+<p id="status">Apertura sicura della pagina di invito…</p>
+</main>
+<script>
+'use strict';
+const token = new URLSearchParams(window.location.search).get('token') || '';
+const apiBase = (window.FUNERAL_SMART_API_URL || '').replace(/\/+$/, '');
+if (!token || token.length < 32) {
+  document.getElementById('status').textContent = 'Link di invito non valido. Chiedi un nuovo invito all’azienda.';
+} else if (!apiBase) {
+  document.getElementById('status').textContent = 'Servizio temporaneamente non disponibile. Riprova più tardi.';
+} else {
+  window.location.replace(apiBase + '/invito/accetta?token=' + encodeURIComponent(token));
+}
+</script>
+</body>
+</html>
