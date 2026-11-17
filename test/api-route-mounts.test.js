@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const express = require('express');
 const mountApiRouters = require('../api-route-mounts');
 
-function fixtures(enabled) {
+function fixtures(enabled, approved = enabled) {
   const mounts = [];
   const app = { use(path, ...handlers) { mounts.push({ path, handlers }); } };
   const pool = {
@@ -21,7 +21,11 @@ function fixtures(enabled) {
   const emailNotifications = { async notifyCompanyInvitation() { return true; } };
   const result = mountApiRouters({
     app, pool, auth, emailNotifications, rateLimit,
-    env: { ENABLE_MULTI_TENANT: enabled ? 'true' : 'false', PUBLIC_APP_URL: 'https://example.invalid' }
+    env: {
+      ENABLE_MULTI_TENANT: enabled ? 'true' : 'false',
+      MULTI_TENANT_CUTOVER_APPROVED: approved ? 'true' : 'false',
+      PUBLIC_APP_URL: 'https://example.invalid'
+    }
   });
   return { mounts, result };
 }
@@ -42,6 +46,13 @@ test('tenant mode mounts company, tenant and platform APIs on separate prefixes'
   assert.equal(mounts.filter(item => item.path === '/api/v1/platform').length, 1);
   assert.equal(mounts.find(item => item.path === '/api/v1/admin').handlers[0], result.tenantApi.router);
   assert.equal(result.tenantApi.router.stack[0].handle.name, 'authenticate');
+});
+
+test('tenant mode refuses to mount without explicit cutover approval', () => {
+  assert.throws(
+    () => fixtures(true, false),
+    /MULTI_TENANT_CUTOVER_APPROVED/
+  );
 });
 
 test('tenant mode blocks legacy global user administration before auth routes', () => {
