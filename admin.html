@@ -315,9 +315,9 @@ async function enterApp(){
  $('connection').classList.add('hidden');$('company-context').classList.add('hidden');$('app').classList.remove('hidden');
  $('tenant-toolbar').classList.toggle('hidden',!TENANT_API_ENABLED);
  if(TENANT_API_ENABLED)$('active-company-name').textContent=(currentUser.activeCompany?.legalName||'Azienda attiva')+' · '+(currentUser.activeCompany?.role||'');
- if(currentUser.role==='admin'&&!currentUser.mfaEnabled)active='security';
+ if(effectiveRole()==='admin'&&!currentUser.mfaEnabled)active='security';
  renderTabs();renderModule();
- if(['admin','manager'].includes(effectiveRole())&&(currentUser.role!=='admin'||currentUser.mfaEnabled))await loadDashboard();
+ if(['admin','manager'].includes(effectiveRole())&&(effectiveRole()!=='admin'||currentUser.mfaEnabled))await loadDashboard();
 }
 async function showCompanyPicker(){
  $('connection').classList.add('hidden');$('app').classList.add('hidden');$('company-context').classList.remove('hidden');
