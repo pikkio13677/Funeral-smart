@@ -24,6 +24,8 @@ const REQUIRED_COLUMNS = Object.freeze([
 ]);
 
 const REQUIRED_FOREIGN_KEYS = Object.freeze([
+  'fk_app_sessions_active_membership_user',
+  'fk_audit_log_tenant_membership',
   'fk_funeral_cases_tenant_customer',
   'fk_stock_movements_tenant_item',
   'fk_stock_movements_tenant_case',
