@@ -102,7 +102,30 @@ async function assertTenantSchemaReady(pool) {
 
   const uniqueIndexValues = REQUIRED_UNIQUE_INDEXES.flatMap(item => [item.name, item.table, item.keyColumns]);
   const uniqueIndexTuples = REQUIRED_UNIQUE_INDEXES.map((_, index) =>
-    '(
+    '($' + (index * 3 + 1) + '::text, $' + (index * 3 + 2) + '::text, $' + (index * 3 + 3) + '::text)'
+  ).join(', ');
+  const missingUniqueIndexes = await pool.query(
+    'SELECT required.name FROM (VALUES ' + uniqueIndexTuples + ') AS required(name, table_name, key_columns) ' +
+    'WHERE NOT EXISTS (SELECT 1 FROM pg_class idx JOIN pg_index i ON i.indexrelid=idx.oid ' +
+    'JOIN pg_class t ON t.oid=i.indrelid JOIN pg_namespace n ON n.oid=t.relnamespace ' +
+    'WHERE n.nspname=\'public\' AND t.relname=required.table_name AND idx.relname=required.name ' +
+    'AND i.indisunique AND i.indisvalid AND pg_get_indexdef(i.indexrelid) LIKE \'%\' || required.key_columns || \'%\')',
+    uniqueIndexValues
+  );
+  if (missingUniqueIndexes.rowCount) throw new Error('Tenant cutover blocked: company-scoped unique indexes are missing or invalid: ' + missingUniqueIndexes.rows.map(row => row.name).join(', '));
+
+  const legacyUniqueValues = LEGACY_GLOBAL_UNIQUE_CONSTRAINTS.flatMap(item => [item.name, item.table]);
+  const legacyUniqueTuples = LEGACY_GLOBAL_UNIQUE_CONSTRAINTS.map((_, index) =>
+    '($' + (index * 2 + 1) + '::text, $' + (index * 2 + 2) + '::text)'
+  ).join(', ');
+  const remainingGlobalUnique = await pool.query(
+    'SELECT c.conname AS name FROM (VALUES ' + legacyUniqueTuples + ') AS required(name, table_name) ' +
+    'JOIN pg_constraint c ON c.conname=required.name JOIN pg_class t ON t.oid=c.conrelid ' +
+    'JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=\'public\' AND t.relname=required.table_name',
+    legacyUniqueValues
+  );
+  if (remainingGlobalUnique.rowCount) throw new Error('Tenant cutover blocked: legacy global unique constraints remain: ' + remainingGlobalUnique.rows.map(row => row.name).join(', '));
+
   for (const table of TENANT_TABLES) {
     const result = await pool.query('SELECT COUNT(*)::int AS count FROM ' + table + ' WHERE company_id IS NULL');
     if (Number(result.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: ' + table + ' still contains rows without company_id.');
