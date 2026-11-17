@@ -24,27 +24,22 @@ const REQUIRED_COLUMNS = Object.freeze([
 ]);
 
 const REQUIRED_FOREIGN_KEYS = Object.freeze([
-  { name: 'customers_company_id_fkey', table: 'customers' },
-  { name: 'funeral_cases_company_id_fkey', table: 'funeral_cases' },
-  { name: 'staff_company_id_fkey', table: 'staff' },
-  { name: 'vehicles_company_id_fkey', table: 'vehicles' },
-  { name: 'inventory_items_company_id_fkey', table: 'inventory_items' },
-  { name: 'stock_movements_company_id_fkey', table: 'stock_movements' },
-  { name: 'tasks_company_id_fkey', table: 'tasks' },
-  { name: 'invoices_company_id_fkey', table: 'invoices' },
-  { name: 'payments_company_id_fkey', table: 'payments' },
-  { name: 'fk_app_sessions_active_membership_user', table: 'app_sessions' },
-  { name: 'fk_audit_log_tenant_membership', table: 'audit_log' },
-  { name: 'fk_funeral_cases_tenant_customer', table: 'funeral_cases' },
-  { name: 'fk_stock_movements_tenant_item', table: 'stock_movements' },
-  { name: 'fk_stock_movements_tenant_case', table: 'stock_movements' },
-  { name: 'fk_tasks_tenant_case', table: 'tasks' },
-  { name: 'fk_tasks_tenant_staff', table: 'tasks' },
-  { name: 'fk_invoices_tenant_case', table: 'invoices' },
-  { name: 'fk_invoices_tenant_customer', table: 'invoices' },
-  { name: 'fk_payments_tenant_invoice', table: 'payments' },
-  { name: 'fk_company_invitations_company', table: 'company_invitations' },
-  { name: 'fk_company_invitations_inviter_membership', table: 'company_invitations' }
+  ...TENANT_TABLES.map(table => ({
+    name: table + '_company_id_fkey', table, localColumns: ['company_id'],
+    referencedTable: 'companies', referencedColumns: ['id']
+  })),
+  { name: 'fk_app_sessions_active_membership_user', table: 'app_sessions', localColumns: ['user_id', 'active_membership_id'], referencedTable: 'company_memberships', referencedColumns: ['user_id', 'id'] },
+  { name: 'fk_audit_log_tenant_membership', table: 'audit_log', localColumns: ['membership_id', 'company_id', 'user_id'], referencedTable: 'company_memberships', referencedColumns: ['id', 'company_id', 'user_id'] },
+  { name: 'fk_funeral_cases_tenant_customer', table: 'funeral_cases', localColumns: ['company_id', 'customer_id'], referencedTable: 'customers', referencedColumns: ['company_id', 'id'] },
+  { name: 'fk_stock_movements_tenant_item', table: 'stock_movements', localColumns: ['company_id', 'item_id'], referencedTable: 'inventory_items', referencedColumns: ['company_id', 'id'] },
+  { name: 'fk_stock_movements_tenant_case', table: 'stock_movements', localColumns: ['company_id', 'case_id'], referencedTable: 'funeral_cases', referencedColumns: ['company_id', 'id'] },
+  { name: 'fk_tasks_tenant_case', table: 'tasks', localColumns: ['company_id', 'case_id'], referencedTable: 'funeral_cases', referencedColumns: ['company_id', 'id'] },
+  { name: 'fk_tasks_tenant_staff', table: 'tasks', localColumns: ['company_id', 'assigned_to'], referencedTable: 'staff', referencedColumns: ['company_id', 'id'] },
+  { name: 'fk_invoices_tenant_case', table: 'invoices', localColumns: ['company_id', 'case_id'], referencedTable: 'funeral_cases', referencedColumns: ['company_id', 'id'] },
+  { name: 'fk_invoices_tenant_customer', table: 'invoices', localColumns: ['company_id', 'customer_id'], referencedTable: 'customers', referencedColumns: ['company_id', 'id'] },
+  { name: 'fk_payments_tenant_invoice', table: 'payments', localColumns: ['company_id', 'invoice_id'], referencedTable: 'invoices', referencedColumns: ['company_id', 'id'] },
+  { name: 'fk_company_invitations_company', table: 'company_invitations', localColumns: ['company_id'], referencedTable: 'companies', referencedColumns: ['id'] },
+  { name: 'fk_company_invitations_inviter_membership', table: 'company_invitations', localColumns: ['invited_by_membership_id', 'company_id'], referencedTable: 'company_memberships', referencedColumns: ['id', 'company_id'] }
 ]);
 
 const REQUIRED_UNIQUE_INDEXES = Object.freeze([
@@ -98,13 +93,27 @@ async function assertTenantSchemaReady(pool) {
   );
   if (nullableCompanyIds.rowCount) throw new Error('Tenant cutover blocked: company_id must be NOT NULL on: ' + nullableCompanyIds.rows.map(row => row.name).join(', '));
 
-  const foreignKeyValues = REQUIRED_FOREIGN_KEYS.flatMap(item => [item.name, item.table]);
-  const foreignKeyPairs = REQUIRED_FOREIGN_KEYS.map((_, index) => '(' + '$' + (index * 2 + 1) + '::text, $' + (index * 2 + 2) + '::text)').join(', ');
+  const foreignKeyValues = REQUIRED_FOREIGN_KEYS.flatMap(item => [
+    item.name, item.table, item.localColumns.join(','), item.referencedTable, item.referencedColumns.join(',')
+  ]);
+  const foreignKeyTuples = REQUIRED_FOREIGN_KEYS.map((_, index) =>
+    '($' + (index * 5 + 1) + '::text, $' + (index * 5 + 2) + '::text, $' +
+    (index * 5 + 3) + '::text, $' + (index * 5 + 4) + '::text, $' + (index * 5 + 5) + '::text)'
+  ).join(', ');
   const missingConstraints = await pool.query(
-    'SELECT required.name FROM (VALUES ' + foreignKeyPairs + ') AS required(name, table_name) ' +
-    'WHERE NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid ' +
-    'JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=\'public\' ' +
-    'AND t.relname=required.table_name AND c.conname=required.name AND c.contype=\'f\' AND c.convalidated)',
+    'SELECT required.name FROM (VALUES ' + foreignKeyTuples + ') AS required(name, table_name, local_columns, referenced_table, referenced_columns) ' +
+    'WHERE NOT EXISTS (SELECT 1 FROM pg_constraint c ' +
+    'JOIN pg_class source_table ON source_table.oid=c.conrelid ' +
+    'JOIN pg_namespace source_schema ON source_schema.oid=source_table.relnamespace ' +
+    'JOIN pg_class target_table ON target_table.oid=c.confrelid ' +
+    'JOIN pg_namespace target_schema ON target_schema.oid=target_table.relnamespace ' +
+    'WHERE source_schema.nspname=\'public\' AND source_table.relname=required.table_name ' +
+    'AND target_schema.nspname=\'public\' AND target_table.relname=required.referenced_table ' +
+    'AND c.conname=required.name AND c.contype=\'f\' AND c.convalidated ' +
+    'AND ARRAY(SELECT source_column.attname FROM unnest(c.conkey) WITH ORDINALITY AS key(attnum, ord) ' +
+    'JOIN pg_attribute source_column ON source_column.attrelid=c.conrelid AND source_column.attnum=key.attnum ORDER BY key.ord) = string_to_array(required.local_columns, \',\') ' +
+    'AND ARRAY(SELECT target_column.attname FROM unnest(c.confkey) WITH ORDINALITY AS key(attnum, ord) ' +
+    'JOIN pg_attribute target_column ON target_column.attrelid=c.confrelid AND target_column.attnum=key.attnum ORDER BY key.ord) = string_to_array(required.referenced_columns, \',\'))',
     foreignKeyValues
   );
   if (missingConstraints.rowCount) throw new Error('Tenant cutover blocked: composite foreign keys are incomplete or unvalidated: ' + missingConstraints.rows.map(row => row.name).join(', '));
