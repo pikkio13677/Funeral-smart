@@ -30,8 +30,12 @@ function decodeAuditCursor(value) {
     const valid = z.object({
       createdAt: z.string().datetime({ offset: true }),
       id: z.string().regex(/^[1-9][0-9]{0,18}$/)
-    }).safeParse(parsed);
-    return valid.success ? valid.data : undefined;
+    }).strict().safeParse(parsed);
+    if (!valid.success) return undefined;
+    // PostgreSQL BIGSERIAL is a signed 64-bit integer; reject out-of-range
+    // cursors before they can trigger a database cast error.
+    if (BigInt(valid.data.id) > 9223372036854775807n) return undefined;
+    return valid.data;
   } catch (_error) { return undefined; }
 }
 
