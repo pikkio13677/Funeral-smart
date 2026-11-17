@@ -246,6 +246,7 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
     } catch (error) { return next(error); }
   });
 
+  router.acceptanceRouter = acceptanceRouter;
   return router;
 }
 
