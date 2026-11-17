@@ -11,7 +11,8 @@ const migrationFiles = [
   '008_tenant_composite_foreign_keys.draft.sql',
   '009_platform_access.draft.sql',
   '010_platform_owner_bootstrap.draft.sql',
-  '011_platform_audit_log.draft.sql'
+  '011_platform_audit_log.draft.sql',
+  '012_tenant_finalize_company_id.draft.sql'
 ];
 
 async function main() {
@@ -114,6 +115,33 @@ async function main() {
       );
       if (!result.rowCount) throw new Error('Expected tenant composite foreign key missing: ' + name);
     }
+
+
+    const finalizedColumns = await client.query(
+      "SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='company_id' AND table_name = ANY($1::text[]) AND is_nullable='YES'",
+      [['customers','funeral_cases','staff','vehicles','inventory_items','stock_movements','tasks','invoices','payments']]
+    );
+    if (finalizedColumns.rowCount) throw new Error('Tenant finalization left nullable company_id columns: ' + finalizedColumns.rows.map(row => row.table_name).join(', '));
+
+    const companyUniqueIndexes = [
+      'uq_funeral_cases_company_case_code',
+      'uq_vehicles_company_plate',
+      'uq_inventory_items_company_sku',
+      'uq_invoices_company_invoice_number'
+    ];
+    for (const name of companyUniqueIndexes) {
+      const result = await client.query(
+        "SELECT 1 FROM pg_class idx JOIN pg_index i ON i.indexrelid=idx.oid JOIN pg_namespace n ON n.oid=idx.relnamespace WHERE n.nspname='public' AND idx.relname=$1 AND i.indisunique AND i.indisvalid",
+        [name]
+      );
+      if (!result.rowCount) throw new Error('Company-scoped unique index missing or invalid: ' + name);
+    }
+
+    const oldGlobalConstraints = await client.query(
+      "SELECT conname FROM pg_constraint WHERE conname = ANY($1::text[])",
+      [['funeral_cases_case_code_key','vehicles_plate_key','inventory_items_sku_key','invoices_invoice_number_key']]
+    );
+    if (oldGlobalConstraints.rowCount) throw new Error('Legacy global unique constraints were not removed after replacement.');
 
     process.stdout.write('All draft tenant migrations and composite foreign keys verified on disposable PostgreSQL.\\n');
   } finally {
