@@ -144,3 +144,68 @@ test('rejects an invalid configured cookie name', () => {
     'bad cookie name'
   ), TypeError);
 });
+
+
+test('rejects a missing session cookie without opening a database connection', async () => {
+  let connected = false;
+  const router = createCompanyContextRouter({
+    connect: async () => { connected = true; throw new Error('must not connect'); },
+    query: async () => ({ rowCount: 0, rows: [] })
+  }, (_req, _res, next) => next(), token => token);
+  const res = response();
+  await routeHandler(router, '/active-company', 'post')({
+    user: { id: 'user-1' }, cookies: {}, body: { companyId: '11111111-1111-4111-8111-111111111111' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 401);
+  assert.equal(connected, false);
+});
+
+test('rejects an expired or unknown session before checking company membership', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, args) {
+      calls.push({ sql, args });
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+      if (/SELECT id/.test(sql)) return { rowCount: 0, rows: [] };
+      throw new Error('Membership lookup must not run for an invalid session');
+    },
+    release() {}
+  };
+  const router = createCompanyContextRouter({ connect: async () => client }, (_req, _res, next) => next(), token => 'digest:' + token);
+  const res = response();
+  await routeHandler(router, '/active-company', 'post')({
+    user: { id: 'user-2' }, cookies: { fs_session: 'q'.repeat(40) },
+    body: { companyId: '22222222-2222-4222-8222-222222222222' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 401);
+  assert.ok(calls.some(call => /expires_at > NOW\(\)/.test(call.sql)));
+  assert.ok(calls.some(call => call.sql === 'ROLLBACK'));
+  assert.equal(calls.some(call => /SELECT m\.id/.test(call.sql)), false);
+  assert.ok(calls.some(call => call.sql === 'ROLLBACK'));
+});
+
+test('rejects selection when the company is inactive even if a membership row is returned by an unsafe mock', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, args) {
+      calls.push({ sql, args });
+      if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+      if (/SELECT id/.test(sql)) return { rowCount: 1, rows: [{ id: 'session-3' }] };
+      if (/SELECT m\.id/.test(sql)) {
+        assert.match(sql, /c\.status = 'active'/);
+        return { rowCount: 0, rows: [] };
+      }
+      throw new Error('No session update should occur for an inactive company');
+    },
+    release() {}
+  };
+  const router = createCompanyContextRouter({ connect: async () => client }, (_req, _res, next) => next(), token => token);
+  const res = response();
+  await routeHandler(router, '/active-company', 'post')({
+    user: { id: 'user-3' }, cookies: { fs_session: 'r'.repeat(40) },
+    body: { companyId: '33333333-3333-4333-8333-333333333333' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 403);
+  assert.ok(calls.some(call => call.sql === 'ROLLBACK'));
+  assert.equal(calls.some(call => /UPDATE app_sessions/.test(call.sql)), false);
+});

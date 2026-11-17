@@ -30,10 +30,11 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
     throw new TypeError('A PostgreSQL pool with query() and connect() is required.');
   }
   const router = express.Router();
+  const acceptanceRouter = express.Router();
 
   // The acceptance endpoint requires a normal authenticated identity, but no
   // active tenant: an invited user may not be a member of the company yet.
-  router.post('/company/invitations/accept', async (req, res, next) => {
+  const acceptInvitation = async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account prima di accettare l’invito.' });
     const parsed = acceptSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Link di invito non valido.' });
@@ -124,7 +125,9 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
     } finally {
       client.release();
     }
-  });
+  };
+  router.post('/company/invitations/accept', acceptInvitation);
+  acceptanceRouter.post('/company/invitations/accept', acceptInvitation);
 
   router.use((req, res, next) => {
     if (!req.tenant?.companyId || !req.tenant?.membershipId || !req.tenant?.role) {
@@ -243,6 +246,7 @@ function createTenantInvitationRouter({ pool, sendInvitationEmail, publicAppUrl 
     } catch (error) { return next(error); }
   });
 
+  router.acceptanceRouter = acceptanceRouter;
   return router;
 }
 

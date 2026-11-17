@@ -7,7 +7,8 @@ const { Client } = require('pg');
 const migrationFiles = [
   '005_multi_tenant_foundation.draft.sql',
   '006_session_active_membership.draft.sql',
-  '007_audit_invitations.draft.sql'
+  '007_audit_invitations.draft.sql',
+  '008_tenant_composite_foreign_keys.draft.sql'
 ];
 
 async function main() {
@@ -73,7 +74,25 @@ async function main() {
       if (!result.rowCount) throw new Error('Expected database object missing: ' + label);
     }
 
-    process.stdout.write('All draft tenant migrations applied and expected objects verified on disposable PostgreSQL.\n');
+    const compositeConstraints = [
+      'fk_funeral_cases_tenant_customer',
+      'fk_stock_movements_tenant_item',
+      'fk_stock_movements_tenant_case',
+      'fk_tasks_tenant_case',
+      'fk_tasks_tenant_staff',
+      'fk_invoices_tenant_case',
+      'fk_invoices_tenant_customer',
+      'fk_payments_tenant_invoice'
+    ];
+    for (const name of compositeConstraints) {
+      const result = await client.query(
+        'SELECT 1 FROM pg_constraint WHERE conname = $1 AND contype = $2',
+        [name, 'f']
+      );
+      if (!result.rowCount) throw new Error('Expected tenant composite foreign key missing: ' + name);
+    }
+
+    process.stdout.write('All draft tenant migrations and composite foreign keys verified on disposable PostgreSQL.\\n');
   } finally {
     await client.end();
   }

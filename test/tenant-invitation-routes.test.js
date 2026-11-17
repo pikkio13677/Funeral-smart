@@ -101,3 +101,102 @@ test('invitation listing is always scoped to the verified tenant company', async
   assert.deepEqual(call.args, ['company-alpha']);
   assert.equal(res.statusCode, 200);
 });
+
+
+test('expired invitation is marked expired and cannot create a membership', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, args = []) {
+      calls.push({ sql, args });
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+      if (sql.includes('FROM company_invitations')) return { rowCount: 1, rows: [{
+        id: 'invite-expired', companyId: 'company-alpha', email: 'member@example.com',
+        role: 'operator', status: 'pending', expiresAt: new Date(Date.now() - 60000)
+      }] };
+      return { rowCount: 1, rows: [] };
+    },
+    release() {}
+  };
+  const router = createRouter({ pool: { query: async () => ({ rowCount: 1, rows: [] }), connect: async () => client } });
+  const res = response();
+  await routeHandler(router, '/company/invitations/accept', 'post')({
+    user: { id: 'user-1' }, body: { token: 'e'.repeat(48) }
+  }, res, e => { throw e; });
+  assert.equal(res.statusCode, 410);
+  assert.ok(calls.some(call => call.sql.includes("SET status = 'expired'")));
+  assert.ok(!calls.some(call => call.sql.includes('INSERT INTO company_memberships')));
+  assert.ok(calls.some(call => call.sql === 'COMMIT'));
+});
+
+test('acceptance rejects an invitation when the account already has a different verified email', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, args = []) {
+      calls.push({ sql, args });
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+      if (sql.includes('FROM company_invitations')) return { rowCount: 1, rows: [{
+        id: 'invite-2', companyId: 'company-alpha', email: 'invited@example.com',
+        role: 'operator', status: 'pending', expiresAt: new Date(Date.now() + 60000)
+      }] };
+      if (sql.includes('FROM app_users')) return { rowCount: 1, rows: [{
+        id: 'user-1', username: 'member', email: 'other@example.com',
+        emailVerifiedAt: new Date(), active: true
+      }] };
+      return { rowCount: 1, rows: [] };
+    },
+    release() {}
+  };
+  const router = createRouter({ pool: { query: async () => ({ rowCount: 1, rows: [] }), connect: async () => client } });
+  const res = response();
+  await routeHandler(router, '/company/invitations/accept', 'post')({
+    user: { id: 'user-1' }, body: { token: 'm'.repeat(48) }
+  }, res, e => { throw e; });
+  assert.equal(res.statusCode, 409);
+  assert.ok(calls.some(call => call.sql === 'ROLLBACK'));
+  assert.ok(!calls.some(call => call.sql.includes('INSERT INTO company_memberships')));
+});
+
+test('failed invitation email delivery revokes the pending invitation', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, args = []) {
+      calls.push({ sql, args });
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+      if (sql.includes('FROM companies')) return { rowCount: 1, rows: [{ name: 'Impresa Alfa' }] };
+      if (sql.includes('FROM company_memberships')) return { rowCount: 0, rows: [] };
+      if (sql.includes('INSERT INTO company_invitations')) return { rowCount: 1, rows: [{ id: 'invite-mail-failed' }] };
+      return { rowCount: 1, rows: [] };
+    },
+    release() {}
+  };
+  const pool = {
+    connect: async () => client,
+    query: async (sql, args = []) => { calls.push({ sql, args }); return { rowCount: 1, rows: [] }; }
+  };
+  const router = createRouter({
+    pool,
+    publicAppUrl: 'https://funeralsmartapp.com',
+    sendInvitationEmail: async () => { throw new Error('simulated mail provider failure'); }
+  });
+  const res = response();
+  await routeHandler(router, '/company/invitations', 'post')({
+    tenant, body: { email: 'nuovo@example.com', role: 'operator' }
+  }, res, e => { throw e; });
+  assert.equal(res.statusCode, 503);
+  assert.ok(calls.some(call => call.sql.includes("SET status = 'revoked'") && call.args[0] === 'invite-mail-failed'));
+});
+
+test('revocation cannot affect an invitation belonging to another company', async () => {
+  let call;
+  const router = createRouter({ pool: {
+    query: async (sql, args) => { call = { sql, args }; return { rowCount: 0, rows: [] }; },
+    connect: async () => ({})
+  } });
+  const res = response();
+  await routeHandler(router, '/company/invitations/:invitationId/revoke', 'post')({
+    tenant, params: { invitationId: '11111111-1111-4111-8111-111111111111' }
+  }, res, e => { throw e; });
+  assert.match(call.sql, /company_id = \$2/);
+  assert.deepEqual(call.args, ['11111111-1111-4111-8111-111111111111', 'company-alpha']);
+  assert.equal(res.statusCode, 404);
+});

@@ -154,6 +154,12 @@ app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize
 // Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
 app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
 
+// Pagina same-origin per accettare inviti aziendali. I dati restano gestiti dalle API protette.
+app.get('/invito/accetta', (_req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  res.sendFile(require('path').join(__dirname, 'invitation.html'));
+});
+
 // Area gestionale web: disponibile sullo stesso servizio Render all'indirizzo /admin.
 app.get('/admin', (_req, res) => {
   // La pagina gestionale usa script e stili inline: abilitarli solo su questa pagina.

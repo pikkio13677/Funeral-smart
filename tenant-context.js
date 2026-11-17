@@ -48,6 +48,14 @@ module.exports = function createTenantContext(pool, tokenHash, cookieName = 'fs_
         });
       }
 
+      // Company administrators must complete MFA before any tenant data route.
+      // MFA setup remains available through the separate authenticated /auth API.
+      if (result.rows[0].role === 'admin' && !req.user.mfaEnabled) {
+        return res.status(403).json({
+          error: 'Attiva la verifica in due passaggi prima di accedere come amministratore aziendale.'
+        });
+      }
+
       // Tenant identity and role are sourced exclusively from verified DB rows.
       req.tenant = Object.freeze({
         membershipId: result.rows[0].membershipId,
