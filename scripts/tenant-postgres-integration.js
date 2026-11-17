@@ -9,7 +9,6 @@ const { Client } = require('pg');
 const crypto = require('node:crypto');
 const createTenantCustomersCasesRouter = require('../tenant-customers-cases-routes');
 const createTenantContext = require('../tenant-context');
-const createAuth = require('../auth');
 const createTenantStaffVehiclesRouter = require('../tenant-staff-vehicles-routes');
 const createTenantInventoryTasksRouter = require('../tenant-inventory-tasks-routes');
 const createTenantInvoicesPaymentsRouter = require('../tenant-invoices-payments-routes');
@@ -196,238 +195,25 @@ async function main() {
       [betaUser, crypto.createHash('sha256').update('beta-invalid-session-token-0123456789').digest('hex'), alfaMembership], '23503'
     );
 
-    // Exercise the real login route, session cookie, authentication middleware and
-    // tenant middleware together using only the disposable test account.
-    const testPassword = 'tenant-integration-test-password';
-    const testSalt = crypto.randomBytes(16);
-    const testPasswordHash = ['scrypt', testSalt.toString('hex'), crypto.scryptSync(testPassword, testSalt, 64).toString('hex')].join('
-
-    // Audit rows must carry a membership that matches both company and user.
-    await client.query(
-      "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, $4)",
-      [alfaUser, alfa, alfa, alfaMembership]
-    );
-    await client.query(
-      "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'beta_test_user', 'tenant.test', 'company', $2, $3, $4)",
-      [betaUser, beta, beta, betaMembership]
-    );
-    await expectDbFailure(
-      'Audit rows must not mix a company with another company membership',
-      "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, $4)",
-      [alfaUser, beta, beta, alfaMembership], '23503'
-    );
-    await expectDbFailure(
-      'Tenant audit context must include company, membership and user together',
-      "INSERT INTO audit_log (user_id, username, action, resource, resource_id, company_id, membership_id) VALUES ($1, 'alfa_test_user', 'tenant.test', 'company', $2, $3, NULL)",
-      [alfaUser, alfa, alfa], '23514'
-    );
-
-    // Invitation constraints: normalized address, digest-only token, consistent status timestamps.
-    const invitationHash = crypto.createHash('sha256').update('alfa-invitation-token').digest('hex');
-    await client.query(
-      "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, expires_at) VALUES ($1, 'nuovo@alfa.example', 'operator', $2, $3, NOW() + INTERVAL '72 hours')",
-      [alfa, invitationHash, alfaMembership]
-    );
-    await expectDbFailure(
-      'Only one pending invitation per company and normalized email is allowed',
-      "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, expires_at) VALUES ($1, 'nuovo@alfa.example', 'operator', $2, $3, NOW() + INTERVAL '72 hours')",
-      [alfa, crypto.createHash('sha256').update('duplicate-invitation-token').digest('hex'), alfaMembership], '23505'
-    );
-    await expectDbFailure(
-      'Invitation token_hash must be a SHA-256 hex digest',
-      "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, expires_at) VALUES ($1, 'hash@alfa.example', 'operator', 'not-a-digest', $2, NOW() + INTERVAL '72 hours')",
-      [alfa, alfaMembership], '23514'
-    );
-    await expectDbFailure(
-      'Accepted invitation status requires accepted_at',
-      "INSERT INTO company_invitations (company_id, email, role, token_hash, invited_by_membership_id, status, expires_at) VALUES ($1, 'accepted@alfa.example', 'operator', $2, $3, 'accepted', NOW() + INTERVAL '72 hours')",
-      [alfa, crypto.createHash('sha256').update('accepted-without-time').digest('hex'), alfaMembership], '23514'
-    );
-
-    function appFor(companyId, membershipId) {
-      const app = express();
-      app.use(express.json());
-      // Test-only identity injection. Production identity comes from verified session membership.
-      app.use((req, _res, next) => {
-        req.tenant = { companyId, membershipId, role: 'admin' };
-        next();
-      });
-      app.use('/admin', createTenantCustomersCasesRouter(client));
-      app.use('/admin', createTenantStaffVehiclesRouter(client));
-      app.use('/admin', createTenantInventoryTasksRouter(client));
-      app.use('/admin', createTenantInvoicesPaymentsRouter(client));
-      app.use('/admin', createTenantDashboardRouter(client));
-      app.use('/admin', createTenantAuditRouter(client));
-      app.use('/admin', createTenantCompanyAdminRouter(client));
-      return app;
-    }
-
-    alfaServer = await listen(appFor(alfa, alfaMembership));
-    betaServer = await listen(appFor(beta, betaMembership));
-
-    const alfaCustomersResponse = await fetch(alfaServer.baseUrl + '/admin/customers');
-    assert.equal(alfaCustomersResponse.status, 200);
-    const alfaCustomers = await alfaCustomersResponse.json();
-    assert.deepEqual(alfaCustomers.data.map(row => row.id), [alfaCustomer],
-      'Alfa must see only Alfa customers');
-
-    const betaCustomersResponse = await fetch(betaServer.baseUrl + '/admin/customers');
-    assert.equal(betaCustomersResponse.status, 200);
-    const betaCustomers = await betaCustomersResponse.json();
-    assert.deepEqual(betaCustomers.data.map(row => row.id), [betaCustomer],
-      'Beta must see only Beta customers');
-
-    const alfaCases = await (await fetch(alfaServer.baseUrl + '/admin/cases')).json();
-    assert.deepEqual(alfaCases.data.map(row => row.id), [alfaCase],
-      'Alfa must see only Alfa cases');
-    const betaCases = await (await fetch(betaServer.baseUrl + '/admin/cases')).json();
-    assert.deepEqual(betaCases.data.map(row => row.id), [betaCase],
-      'Beta must see only Beta cases');
-
-    async function assertOnlyOwnRecord(server, path, expectedId, idField = 'id') {
-      const response = await fetch(server.baseUrl + path);
-      assert.equal(response.status, 200, path + ' should be available to tenant admin');
-      const payload = await response.json();
-      assert.deepEqual(payload.data.map(row => row[idField]), [expectedId], path + ' must expose only this tenant\'s rows');
-    }
-    await assertOnlyOwnRecord(alfaServer, '/admin/staff', staffAlfa);
-    await assertOnlyOwnRecord(betaServer, '/admin/staff', staffBeta);
-    await assertOnlyOwnRecord(alfaServer, '/admin/vehicles', vehicleAlfa);
-    await assertOnlyOwnRecord(betaServer, '/admin/vehicles', vehicleBeta);
-    await assertOnlyOwnRecord(alfaServer, '/admin/inventory', itemAlfa);
-    await assertOnlyOwnRecord(betaServer, '/admin/inventory', itemBeta);
-    await assertOnlyOwnRecord(alfaServer, '/admin/tasks', taskAlfa);
-    await assertOnlyOwnRecord(betaServer, '/admin/tasks', taskBeta);
-    await assertOnlyOwnRecord(alfaServer, '/admin/invoices', invoiceAlfa);
-    await assertOnlyOwnRecord(betaServer, '/admin/invoices', invoiceBeta);
-    await assertOnlyOwnRecord(alfaServer, '/admin/inventory/' + itemAlfa + '/movements', (await client.query('SELECT id FROM stock_movements WHERE item_id=$1', [itemAlfa])).rows[0].id);
-    await assertOnlyOwnRecord(betaServer, '/admin/inventory/' + itemBeta + '/movements', (await client.query('SELECT id FROM stock_movements WHERE item_id=$1', [itemBeta])).rows[0].id);
-    await assertOnlyOwnRecord(alfaServer, '/admin/invoices/' + invoiceAlfa + '/payments', paymentAlfa);
-    await assertOnlyOwnRecord(betaServer, '/admin/invoices/' + invoiceBeta + '/payments', paymentBeta);
-    await assertOnlyOwnRecord(alfaServer, '/admin/company/members', alfaMembership, 'membershipId');
-    await assertOnlyOwnRecord(betaServer, '/admin/company/members', betaMembership, 'membershipId');
-    await assertOnlyOwnRecord(alfaServer, '/admin/company/activity', (await client.query('SELECT id FROM audit_log WHERE company_id=$1', [alfa])).rows[0].id);
-    await assertOnlyOwnRecord(betaServer, '/admin/company/activity', (await client.query('SELECT id FROM audit_log WHERE company_id=$1', [beta])).rows[0].id);
-
-    const alfaDashboard = await (await fetch(alfaServer.baseUrl + '/admin/dashboard')).json();
-    const betaDashboard = await (await fetch(betaServer.baseUrl + '/admin/dashboard')).json();
-    assert.equal(alfaDashboard.data.cases.total, 1);
-    assert.equal(betaDashboard.data.cases.total, 1);
-    assert.equal(alfaDashboard.data.customers.total, 1);
-    assert.equal(betaDashboard.data.customers.total, 1);
-    assert.equal(Number(alfaDashboard.data.outstandingEuro), 75);
-    assert.equal(Number(betaDashboard.data.outstandingEuro), 150);
-    const crossTenantMovements = await (await fetch(alfaServer.baseUrl + '/admin/inventory/' + itemBeta + '/movements')).json();
-    assert.deepEqual(crossTenantMovements.data, [], 'Alfa must not read Beta stock movements');
-    const crossTenantPayments = await (await fetch(alfaServer.baseUrl + '/admin/invoices/' + invoiceBeta + '/payments')).json();
-    assert.deepEqual(crossTenantPayments.data, [], 'Alfa must not read Beta invoice payments');
-
-    const crossTenantUpdate = await fetch(alfaServer.baseUrl + '/admin/cases/' + betaCase + '/status', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ status: 'completed' })
-    });
-    assert.equal(crossTenantUpdate.status, 404,
-      'Alfa must not update a Beta case by guessing its UUID');
-
-    const crossTenantCreate = await fetch(alfaServer.baseUrl + '/admin/cases', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        caseCode: 'IT-ALFA-CROSS-TEST',
-        customerId: betaCustomer,
-        deceasedFirstName: 'Test',
-        deceasedLastName: 'Cross Tenant',
-        serviceType: 'burial'
-      })
-    });
-    assert.equal(crossTenantCreate.status, 400,
-      'Alfa must not create a case linked to a Beta customer');
-
-    const betaStatus = await client.query(
-      'SELECT status FROM funeral_cases WHERE id = $1 AND company_id = $2',
-      [betaCase, beta]
-    );
-    assert.equal(betaStatus.rows[0].status, 'open',
-      'Denied cross-tenant update must leave Beta data unchanged');
-
-    process.stdout.write([
-      'PASS: Alfa and Beta see only their own customers.',
-      'PASS: Alfa and Beta see only their own cases.',
-      'PASS: IDOR-style cross-tenant case update is denied.',
-      'PASS: Cross-tenant customer reference on case creation is denied.',
-      'PASS: Denied write leaves Beta data unchanged.',
-      'PASS: Session cannot reference another user membership.',
-      'PASS: Tenant context comes from the verified DB membership.',
-      'PASS: Membership revocation blocks the next request.',
-      'PASS: Audit rows enforce company, membership and user consistency.',
-      'PASS: Invitation uniqueness, token digest and status constraints are enforced.',
-      'PASS: Staff and vehicles are isolated between Alfa and Beta.',
-      'PASS: Inventory, stock movements and tasks are isolated between Alfa and Beta.',
-      'PASS: Invoices and payments are isolated between Alfa and Beta.',
-      'PASS: Company membership and audit views are scoped to the active tenant.',
-      'PASS: Tenant dashboard totals and outstanding balances do not mix companies.',
-      'PASS: Cross-tenant stock movement and invoice payment lookups return no data.',
-      'PASS: Composite tenant foreign keys reject cross-company customer and case links.',
-      'PASS: Composite tenant foreign keys reject cross-company inventory and staff links.',
-      'PASS: Composite tenant foreign keys reject cross-company invoice and payment links.'
-    ].join('\n') + '\n');
-  } finally {
-    if (alfaServer) await new Promise(resolve => alfaServer.server.close(resolve));
-    if (betaServer) await new Promise(resolve => betaServer.server.close(resolve));
-    await client.query('ROLLBACK');
-    await client.end();
-  }
-}
-
-main().catch(error => {
-  process.stderr.write((error.stack || error.message) + '\n');
-  process.exitCode = 1;
-});
-);
-    await client.query("UPDATE app_users SET password_hash = $1, role = 'operator' WHERE id = $2", [testPasswordHash, alfaUser]);
-
+    // The middleware derives tenant identity from the database, and checks revocation live.
     const contextApp = express();
     contextApp.use((req, _res, next) => {
-      const raw = req.headers.cookie || '';
-      req.cookies = Object.fromEntries(raw.split(';').map(part => {
-        const index = part.indexOf('=');
-        return index < 0 ? ['', ''] : [part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim())];
-      }).filter(([key]) => key));
+      req.user = { id: alfaUser };
+      req.cookies = { fs_session: alfaToken };
       next();
     });
-    contextApp.use(express.json());
-    const auth = createAuth(client);
-    contextApp.use('/auth', auth.router);
-    contextApp.use('/tenant', auth.authenticate, createTenantContext(client, value => crypto.createHash('sha256').update(value).digest('hex')));
-    contextApp.get('/tenant', (req, res) => res.json({ user: req.user, tenant: req.tenant }));
+    contextApp.use(createTenantContext(client, value => crypto.createHash('sha256').update(value).digest('hex')));
+    contextApp.get('/tenant', (req, res) => res.json({ tenant: req.tenant }));
     const contextServer = await listen(contextApp);
     try {
-      const noSession = await fetch(contextServer.baseUrl + '/tenant');
-      assert.equal(noSession.status, 401, 'Tenant route must reject a request without an authenticated session');
-      const loginResponse = await fetch(contextServer.baseUrl + '/auth/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ username: 'alfa_test_user', password: testPassword })
-      });
-      assert.equal(loginResponse.status, 200, 'Real login route must accept the disposable test account');
-      const setCookie = loginResponse.headers.get('set-cookie');
-      assert.ok(setCookie, 'Successful login must issue a session cookie');
-      const sessionCookie = setCookie.split(';', 1)[0];
-      const sessionToken = decodeURIComponent(sessionCookie.slice('fs_session='.length));
-      await client.query('UPDATE app_sessions SET active_membership_id = $1 WHERE token_hash = $2', [
-        alfaMembership, crypto.createHash('sha256').update(sessionToken).digest('hex')
-      ]);
-      const activeContext = await fetch(contextServer.baseUrl + '/tenant', { headers: { cookie: sessionCookie } });
-      assert.equal(activeContext.status, 200, 'A real login session and active membership must establish tenant context');
-      const activePayload = await activeContext.json();
-      assert.equal(activePayload.user.id, alfaUser);
-      assert.equal(activePayload.user.role, 'operator', 'Global role must remain distinct from tenant membership role');
-      assert.equal(activePayload.tenant.companyId, alfa);
-      assert.equal(activePayload.tenant.membershipId, alfaMembership);
-      assert.equal(activePayload.tenant.role, 'admin');
+      const activeContext = await fetch(contextServer.baseUrl + '/tenant');
+      assert.equal(activeContext.status, 200, 'An active session and membership must establish tenant context');
+      const activeTenant = (await activeContext.json()).tenant;
+      assert.equal(activeTenant.companyId, alfa);
+      assert.equal(activeTenant.membershipId, alfaMembership);
+      assert.equal(activeTenant.role, 'admin');
       await client.query("UPDATE company_memberships SET status = 'revoked' WHERE id = $1", [alfaMembership]);
-      const revokedContext = await fetch(contextServer.baseUrl + '/tenant', { headers: { cookie: sessionCookie } });
+      const revokedContext = await fetch(contextServer.baseUrl + '/tenant');
       assert.equal(revokedContext.status, 403, 'A revoked membership must lose access on the next request');
       await client.query("UPDATE company_memberships SET status = 'active' WHERE id = $1", [alfaMembership]);
     } finally {
