@@ -21,7 +21,8 @@ function readyPool({ unassignedTable = null, missingConstraint = false, nullable
         const columns = [];
         for (let i = 0; i < values.length; i += 2) columns.push({ tableName: values[i], columnName: values[i + 1] });
         return { rows: columns, rowCount: columns.length };
-      }\n      if (sql.includes('FROM unnest($1::text[]) AS items(name) WHERE NOT EXISTS')) {
+      }
+      if (sql.includes('FROM unnest($1::text[]) AS items(name) WHERE NOT EXISTS')) {
         const rows = missingConstraint ? [{ name: values[0][0] }] : [];
         return { rows, rowCount: rows.length };
       }
@@ -42,7 +43,7 @@ test('tenant startup preflight accepts a complete, backfilled schema', async () 
   const pool = readyPool();
   const result = await assertTenantSchemaReady(pool);
   assert.deepEqual(result, { ready: true, checkedTables: 9, checkedForeignKeys: 8 });
-  assert.ok(pool.queries.every(sql => !/^\\s*(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|BEGIN)\\b/i.test(sql)));
+  assert.ok(pool.queries.every(sql => !/^\s*(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|BEGIN)\b/i.test(sql)));
 });
 
 test('tenant startup preflight blocks rows without company ownership', async () => {
@@ -58,7 +59,6 @@ test('tenant startup preflight blocks missing composite foreign keys', async () 
     /composite foreign keys are incomplete/
   );
 });
-
 
 test('tenant startup preflight blocks nullable company_id columns', async () => {
   await assert.rejects(
