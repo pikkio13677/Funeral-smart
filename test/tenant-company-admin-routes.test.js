@@ -108,7 +108,7 @@ test('membership role update is company-scoped and serialized on company row', a
   const router = createRouter({ query: async () => ({ rows: [] }), connect: async () => client });
   const res = response();
   await handler(router, '/company/members/:membershipId', 'patch')({
-    tenant, params: { membershipId: memberId }, body: { role: 'manager' }
+    tenant, user: actor, params: { membershipId: memberId }, body: { role: 'manager' }
   }, res, e => { throw e; });
   assert.equal(res.statusCode, 200);
   assert.match(calls.find(x => x.sql.startsWith('SELECT id FROM companies')).sql, /FROM companies WHERE id = \$1 FOR UPDATE/);
