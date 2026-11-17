@@ -24,6 +24,15 @@ const REQUIRED_COLUMNS = Object.freeze([
 ]);
 
 const REQUIRED_FOREIGN_KEYS = Object.freeze([
+  { name: 'customers_company_id_fkey', table: 'customers' },
+  { name: 'funeral_cases_company_id_fkey', table: 'funeral_cases' },
+  { name: 'staff_company_id_fkey', table: 'staff' },
+  { name: 'vehicles_company_id_fkey', table: 'vehicles' },
+  { name: 'inventory_items_company_id_fkey', table: 'inventory_items' },
+  { name: 'stock_movements_company_id_fkey', table: 'stock_movements' },
+  { name: 'tasks_company_id_fkey', table: 'tasks' },
+  { name: 'invoices_company_id_fkey', table: 'invoices' },
+  { name: 'payments_company_id_fkey', table: 'payments' },
   { name: 'fk_app_sessions_active_membership_user', table: 'app_sessions' },
   { name: 'fk_audit_log_tenant_membership', table: 'audit_log' },
   { name: 'fk_funeral_cases_tenant_customer', table: 'funeral_cases' },
