@@ -35,7 +35,7 @@ In modalità tenant vengono bloccati gli endpoint globali `/api/v1/auth/users`; 
 Se la modalità tenant viene approvata, prima di aprire la porta HTTP il server esegue un preflight PostgreSQL in sola lettura. Richiede:
 
 - tabelle e colonne tenant/piattaforma presenti;
-- dieci foreign key tenant/identità;
+- dodici foreign key tenant/identità, comprese entrambe le relazioni degli inviti aziendali;
 - `company_id` NOT NULL in tutte le nove tabelle gestionali;
 - zero record senza azienda e zero riferimenti tra aziende;
 - vincolo ruolo `platform_owner` e riga singleton bootstrap presenti;
