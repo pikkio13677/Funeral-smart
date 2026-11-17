@@ -20,19 +20,21 @@ The tenant route modules are intentionally dormant until the production data mig
 6. Only after approval, apply migrations 005–008 and the reviewed backfill to the target environment.
 7. Mount `companyContextRouter` after the existing auth router and mount the tenant router before the legacy admin router.
 8. Remove or isolate the legacy global business-data routes in the same cutover. They must never remain as a fall-through path for tenant resources.
-9. Update the admin UI to select and display the active company, then call the tenant API contract below.
+9. The admin UI now has a dormant company selector/switcher, tenant-role navigation, company member/invitation management, tenant activity log, task PATCH contract and logout. Keep its `TENANT_API_ENABLED` flag false until the reviewed migration and route cutover are complete.
 10. Keep platform-wide inquiries, provider applications, user administration and support tools behind the separate platform-owner authorization design (PR #55), not tenant `admin`.
 
-## Frontend/API contract work still outstanding
+## Frontend/API integration status
 
-The current `admin.html` still uses the legacy global API and assumes a single global role. Before cutover it must:
+The interface preparation is implemented and syntax-tested, but intentionally dormant:
 
-- call `/api/v1/auth/companies` and `/api/v1/auth/active-company` to select the company;
-- display the verified tenant role returned by the active-company selection and refresh it after switching company;
-- use `/api/v1/admin/company/activity` instead of the legacy global `/audit` endpoint;
-- align task status updates with `PATCH /tasks/:id` (or add a compatibility route);
-- preserve the company context after login, logout and session expiry;
-- separate platform-wide user management from company membership management.
+- company selection and switching use `/api/v1/auth/companies` and `/api/v1/auth/active-company`;
+- tenant navigation and create forms follow the verified membership role rather than the global account role;
+- tenant administrators must complete MFA before the tenant context middleware grants data access;
+- company members and invitations use the tenant-scoped company endpoints;
+- activity log uses `/api/v1/admin/company/activity` and task completion uses `PATCH /tasks/:id`;
+- the tenant toolbar includes explicit logout.
+
+Still outstanding: implement and test the invitation acceptance page at `/invito/accetta`, then run full browser/API end-to-end tests against a migrated staging database. `TENANT_API_ENABLED` must remain false until those tests and the production backfill rehearsal pass.
 
 ## Safety boundary
 
