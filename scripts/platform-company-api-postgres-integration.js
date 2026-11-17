@@ -114,6 +114,30 @@ async function main() {
       body: JSON.stringify({ status: 'active', reason: 'Integration test reactivation reason' })
     });
     assert.equal(reactivate.status, 200);
+
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION test_platform_audit_reject_insert()
+      RETURNS trigger LANGUAGE plpgsql AS $
+      BEGIN
+        RAISE EXCEPTION 'intentional disposable integration-test audit failure';
+      END;
+      $;
+    `);
+    await pool.query(`
+      CREATE TRIGGER test_platform_audit_reject_insert
+      BEFORE INSERT ON platform_audit_log
+      FOR EACH ROW EXECUTE FUNCTION test_platform_audit_reject_insert()
+    `);
+    const failedAudit = await fetch(base + '/api/v1/platform/companies/' + companyId + '/status', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'suspended', reason: 'Integration test forced audit failure' })
+    });
+    assert.equal(failedAudit.status, 500, 'audit failure returns an error');
+    const unchanged = await pool.query('SELECT status FROM companies WHERE id=$1', [companyId]);
+    assert.equal(unchanged.rows[0].status, 'active', 'company status rolls back when audit insert fails');
+    await pool.query('DROP TRIGGER test_platform_audit_reject_insert ON platform_audit_log');
+    await pool.query('DROP FUNCTION test_platform_audit_reject_insert()');
   });
 
   const noAccessRouter = createPlatformCompanyRouter(pool, {
@@ -141,6 +165,8 @@ main()
   .catch(error => { console.error(error); process.exitCode = 1; })
   .finally(async () => {
     try {
+      await pool.query('DROP TRIGGER IF EXISTS test_platform_audit_reject_insert ON platform_audit_log');
+      await pool.query('DROP FUNCTION IF EXISTS test_platform_audit_reject_insert()');
       await pool.query('DELETE FROM platform_audit_log WHERE actor_user_id=$1', [ownerId]);
       await pool.query('DELETE FROM platform_access WHERE user_id=$1', [ownerId]);
       await pool.query('DELETE FROM company_memberships WHERE company_id=$1', [companyId]);
