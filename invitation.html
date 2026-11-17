@@ -57,6 +57,7 @@ button:disabled{opacity:.55;cursor:wait}.row{display:flex;gap:9px;flex-wrap:wrap
 <script>
 'use strict';
 const token = new URLSearchParams(window.location.search).get('token') || '';
+if (token) window.history.replaceState({}, document.title, window.location.pathname);
 const apiBase = window.location.origin;
 const $ = id => document.getElementById(id);
 let pendingLogin = null;
@@ -86,6 +87,9 @@ function finishAcceptedInvite(text) {
   $('login-form').classList.add('hidden');
   $('register-form').classList.add('hidden');
   $('mfa-form').classList.add('hidden');
+  $('login-password').value = '';
+  $('register-password').value = '';
+  $('mfa-code').value = '';
   setTimeout(() => { window.location.assign('/admin'); }, 1800);
 }
 async function acceptInvitation() {
@@ -105,7 +109,7 @@ async function loginAndAccept(username, password) {
     method: 'POST', body: JSON.stringify({ username, password })
   });
   if (result.mfaRequired) {
-    pendingLogin = { username, password };
+    pendingLogin = { invitationAccepted: false };
     $('login-form').classList.add('hidden');
     $('register-form').classList.add('hidden');
     $('mfa-form').classList.remove('hidden');
