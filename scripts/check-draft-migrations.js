@@ -8,7 +8,8 @@ const migrationFiles = [
   '005_multi_tenant_foundation.draft.sql',
   '006_session_active_membership.draft.sql',
   '007_audit_invitations.draft.sql',
-  '008_tenant_composite_foreign_keys.draft.sql'
+  '008_tenant_composite_foreign_keys.draft.sql',
+  '009_platform_access.draft.sql'
 ];
 
 async function main() {
@@ -42,6 +43,7 @@ async function main() {
 
     const checks = [
       ['companies', 'companies'],
+      ['platform_access', 'platform_access'],
       ['company_memberships', 'company_memberships'],
       ['company_invitations', 'company_invitations'],
       ['customers.company_id', 'customers'],
