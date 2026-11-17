@@ -96,7 +96,7 @@ async function assertTenantSchemaReady(pool) {
   if (bootstrap.rowCount !== 1) throw new Error('Tenant cutover blocked: platform bootstrap singleton is missing.');
 
   const unassignedUsers = await pool.query(
-    "SELECT COUNT(*)::int AS count FROM app_users u WHERE u.active = TRUE AND u.role <> 'platform_owner' AND NOT EXISTS (SELECT 1 FROM company_memberships m WHERE m.user_id=u.id AND m.status='active')"
+    "SELECT COUNT(*)::int AS count FROM app_users u WHERE u.active = TRUE AND u.role <> 'platform_owner' AND NOT EXISTS (SELECT 1 FROM company_memberships m WHERE m.user_id=u.id AND m.status='active') AND NOT EXISTS (SELECT 1 FROM platform_access pa WHERE pa.user_id=u.id AND pa.status='active')"
   );
   if (Number(unassignedUsers.rows[0].count) !== 0) throw new Error('Tenant cutover blocked: active non-platform users without an active company membership remain.');
 
