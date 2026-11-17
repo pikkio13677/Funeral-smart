@@ -49,7 +49,7 @@ async function assertTenantSchemaReady(pool) {
   if (!pool || typeof pool.query !== 'function') throw new TypeError('A PostgreSQL pool is required.');
 
   const tableResult = await pool.query(
-    'SELECT name FROM unnest($1::text[]) AS name WHERE to_regclass(\'public.\' || name) IS NOT NULL',
+    'SELECT name FROM unnest($1::text[]) AS items(name) WHERE to_regclass(\'public.\' || items.name) IS NOT NULL',
     [REQUIRED_TABLES]
   );
   const foundTables = new Set(tableResult.rows.map(row => row.name));
@@ -72,7 +72,7 @@ async function assertTenantSchemaReady(pool) {
   if (nullableCompanyIds.rowCount) throw new Error('Tenant cutover blocked: company_id must be NOT NULL on: ' + nullableCompanyIds.rows.map(row => row.name).join(', '));
 
   const missingConstraints = await pool.query(
-    'SELECT name FROM unnest($1::text[]) AS name WHERE NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = name AND contype = \'f\')',
+    'SELECT name FROM unnest($1::text[]) AS items(name) WHERE NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = items.name AND contype = \'f\')',
     [REQUIRED_FOREIGN_KEYS]
   );
   if (missingConstraints.rowCount) throw new Error('Tenant cutover blocked: composite foreign keys are incomplete: ' + missingConstraints.rows.map(row => row.name).join(', '));
