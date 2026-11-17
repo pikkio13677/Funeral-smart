@@ -93,8 +93,8 @@ module.exports = function createPlatformCompanyRouter(pool, options = {}) {
         [parsed.data.status, req.params.companyId]
       );
       await client.query(
-        'INSERT INTO platform_audit_log (actor_user_id,actor_username,action,resource,resource_id,reason,ip_address) VALUES ($1,$2,$3,\\'company\\',$4,$5,$6)',
-        [req.user.id, req.user.username || null, parsed.data.status === 'suspended' ? 'platform.company.suspended' : 'platform.company.reactivated', req.params.companyId, parsed.data.reason, req.ip || null]
+        'INSERT INTO platform_audit_log (actor_user_id,actor_username,action,resource,resource_id,reason,ip_address) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [req.user.id, req.user.username || null, parsed.data.status === 'suspended' ? 'platform.company.suspended' : 'platform.company.reactivated', 'company', req.params.companyId, parsed.data.reason, req.ip || null]
       );
       await client.query('COMMIT');
       res.json({ data: updated.rows[0] });
