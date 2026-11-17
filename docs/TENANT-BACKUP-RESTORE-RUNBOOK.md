@@ -86,3 +86,24 @@ La migrazione 012 rimuove i vincoli globali su codice pratica, targa, SKU e nume
 ## 7. Criterio di arresto
 
 Se i conteggi non coincidono, una relazione è ambigua, manca una membership, un indice o una FK non è validata, fermarsi e non abilitare il multi-tenant. Nessuna variabile Render deve essere modificata in questa fase.
+
+## 8. Integrità del backup cifrato e prova di ripristino
+
+Questa sezione è una lista di controllo, non una dichiarazione che il backup cifrato sia già stato verificato.
+
+1. Conservare intatto il file cifrato originale e lavorare su una copia.
+2. Calcolare e registrare SHA-256 del file cifrato prima di qualsiasi operazione; ripetere il calcolo sulla copia e verificare che coincida.
+3. Identificare il formato e il metodo di cifratura effettivamente usati per quel file. Non indovinare algoritmo, opzioni o formato e non salvare chiavi/passphrase nel repository, nei log o nella cronologia della shell.
+4. Decifrare soltanto una copia in una cartella locale con permessi riservati. La chiave deve essere fornita localmente tramite il metodo sicuro previsto dallo strumento, mai incollata in chat o in GitHub.
+5. Verificare il dump decifrato con `pg_restore --list`. Se il comando non riconosce l'archivio o segnala errori, fermarsi: non tentare un restore parziale.
+6. Ripristinare il dump in un secondo database PostgreSQL locale, vuoto e usa-e-getta, distinto dal database usato per la migrazione.
+7. Confrontare i conteggi delle tabelle e le sequenze con la fotografia iniziale; eseguire i controlli di integrità e i test applicativi previsti.
+8. Registrare soltanto esito, data, versione dello schema e conteggi aggregati. Non condividere dump, dati personali, chiavi o passphrase.
+
+## 9. Limiti del collaudo automatico e attività ancora aperte
+
+- I workflow GitHub che passano su PostgreSQL usa-e-getta verificano schema, migrazioni draft, isolamento Alfa/Beta, bootstrap e API. **Non dimostrano** che un dump reale, né la sua copia cifrata, siano stati decifrati e ripristinati correttamente.
+- La documentazione del repository indica ancora come attività da realizzare i backup automatici, la retention e i test periodici di ripristino. Non considerare quindi già disponibile un servizio automatico di backup solo perché il database è ospitato su Render.
+- Il restore-test del backup effettivo, il controllo della copia cifrata e la verifica delle regole di conservazione restano gate separati. Devono essere eseguiti e documentati prima di qualsiasi cutover.
+- Nessun test descritto in questa procedura autorizza l'uso del database di produzione, la modifica di Render, l'attivazione di flag tenant, il merge o il deploy.
+
