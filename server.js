@@ -7,6 +7,11 @@ const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const { z } = require('zod');
 const emailNotifications = require('./email-notifications')();
+const assertTenantCutoverReady = require('./tenant-cutover-guard');
+
+// The tenant API is deliberately not mounted in this release candidate.
+// Fail closed if someone enables the feature flag before the complete cutover.
+assertTenantCutoverReady(process.env);
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
