@@ -3,6 +3,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Client } = require('pg');
+const crypto = require('node:crypto');
+const { backfillSingleCompany } = require('./backfill-single-company');
 
 const migrationFiles = [
   '005_multi_tenant_foundation.draft.sql',
@@ -11,8 +13,7 @@ const migrationFiles = [
   '008_tenant_composite_foreign_keys.draft.sql',
   '009_platform_access.draft.sql',
   '010_platform_owner_bootstrap.draft.sql',
-  '011_platform_audit_log.draft.sql',
-  '012_tenant_finalize_company_id.draft.sql'
+  '011_platform_audit_log.draft.sql'
 ];
 
 async function main() {
@@ -42,6 +43,42 @@ async function main() {
         await client.query('ROLLBACK');
         throw new Error(file + ' failed: ' + error.message);
       }
+    }
+
+    // Rehearse the one-company legacy backfill on disposable PostgreSQL.
+    const companyId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
+    const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
+    await client.query(
+      "INSERT INTO companies(id,legal_name,status,plan_code) VALUES($1,$2,'active','trial')",
+      [companyId, 'Single Company Backfill Test ' + suffix]
+    );
+    await client.query(
+      "INSERT INTO app_users(id,username,display_name,password_hash,role,active) VALUES($1,$2,$3,$4,'admin',TRUE)",
+      [userId, 'single_backfill_' + suffix, 'Single Company Test', 'test-only-not-a-real-password-hash']
+    );
+    const backfillReport = await backfillSingleCompany(client, companyId, { apply: true });
+    if (backfillReport.membershipsCreated !== 1) {
+      throw new Error('Single-company backfill did not create the expected initial admin membership.');
+    }
+    const membershipCheck = await client.query(
+      "SELECT 1 FROM company_memberships WHERE company_id=$1 AND user_id=$2 AND role='admin' AND status='active'",
+      [companyId, userId]
+    );
+    if (!membershipCheck.rowCount) throw new Error('Single-company backfill membership verification failed.');
+
+    const finalizationSql = await fs.readFile(
+      path.join(__dirname, '..', 'migrations', '012_tenant_finalize_company_id.draft.sql'),
+      'utf8'
+    );
+    await client.query('BEGIN');
+    try {
+      await client.query(finalizationSql);
+      await client.query('COMMIT');
+      process.stdout.write('Draft migration OK: 012_tenant_finalize_company_id.draft.sql after single-company backfill\n');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw new Error('012_tenant_finalize_company_id.draft.sql failed after backfill: ' + error.message);
     }
 
     const checks = [
