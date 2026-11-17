@@ -568,8 +568,8 @@ main().catch(error => {
   process.stderr.write((error.stack || error.message) + '\n');
   process.exitCode = 1;
 });
-
-      + crypto.scryptSync(testPassword, testSalt, 64).toString('hex');
+ +
+      crypto.scryptSync(testPassword, testSalt, 64).toString('hex');
     await client.query("UPDATE app_users SET password_hash = $1, role = 'operator' WHERE id = $2", [testPasswordHash, alfaUser]);
 
     const contextApp = express();
