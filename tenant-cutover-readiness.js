@@ -11,13 +11,13 @@ const REQUIRED_TABLES = Object.freeze([
 ]);
 
 const REQUIRED_COLUMNS = Object.freeze([
-  ['app_sessions', 'active_membership_id'],
-  ['app_users', 'id'], ['app_users', 'role'], ['app_users', 'active'], ['app_users', 'email'], ['app_users', 'email_verified_at'],
-  ['audit_log', 'company_id'], ['audit_log', 'membership_id'],
+  ['app_sessions', 'user_id'], ['app_sessions', 'token_hash'], ['app_sessions', 'expires_at'], ['app_sessions', 'active_membership_id'],
+  ['app_users', 'id'], ['app_users', 'username'], ['app_users', 'display_name'], ['app_users', 'role'], ['app_users', 'active'], ['app_users', 'email'], ['app_users', 'email_verified_at'],
+  ['audit_log', 'user_id'], ['audit_log', 'username'], ['audit_log', 'action'], ['audit_log', 'resource'], ['audit_log', 'resource_id'], ['audit_log', 'ip_address'], ['audit_log', 'created_at'], ['audit_log', 'company_id'], ['audit_log', 'membership_id'],
   ['companies', 'id'], ['companies', 'legal_name'], ['companies', 'vat_number'], ['companies', 'address'], ['companies', 'city'], ['companies', 'province'], ['companies', 'email'], ['companies', 'phone'], ['companies', 'status'], ['companies', 'plan_code'], ['companies', 'created_at'], ['companies', 'updated_at'],
-  ['company_memberships', 'id'], ['company_memberships', 'company_id'], ['company_memberships', 'user_id'], ['company_memberships', 'role'], ['company_memberships', 'status'],
-  ['company_invitations', 'id'], ['company_invitations', 'company_id'], ['company_invitations', 'email'], ['company_invitations', 'role'], ['company_invitations', 'token_hash'], ['company_invitations', 'invited_by_membership_id'], ['company_invitations', 'status'], ['company_invitations', 'expires_at'],
-  ['platform_access', 'user_id'], ['platform_access', 'role'], ['platform_access', 'status'],
+  ['company_memberships', 'id'], ['company_memberships', 'company_id'], ['company_memberships', 'user_id'], ['company_memberships', 'role'], ['company_memberships', 'status'], ['company_memberships', 'created_at'], ['company_memberships', 'updated_at'],
+  ['company_invitations', 'id'], ['company_invitations', 'company_id'], ['company_invitations', 'email'], ['company_invitations', 'role'], ['company_invitations', 'token_hash'], ['company_invitations', 'invited_by_membership_id'], ['company_invitations', 'status'], ['company_invitations', 'expires_at'], ['company_invitations', 'accepted_at'], ['company_invitations', 'revoked_at'], ['company_invitations', 'created_at'],
+  ['platform_access', 'user_id'], ['platform_access', 'role'], ['platform_access', 'status'], ['platform_access', 'granted_at'], ['platform_access', 'updated_at'],
   ['platform_bootstrap_state', 'singleton'], ['platform_bootstrap_state', 'consumed_at'], ['platform_bootstrap_state', 'consumed_by'],
   ['platform_audit_log', 'id'], ['platform_audit_log', 'actor_user_id'], ['platform_audit_log', 'actor_username'], ['platform_audit_log', 'action'], ['platform_audit_log', 'resource'], ['platform_audit_log', 'resource_id'], ['platform_audit_log', 'reason'], ['platform_audit_log', 'ip_address'], ['platform_audit_log', 'created_at'],
   ...TENANT_TABLES.map(table => [table, 'company_id'])
