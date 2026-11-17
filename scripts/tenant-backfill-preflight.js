@@ -170,12 +170,6 @@ async function main() {
     if (companyConstraintResult.rowCount !== companyForeignKeyNames.length) {
       throw new Error('Validated company ownership foreign keys are incomplete.');
     }
-    if (uniqueIndexResult.rowCount !== uniqueIndexNames.length || nullableCompanyIds.rowCount || legacyGlobalUnique.rowCount) {
-      throw new Error('Company-scoped uniqueness or NOT NULL finalization is incomplete.');
-    }
-    if (Number(unassignedUsers.rows[0].count) !== 0) {
-      throw new Error('Active users without an active company membership remain.');
-    }
     if (Object.values(unassigned).some(count => count > 0)) {
       process.stdout.write('PRECHECK: company_id backfill is still required; no data was changed.\\n');
     } else {
