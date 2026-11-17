@@ -81,20 +81,13 @@ async function main() {
       crossTenantReferences[label] = result.rows[0].count;
     }
 
-    const constraintResult = await client.query(`
-      SELECT conname FROM pg_constraint
-      WHERE contype = 'f' AND conname IN (
-        'fk_funeral_cases_tenant_customer',
-        'fk_stock_movements_tenant_item',
-        'fk_stock_movements_tenant_case',
-        'fk_tasks_tenant_case',
-        'fk_tasks_tenant_staff',
-        'fk_invoices_tenant_case',
-        'fk_invoices_tenant_customer',
-        'fk_payments_tenant_invoice'
-      )
-      ORDER BY conname
-    `);
+    const constraintResult = await client.query(
+      "SELECT c.conname FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid " +
+      "JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public' " +
+      "AND c.contype='f' AND c.convalidated AND (t.relname,c.conname) IN (" +
+      compositeForeignKeys.map((_, i) => "($" + (i * 2 + 1) + ",$" + (i * 2 + 2) + ")").join(',') + ")",
+      compositeForeignKeys.flat()
+    );
 
     const companyForeignKeyNames = [
       'customers_company_id_fkey', 'funeral_cases_company_id_fkey', 'staff_company_id_fkey',
