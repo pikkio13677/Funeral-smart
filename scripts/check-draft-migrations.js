@@ -116,6 +116,25 @@ async function main() {
       if (!result.rowCount) throw new Error('Expected tenant composite foreign key missing: ' + name);
     }
 
+    const companyForeignKeys = [
+      'customers_company_id_fkey',
+      'funeral_cases_company_id_fkey',
+      'staff_company_id_fkey',
+      'vehicles_company_id_fkey',
+      'inventory_items_company_id_fkey',
+      'stock_movements_company_id_fkey',
+      'tasks_company_id_fkey',
+      'invoices_company_id_fkey',
+      'payments_company_id_fkey'
+    ];
+    for (const name of companyForeignKeys) {
+      const result = await client.query(
+        "SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid=c.confrelid JOIN pg_namespace n ON n.oid=r.relnamespace WHERE c.conname=$1 AND c.contype='f' AND c.convalidated AND n.nspname='public' AND r.relname='companies'",
+        [name]
+      );
+      if (!result.rowCount) throw new Error('Expected validated company foreign key missing: ' + name);
+    }
+
 
     const finalizedColumns = await client.query(
       "SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='company_id' AND table_name = ANY($1::text[]) AND is_nullable='YES'",
