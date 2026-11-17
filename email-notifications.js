@@ -75,6 +75,23 @@ function createEmailNotifications({ env = process.env, fetchImpl = global.fetch,
     await Promise.all(tasks);
   }
 
+  async function notifyCompanyInvitation({ to, companyName, invitationUrl, expiresAt }) {
+    const expiry = new Date(expiresAt).toLocaleString('it-IT', { timeZone: 'Europe/Rome' });
+    const delivered = await send(
+      to,
+      'Invito a FUNERAL SMART — ' + companyName,
+      [
+        'Sei stato invitato a collaborare con ' + companyName + ' su FUNERAL SMART.',
+        'Apri questo collegamento sicuro per completare la registrazione o accettare l’invito:',
+        invitationUrl,
+        'Il collegamento scade il: ' + expiry,
+        'Se non riconosci questa richiesta, ignora questa email.'
+      ]
+    );
+    if (!delivered) throw new Error('Company invitation email could not be delivered.');
+    return true;
+  }
+
   async function notifyProviderApplication({ id, businessName, city, email }) {
     if (!env.ADMIN_NOTIFICATION_EMAIL) {
       logger.warn('[email] ADMIN_NOTIFICATION_EMAIL non configurata: avviso candidatura saltato.');
@@ -93,7 +110,7 @@ function createEmailNotifications({ env = process.env, fetchImpl = global.fetch,
     await send(env.ADMIN_NOTIFICATION_EMAIL, 'Nuova candidatura impresa — FUNERAL SMART', lines);
   }
 
-  return { notifyInquiry, notifyProviderApplication };
+  return { notifyInquiry, notifyProviderApplication, notifyCompanyInvitation };
 }
 
 module.exports = createEmailNotifications;
