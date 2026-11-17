@@ -34,7 +34,7 @@ The interface preparation is implemented and syntax-tested, but intentionally do
 - activity log uses `/api/v1/admin/company/activity` and task completion uses `PATCH /tasks/:id`;
 - the tenant toolbar includes explicit logout.
 
-Still outstanding: implement and test the invitation acceptance page at `/invito/accetta`, then run full browser/API end-to-end tests against a migrated staging database. `TENANT_API_ENABLED` must remain false until those tests and the production backfill rehearsal pass.
+Invitation onboarding is now prepared: the public site path redirects to the same-origin API page, which supports existing-account login with MFA or new account creation from the email-bound invitation token. The registration router and tenant acceptance endpoint remain unmounted until cutover. Still outstanding: full browser/API end-to-end tests against a migrated staging database, including rate-limit behaviour, email delivery and duplicate/expired invitations. `TENANT_API_ENABLED` must remain false until those tests and the production backfill rehearsal pass.
 
 ## Safety boundary
 
