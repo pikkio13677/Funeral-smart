@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const assertTenantSchemaReady = require('../tenant-cutover-readiness');
 
-function readyPool({ unassignedTable = null, missingConstraint = false, nullableCompanyId = false } = {}) {
+function readyPool({ unassignedTable = null, missingConstraint = false, nullableCompanyId = false, missingUniqueIndex = false, remainingGlobalUnique = false } = {}) {
   const queries = [];
   return {
     queries,
@@ -21,6 +21,14 @@ function readyPool({ unassignedTable = null, missingConstraint = false, nullable
         const columns = [];
         for (let i = 0; i < values.length; i += 2) columns.push({ tableName: values[i], columnName: values[i + 1] });
         return { rows: columns, rowCount: columns.length };
+      }
+      if (sql.includes('FROM (VALUES') && sql.includes('pg_index')) {
+        const rows = missingUniqueIndex ? [{ name: values[0] }] : [];
+        return { rows, rowCount: rows.length };
+      }
+      if (sql.includes('FROM (VALUES') && sql.includes('JOIN pg_constraint c')) {
+        const rows = remainingGlobalUnique ? [{ name: values[0] }] : [];
+        return { rows, rowCount: rows.length };
       }
       if (sql.includes('FROM (VALUES')) {
         const rows = missingConstraint ? [{ name: values[0] }] : [];
@@ -42,11 +50,14 @@ function readyPool({ unassignedTable = null, missingConstraint = false, nullable
 test('tenant startup preflight accepts a complete, backfilled schema', async () => {
   const pool = readyPool();
   const result = await assertTenantSchemaReady(pool);
-  assert.deepEqual(result, { ready: true, checkedTables: 9, checkedForeignKeys: 12 });
+  assert.deepEqual(result, { ready: true, checkedTables: 9, checkedForeignKeys: 12, checkedUniqueIndexes: 4 });
   assert.ok(pool.queries.every(sql => !/^\s*(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|BEGIN)\b/i.test(sql)));
   const roleCheck = pool.queries.find(sql => sql.includes("t.relname='app_users'"));
   assert.match(roleCheck, /c\.convalidated/);
   assert.match(roleCheck, /c\.contype='c'/);
+  const uniqueCheck = pool.queries.find(sql => sql.includes('FROM (VALUES') && sql.includes('pg_index'));
+  assert.match(uniqueCheck, /i\.indisunique/);
+  assert.match(uniqueCheck, /i\.indisvalid/);
 });
 
 test('tenant startup preflight blocks rows without company ownership', async () => {
@@ -67,5 +78,19 @@ test('tenant startup preflight blocks nullable company_id columns', async () => 
   await assert.rejects(
     () => assertTenantSchemaReady(readyPool({ nullableCompanyId: true })),
     /company_id must be NOT NULL on: customers/
+  );
+});
+
+test('tenant startup preflight blocks missing company-scoped unique indexes', async () => {
+  await assert.rejects(
+    () => assertTenantSchemaReady(readyPool({ missingUniqueIndex: true })),
+    /company-scoped unique indexes are missing or invalid/
+  );
+});
+
+test('tenant startup preflight blocks legacy global unique constraints', async () => {
+  await assert.rejects(
+    () => assertTenantSchemaReady(readyPool({ remainingGlobalUnique: true })),
+    /legacy global unique constraints remain/
   );
 });
