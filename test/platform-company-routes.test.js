@@ -43,7 +43,7 @@ test('company list applies bounded filters and cursor pagination', async () => {
     assert.equal(response.status, 200); assert.equal(body.data.length, 2);
     assert.equal(body.page.hasMore, true); assert.ok(body.page.nextCursor);
     assert.equal(values[0], 'active'); assert.equal(values[1], 'Impresa'); assert.equal(values[4], 3);
-    assert.equal((await fetch(base + '/api/v1/platform/companies?status=closed')).status, 400);
+    assert.equal((await fetch(base + '/api/v1/platform/companies?status=archived')).status, 400);
     assert.equal((await fetch(base + '/api/v1/platform/companies?limit=1000')).status, 400);
   });
 });
