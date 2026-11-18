@@ -209,3 +209,39 @@ test('price list creation refuses unverified providers', async () => {
     assert.equal(pool.calls.some(call => call.sql.startsWith('INSERT INTO price_lists')), false);
   });
 });
+
+
+test('inquiry list hides logically deleted records unless explicitly requested', async () => {
+  let captured;
+  const pool = {
+    async query(sql, args) { captured = { sql, args }; return { rowCount: 0, rows: [] }; },
+    async connect() { throw new Error('unexpected'); }
+  };
+  await withServer(createRouter(pool, authOptions()), async base => {
+    const response = await fetch(base + '/api/v1/platform/inquiries');
+    assert.equal(response.status, 200);
+    assert.match(captured.sql, /status <> 'deleted'/);
+    assert.deepEqual(captured.args, [null, 50]);
+    const deleted = await fetch(base + '/api/v1/platform/inquiries?status=deleted');
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(captured.args, ['deleted', 50]);
+  });
+});
+
+test('closed inquiries cannot be reopened through the status endpoint', async () => {
+  const pool = fakePool(async sql => {
+    if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+    if (sql.startsWith('SELECT id,status FROM inquiries')) return { rowCount: 1, rows: [{ id: INQUIRY_ID, status: 'closed' }] };
+    return { rowCount: 0, rows: [] };
+  });
+  await withServer(createRouter(pool, authOptions()), async base => {
+    const response = await fetch(base + '/api/v1/platform/inquiries/' + INQUIRY_ID + '/status', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'reviewed', reason: 'Verifica del cambio di stato' })
+    });
+    assert.equal(response.status, 409);
+    assert.ok(pool.calls.some(call => call.sql === 'ROLLBACK'));
+    assert.equal(pool.calls.some(call => call.sql.startsWith('UPDATE inquiries')), false);
+  });
+});
