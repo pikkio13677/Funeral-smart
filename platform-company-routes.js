@@ -48,7 +48,7 @@ module.exports = function createPlatformCompanyRouter(pool, options = {}) {
 
   router.get('/audit', async (req, res, next) => {
     const parsed = z.object({
-      action: z.enum(['platform.company.suspended', 'platform.company.reactivated', 'platform.inquiry.status_changed', 'platform.provider_application.approved', 'platform.provider_application.rejected', 'platform.provider.verified', 'platform.price_list.created', 'platform.price_list.published', 'platform.price_list.unpublished']).optional(),
+      action: z.enum(['platform.company.suspended', 'platform.company.reactivated', 'platform.inquiry.status_changed', 'platform.inquiry.anonymized', 'platform.provider_application.approved', 'platform.provider_application.rejected', 'platform.provider.verified', 'platform.price_list.created', 'platform.price_list.published', 'platform.price_list.unpublished']).optional(),
       resource: z.enum(['company', 'inquiry', 'provider_application', 'provider', 'price_list']).optional(),
       resourceId: UUID.optional(),
       cursor: z.string().max(512).optional(),
