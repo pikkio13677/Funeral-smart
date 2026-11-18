@@ -9,14 +9,14 @@
 
 -- Le FK 009 sono create NOT VALID per consentire il backfill controllato.
 -- Qui vengono validate esplicitamente: se esistono relazioni cross-tenant, la finalizzazione si arresta.
-ALTER TABLE funeral_cases VALIDATE CONSTRAINT fk_funeral_cases_tenant_customer;
-ALTER TABLE stock_movements VALIDATE CONSTRAINT fk_stock_movements_tenant_item;
-ALTER TABLE stock_movements VALIDATE CONSTRAINT fk_stock_movements_tenant_case;
-ALTER TABLE tasks VALIDATE CONSTRAINT fk_tasks_tenant_case;
-ALTER TABLE tasks VALIDATE CONSTRAINT fk_tasks_tenant_staff;
-ALTER TABLE invoices VALIDATE CONSTRAINT fk_invoices_tenant_case;
-ALTER TABLE invoices VALIDATE CONSTRAINT fk_invoices_tenant_customer;
-ALTER TABLE payments VALIDATE CONSTRAINT fk_payments_tenant_invoice;
+ALTER TABLE funeral_cases VALIDATE CONSTRAINT fk_funeral_cases_company_customer;
+ALTER TABLE stock_movements VALIDATE CONSTRAINT fk_stock_movements_company_item;
+ALTER TABLE stock_movements VALIDATE CONSTRAINT fk_stock_movements_company_case;
+ALTER TABLE tasks VALIDATE CONSTRAINT fk_tasks_company_case;
+ALTER TABLE tasks VALIDATE CONSTRAINT fk_tasks_company_staff;
+ALTER TABLE invoices VALIDATE CONSTRAINT fk_invoices_company_case;
+ALTER TABLE invoices VALIDATE CONSTRAINT fk_invoices_company_customer;
+ALTER TABLE payments VALIDATE CONSTRAINT fk_payments_company_invoice;
 
 DO $$
 DECLARE
@@ -44,14 +44,14 @@ BEGIN
     AND c.contype = 'f'
     AND c.convalidated
     AND (t.relname, c.conname) IN (
-      ('funeral_cases', 'fk_funeral_cases_tenant_customer'),
-      ('stock_movements', 'fk_stock_movements_tenant_item'),
-      ('stock_movements', 'fk_stock_movements_tenant_case'),
-      ('tasks', 'fk_tasks_tenant_case'),
-      ('tasks', 'fk_tasks_tenant_staff'),
-      ('invoices', 'fk_invoices_tenant_case'),
-      ('invoices', 'fk_invoices_tenant_customer'),
-      ('payments', 'fk_payments_tenant_invoice')
+      ('funeral_cases', 'fk_funeral_cases_company_customer'),
+      ('stock_movements', 'fk_stock_movements_company_item'),
+      ('stock_movements', 'fk_stock_movements_company_case'),
+      ('tasks', 'fk_tasks_company_case'),
+      ('tasks', 'fk_tasks_company_staff'),
+      ('invoices', 'fk_invoices_company_case'),
+      ('invoices', 'fk_invoices_company_customer'),
+      ('payments', 'fk_payments_company_invoice')
     );
   IF required_fk_count <> 8 THEN
     RAISE EXCEPTION 'Tenant finalization blocked: expected 8 validated composite foreign keys, found %',
