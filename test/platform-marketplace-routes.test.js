@@ -252,8 +252,8 @@ test('collection data is not returned when its read audit cannot be recorded', a
   await withServer(createRouter(pool, authOptions()), async base => {
     const response = await fetch(base + '/api/v1/platform/inquiries');
     assert.equal(response.status, 500);
-    const body = await response.json();
-    assert.equal(JSON.stringify(body).includes('private@example.invalid'), false);
+    const body = await response.text();
+    assert.equal(body.includes('private@example.invalid'), false);
   });
 });
 
