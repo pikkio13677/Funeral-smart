@@ -6,6 +6,7 @@ const createPlatformAccess = require('./platform-access');
 const createPlatformCompanyRouter = require('./platform-company-routes');
 const createPlatformMarketplaceRouter = require('./platform-marketplace-routes');
 const assertTenantCutoverReady = require('./tenant-cutover-guard');
+const createProviderInvitationRouter = require('./provider-portal-invitation-routes');
 
 function mountApiRouters({ app, pool, auth, emailNotifications, env = process.env, rateLimit }) {
   if (!app || typeof app.use !== 'function') throw new TypeError('An Express application is required.');
@@ -15,6 +16,7 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
   // Defense in depth: never mount tenant routes unless both cutover switches agree.
   assertTenantCutoverReady(env);
   const multiTenantEnabled = env.ENABLE_MULTI_TENANT === 'true';
+  const providerInvitationsEnabled = env.ENABLE_PROVIDER_PORTAL_INVITATIONS === 'true';
   const authRouter = express.Router();
 
   // Global user administration is unsafe in tenant mode: company admins must
@@ -33,8 +35,24 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
   authRouter.use(auth.router);
   app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), authRouter);
 
+  // Provider invitation APIs are independently opt-in and remain disabled by default.
+  // Startup performs a read-only schema preflight before the listener can open.
+  let providerInvitationRouter = null;
+  if (providerInvitationsEnabled) {
+    providerInvitationRouter = createProviderInvitationRouter({
+      pool,
+      authenticate: auth.authenticate,
+      sendInvitationEmail: emailNotifications?.notifyProviderUserInvitation,
+      publicAppUrl: env.PUBLIC_APP_URL
+    });
+    app.use('/api/v1/provider-portal',
+      rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }),
+      providerInvitationRouter
+    );
+  }
+
   if (!multiTenantEnabled) {
-    return { multiTenantEnabled: false, authRouter };
+    return { multiTenantEnabled: false, authRouter, providerInvitationsEnabled, providerInvitationRouter };
   }
 
   const tenantApi = createTenantApi({
@@ -64,7 +82,7 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
   });
   app.use('/api/v1/platform', marketplaceRouter);
 
-  return { multiTenantEnabled: true, authRouter, tenantApi, platformRouter, marketplaceRouter };
+  return { multiTenantEnabled: true, authRouter, tenantApi, platformRouter, marketplaceRouter, providerInvitationsEnabled, providerInvitationRouter };
 }
 
 module.exports = mountApiRouters;

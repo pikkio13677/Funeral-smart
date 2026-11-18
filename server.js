@@ -11,6 +11,7 @@ const stagingSubmissionGuard = require('./staging-submission-guard')();
 const assertTenantCutoverReady = require('./tenant-cutover-guard');
 const assertTenantSchemaReady = require('./tenant-cutover-readiness');
 const mountApiRouters = require('./api-route-mounts');
+const assertProviderInvitationSchemaReady = require('./provider-invitation-schema-readiness');
 const createPublicIntakeRouter = require('./public-intake-routes');
 
 // Tenant routes require a separate approval flag and a read-only database preflight before the listener opens.
@@ -151,6 +152,10 @@ app.use((err, _req, res, _next) => {
 });
 
 async function startServer() {
+  if (routeMounts.providerInvitationsEnabled) {
+    const readiness = await assertProviderInvitationSchemaReady(pool);
+    console.log('Provider invitation schema preflight superato:', readiness);
+  }
   if (multiTenantEnabled) {
     const readiness = await assertTenantSchemaReady(pool);
     console.log('Tenant cutover preflight superato:', readiness);
