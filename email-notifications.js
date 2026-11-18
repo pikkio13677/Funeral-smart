@@ -96,6 +96,25 @@ function createEmailNotifications({ env = process.env, fetchImpl = global.fetch,
     return true;
   }
 
+  async function notifyProviderUserInvitation({ to, businessName, invitationUrl, expiresAt, role }) {
+    const expiry = new Date(expiresAt).toLocaleString('it-IT', { timeZone: 'Europe/Rome' });
+    const roleLabel = role === 'provider_admin' ? 'Amministratore impresa' : 'Collaboratore';
+    const delivered = await send(
+      to,
+      'Invito al portale imprese FUNERAL SMART — ' + businessName,
+      [
+        'Sei stato invitato ad accedere al portale imprese di ' + businessName + '.',
+        'Ruolo assegnato: ' + roleLabel + '.',
+        'Apri questo collegamento sicuro per accettare l’invito dopo aver effettuato l’accesso al tuo account:',
+        invitationUrl,
+        'Il collegamento scade il: ' + expiry,
+        'Se non riconosci questa richiesta, ignora questa email.'
+      ]
+    );
+    if (!delivered) throw new Error('Provider portal invitation email could not be delivered.');
+    return true;
+  }
+
   async function notifyProviderApplication({ id, businessName, city, email }) {
     if (!env.ADMIN_NOTIFICATION_EMAIL) {
       logger.warn('[email] ADMIN_NOTIFICATION_EMAIL non configurata: avviso candidatura saltato.');
@@ -114,7 +133,7 @@ function createEmailNotifications({ env = process.env, fetchImpl = global.fetch,
     await send(env.ADMIN_NOTIFICATION_EMAIL, 'Nuova candidatura impresa — FUNERAL SMART', lines);
   }
 
-  return { notifyInquiry, notifyProviderApplication, notifyCompanyInvitation };
+  return { notifyInquiry, notifyProviderApplication, notifyCompanyInvitation, notifyProviderUserInvitation };
 }
 
 module.exports = createEmailNotifications;
