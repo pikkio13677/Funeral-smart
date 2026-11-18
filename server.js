@@ -49,6 +49,55 @@ app.use('/api/v1', createPublicIntakeRouter({
   submissionLimiter: publicSubmissionLimiter
 }));
 
+const auth = require('./auth')(pool);
+const routeMounts = mountApiRouters({ app, pool, auth, emailNotifications, env: process.env, rateLimit });
+const multiTenantEnabled = routeMounts.multiTenantEnabled;
+
+app.get('/api/health', async (_req, res) => {
+  try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'funeral-smart-api', database: 'connected' }); }
+  catch (_e) { res.status(503).json({ status: 'degraded', service: 'funeral-smart-api', database: 'unavailable' }); }
+});
+
+app.get('/api/v1/services', async (_req, res, next) => {
+  try {
+    const { rows } = await pool.query('SELECT code, label, description FROM service_types WHERE active = TRUE ORDER BY sort_order, label');
+    res.json({ data: rows });
+  } catch (e) { next(e); }
+});
+
+app.get('/api/v1/providers', async (req, res, next) => {
+  const parsed = z.object({ city: z.string().trim().max(100).optional(), service: z.string().trim().max(80).optional() }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: 'Filtri non validi' });
+  try {
+    const values = []; let where = "p.status = 'verified'";
+    if (parsed.data.city) { values.push(`%${parsed.data.city}%`); where += ` AND (p.city ILIKE $${values.length} OR p.province ILIKE $${values.length})`; }
+    if (parsed.data.service) { values.push(parsed.data.service); where += ` AND EXISTS (SELECT 1 FROM provider_services ps JOIN service_types st ON st.id=ps.service_type_id WHERE ps.provider_id=p.id AND st.code=$${values.length})`; }
+    const { rows } = await pool.query(`SELECT p.id, p.business_name AS "businessName", p.city, p.province, p.website, p.phone, p.verification_date AS "verificationDate" FROM providers p WHERE ${where} ORDER BY p.business_name LIMIT 100`, values);
+    res.json({ data: rows, count: rows.length, note: 'Sono mostrate esclusivamente imprese con stato verificato.' });
+  } catch (e) { next(e); }
+});
+
+app.get('/api/v1/price-lists', async (req, res, next) => {
+  const parsed = z.object({ city: z.string().trim().max(100).optional(), service: z.string().trim().max(80).optional() }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: 'Filtri non validi' });
+  try {
+    const values = []; let where = "pl.published = TRUE AND p.status = 'verified'";
+    if (parsed.data.city) { values.push(`%${parsed.data.city}%`); where += ` AND (p.city ILIKE $${values.length} OR p.province ILIKE $${values.length})`; }
+    if (parsed.data.service) { values.push(parsed.data.service); where += ` AND st.code = $${values.length}`; }
+    const { rows } = await pool.query(
+      `SELECT pl.id, pl.title, pl.total_euro AS "totalEuro", pl.vat_included AS "vatIncluded",
+              pl.included_items AS "includedItems", pl.excluded_items AS "excludedItems",
+              pl.third_party_costs_note AS "thirdPartyCostsNote", pl.valid_from AS "validFrom", pl.valid_until AS "validUntil",
+              p.id AS "providerId", p.business_name AS "businessName", p.city, p.province,
+              st.code AS "serviceCode", st.label AS "serviceLabel"
+       FROM price_lists pl JOIN providers p ON p.id=pl.provider_id
+       JOIN service_types st ON st.id=pl.service_type_id WHERE ${where}
+       AND (pl.valid_until IS NULL OR pl.valid_until >= CURRENT_DATE)
+       ORDER BY p.city, p.business_name, pl.title LIMIT 200`, values
+    );
+    res.json({ data: rows, count: rows.length, note: 'Sono mostrati solo listini pubblicati di imprese verificate. Un prezzo nullo indica che il totale va richiesto.' });
+  } catch (e) { next(e); }
+});
 
 if (!multiTenantEnabled) {
   app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, async (_req, res, next) => {
