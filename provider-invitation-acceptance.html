@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#173b35">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<title>FUNERAL SMART — Accetta invito impresa</title>
+<style>
+:root{color-scheme:light;--green:#173b35;--green2:#245b4e;--gold:#c9ad78;--ink:#24312b;--muted:#68766f;--line:#e1e8e2;--bg:#f3f6f3;--white:#fff;--warn:#fff5df;--warnink:#715522;--ok:#eaf5ed;--okink:#245b3c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:linear-gradient(120deg,var(--green),var(--green2));color:white;padding:22px max(20px,calc((100vw - 760px)/2))}
+.brand{display:flex;align-items:center;gap:12px}.mark{width:42px;height:42px;border:1px solid var(--gold);border-radius:13px;display:grid;place-items:center;color:#e3ca91;font-size:22px}.brand strong{display:block;letter-spacing:.1em;font-size:14px}.brand small{color:#d5e2dc;font-size:12px}
+main{max-width:620px;margin:34px auto;padding:0 16px 50px}.panel{background:var(--white);border:1px solid var(--line);border-radius:17px;padding:clamp(20px,5vw,30px);box-shadow:0 12px 34px #1b3c2d0a}
+.eyebrow{color:var(--green2);font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}h1{font-size:25px;line-height:1.2;letter-spacing:-.03em;margin:7px 0 9px}h2{font-size:18px;margin:22px 0 8px}p{color:var(--muted);margin:8px 0 15px}.field{margin:14px 0}.field label{display:block;font-size:12px;font-weight:750;color:#53635a;margin-bottom:6px}
+input{width:100%;border:1px solid #d4dfd6;border-radius:10px;padding:13px 12px;font:inherit;background:#fff;color:var(--ink)}input:focus{outline:3px solid #c9ad7855;border-color:#947a4e}
+button{width:100%;border:0;border-radius:10px;background:var(--green);color:white;padding:13px 16px;font:700 14px system-ui;cursor:pointer;margin-top:7px}button:disabled{opacity:.55;cursor:wait}
+.note{border-radius:11px;padding:12px 14px;background:#f0f4f0;color:#526158;font-size:13px;margin:16px 0}.message{border-radius:11px;padding:13px 14px;background:var(--warn);color:var(--warnink);font-size:14px;margin-top:16px;white-space:pre-wrap}.message.success{background:var(--ok);color:var(--okink)}.hidden{display:none!important}.divider{border:0;border-top:1px solid var(--line);margin:22px 0}.muted-small{font-size:12px}.status{display:flex;gap:9px;align-items:flex-start}.status strong{display:block}.footer{text-align:center;color:var(--muted);font-size:11px;margin:18px 0}
+</style>
+</head>
+<body>
+<header><div class="brand"><div class="mark" aria-hidden="true">✦</div><div><strong>FUNERAL SMART</strong><small>Portale imprese partner</small></div></div></header>
+<main>
+<section class="panel" aria-labelledby="page-title">
+<div class="eyebrow">Accesso riservato</div>
+<h1 id="page-title">Accetta l’invito della tua impresa</h1>
+<p>Per attivare l’accesso, entra con l’account Funeral Smart associato all’indirizzo email che ha ricevuto l’invito.</p>
+<div id="invalid" class="message hidden" role="alert"></div>
+<div id="checking" class="note">Verifica del collegamento in corso…</div>
+<div id="signed-in" class="hidden">
+<div class="note" id="account-label"></div>
+<button id="accept-button" type="button">Accetta invito</button>
+</div>
+<form id="login-form" class="hidden">
+<h2>Accedi al tuo account</h2>
+<div class="field"><label for="username">Username</label><input id="username" name="username" autocomplete="username" required maxlength="60"></div>
+<div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required maxlength="200"></div>
+<button id="login-button" type="submit">Accedi e continua</button>
+</form>
+<form id="mfa-form" class="hidden">
+<h2>Verifica in due passaggi</h2>
+<p>Inserisci il codice dell’app Authenticator o un codice di recupero.</p>
+<div class="field"><label for="mfa-code">Codice di verifica</label><input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" required maxlength="32"></div>
+<button id="mfa-button" type="submit">Verifica e continua</button>
+</form>
+<div id="message" class="message hidden" role="status" aria-live="polite"></div>
+<div class="note"><strong>Protezione dell’account</strong><br>Il link è personale, monouso e valido per un periodo limitato. L’indirizzo email dell’account deve essere già verificato e coincidere con quello dell’invito.</div>
+</section>
+<div class="footer">FUNERAL SMART · Accesso sicuro per imprese partner</div>
+</main>
+<script>
+'use strict';
+const API = '/api/v1';
+const params = new URLSearchParams(window.location.search);
+const invitationToken = params.get('token') || '';
+// Remove the bearer token from the visible URL as soon as it has been captured.
+if (params.has('token')) window.history.replaceState({}, document.title, window.location.pathname);
+const $ = id => document.getElementById(id);
+let busy = false;
+
+function showMessage(text, success=false) {
+  $('message').textContent = text;
+  $('message').className = 'message' + (success ? ' success' : '');
+  $('message').classList.remove('hidden');
+}
+function hideForms() {
+  ['signed-in','login-form','mfa-form'].forEach(id => $(id).classList.add('hidden'));
+}
+async function request(path, options={}) {
+  const response = await fetch(API + path, {
+    method: options.method || 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: options.body ? {'Content-Type':'application/json'} : {},
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Operazione non riuscita. Riprova.');
+  return payload;
+}
+function setBusy(formId, value) {
+  const button = $(formId).querySelector('button');
+  button.disabled = value;
+}
+async function acceptInvitation() {
+  if (!invitationToken) throw new Error('Il link non contiene un codice di invito.');
+  const result = await request('/provider-portal/invitations/accept', {
+    method:'POST', body:{token:invitationToken}
+  });
+  hideForms();
+  showMessage(result.message || 'Invito accettato correttamente. Il tuo accesso all’impresa è stato attivato.', true);
+  $('message').focus();
+}
+$('accept-button').addEventListener('click', async () => {
+  if (busy) return;
+  busy = true; $('accept-button').disabled = true;
+  try { await acceptInvitation(); }
+  catch (error) { showMessage(error.message); }
+  finally { busy = false; $('accept-button').disabled = false; }
+});
+$('login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (busy) return;
+  busy = true; setBusy('login-form', true);
+  try {
+    const result = await request('/auth/login', {
+      method:'POST',
+      body:{username:$('username').value.trim(),password:$('password').value}
+    });
+    $('password').value = '';
+    if (result.mfaRequired) {
+      $('login-form').classList.add('hidden');
+      $('mfa-form').classList.remove('hidden');
+      $('mfa-code').focus();
+      showMessage('Inserisci il codice MFA per completare l’accesso.');
+    } else {
+      await acceptInvitation();
+    }
+  } catch (error) { showMessage(error.message); }
+  finally { busy = false; setBusy('login-form', false); }
+});
+$('mfa-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (busy) return;
+  busy = true; setBusy('mfa-form', true);
+  try {
+    await request('/auth/mfa/verify-login', {
+      method:'POST', body:{code:$('mfa-code').value.trim()}
+    });
+    $('mfa-code').value = '';
+    await acceptInvitation();
+  } catch (error) { showMessage(error.message); }
+  finally { busy = false; setBusy('mfa-form', false); }
+});
+(async function initialize() {
+  $('checking').classList.add('hidden');
+  if (!invitationToken || invitationToken.length < 32 || invitationToken.length > 200) {
+    $('invalid').textContent = 'Il link di invito è incompleto o non valido. Chiedi all’amministratore dell’impresa di inviarti un nuovo invito.';
+    $('invalid').classList.remove('hidden');
+    return;
+  }
+  try {
+    const session = await request('/auth/me');
+    $('account-label').textContent = 'Hai effettuato l’accesso come ' + (session.data.displayName || session.data.username) + '. Se l’email verificata corrisponde all’invito, puoi continuare.';
+    $('signed-in').classList.remove('hidden');
+  } catch (_error) {
+    $('login-form').classList.remove('hidden');
+  }
+})();
+</script>
+</body>
+</html>
