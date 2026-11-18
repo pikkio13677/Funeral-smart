@@ -471,7 +471,7 @@ test('provider administrator can suspend a colleague with atomic audit', async (
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.data.status, 'suspended');
   assert.equal(client.calls.some(call => call.sql.includes('FOR UPDATE')), true);
-  assert.equal(client.calls.some(call => call.sql.includes("provider.member.suspended")), true);
+  assert.equal(client.calls.some(call => call.args?.includes('provider.member.suspended')), true);
   assert.equal(client.calls.some(call => call.sql === 'COMMIT'), true);
 });
 
@@ -551,7 +551,7 @@ test('suspended member can be reactivated, but platform-disabled accounts stay b
   }, res, error => { throw error; });
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.data.status, 'active');
-  assert.equal(client.calls.some(call => call.sql.includes('provider.member.reactivated')), true);
+  assert.equal(client.calls.some(call => call.args?.includes('provider.member.reactivated')), true);
   assert.equal(client.calls.some(call => call.sql === 'COMMIT'), true);
 });
 
