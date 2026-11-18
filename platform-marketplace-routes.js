@@ -71,10 +71,6 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'Transizione di stato non consentita per questa richiesta.' });
       }
-      if (current.rows[0].status === parsed.data.status) {
-        await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'La richiesta ha già questo stato.' });
-      }
       const updated = await client.query(
         'UPDATE inquiries SET status=$1 WHERE id=$2 RETURNING id,status',
         [parsed.data.status, id.data]
