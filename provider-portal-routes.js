@@ -128,6 +128,39 @@ function createProviderPortalRouter(pool, options = {}) {
     } catch (error) { next(error); }
   });
 
+  router.get('/inquiries/:assignmentId', async (req, res, next) => {
+    const assignmentId = z.string().uuid().safeParse(req.params.assignmentId);
+    if (!assignmentId.success) return res.status(400).json({ error: 'Identificativo incarico non valido.' });
+
+    try {
+      const result = await pool.query(
+        `SELECT assignment.id AS "assignmentId",
+                inquiry.city,
+                inquiry.service_type AS "serviceType",
+                inquiry.destination_country AS "destinationCountry",
+                inquiry.created_at AS "receivedAt",
+                assignment.assigned_at AS "assignedAt",
+                response.status AS "responseStatus",
+                CASE WHEN response.status = 'accepted' THEN inquiry.contact_email ELSE NULL END AS "contactEmail",
+                CASE WHEN response.status = 'accepted' THEN inquiry.contact_phone ELSE NULL END AS "contactPhone"
+         FROM inquiry_provider_assignments assignment
+         JOIN inquiries inquiry ON inquiry.id = assignment.inquiry_id
+         LEFT JOIN provider_inquiry_responses response
+           ON response.assignment_id = assignment.id
+          AND response.provider_id = assignment.provider_id
+         WHERE assignment.id = $1
+           AND assignment.provider_id = $2
+           AND assignment.status = 'active'
+           AND inquiry.status NOT IN ('closed', 'deleted')
+         LIMIT 1`,
+        [assignmentId.data, req.provider.providerId]
+      );
+      if (!result.rowCount) return res.status(404).json({ error: 'Incarico non trovato o non più disponibile.' });
+      res.set('Cache-Control', 'no-store');
+      res.json({ data: result.rows[0] });
+    } catch (error) { next(error); }
+  });
+
   router.post('/inquiries/:assignmentId/response', async (req, res, next) => {
     const assignmentId = z.string().uuid().safeParse(req.params.assignmentId);
     const parsed = z.object({
