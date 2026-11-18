@@ -296,6 +296,7 @@ test('inquiry assignment refuses a second active assignment and invalid states',
   const pool = fakePool(async sql => {
     if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
     if (sql.startsWith('SELECT id,status FROM inquiries')) return { rowCount: 1, rows: [{ id: INQUIRY_ID, status: 'assigned' }] };
+    if (sql.startsWith("SELECT id FROM inquiry_provider_assignments")) return { rowCount: 1, rows: [{ id: '66666666-6666-4666-8666-666666666666' }] };
     return { rowCount: 0, rows: [] };
   });
   await withServer(createRouter(pool, authOptions()), async base => {
