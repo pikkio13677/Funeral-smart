@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS provider_user_invitations (
   accepted_at TIMESTAMPTZ,
   revoked_at TIMESTAMPTZ,
   CHECK (expires_at > created_at),
-  CHECK ((status = 'accepted' AND accepted_at IS NOT NULL AND accepted_by_user_id IS NOT NULL)
+  CHECK ((status = 'accepted' AND accepted_at IS NOT NULL)
       OR status <> 'accepted')
 );
 CREATE INDEX IF NOT EXISTS idx_provider_user_invitations_provider_status
@@ -79,3 +79,76 @@ CREATE INDEX IF NOT EXISTS idx_provider_portal_audit_provider_created
 -- esclusivamente da un invito verificato. Nessun collegamento automatico per email.
 -- Le API devono ricavare provider_id dal record provider_user_access attivo,
 -- mai da un parametro controllato dal browser.
+
+-- Difesa referenziale: una risposta o un evento audit non può attribuire
+-- un incarico all'ID di un'altra impresa. L'ID assegnazione è già PK;
+-- questo indice univoco abilita la FK composta richiesta dal modello.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_inquiry_provider_assignments_id_provider
+  ON inquiry_provider_assignments(id, provider_id);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.provider_inquiry_responses'::regclass
+      AND conname = 'fk_provider_response_assignment_provider'
+  ) THEN
+    ALTER TABLE provider_inquiry_responses
+      ADD CONSTRAINT fk_provider_response_assignment_provider
+      FOREIGN KEY (assignment_id, provider_id)
+      REFERENCES inquiry_provider_assignments(id, provider_id)
+      ON DELETE RESTRICT;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.provider_portal_audit_log'::regclass
+      AND conname = 'fk_provider_audit_assignment_provider'
+  ) THEN
+    ALTER TABLE provider_portal_audit_log
+      ADD CONSTRAINT fk_provider_audit_assignment_provider
+      FOREIGN KEY (assignment_id, provider_id)
+      REFERENCES inquiry_provider_assignments(id, provider_id)
+      ON DELETE RESTRICT;
+  END IF;
+END $$;
+
+-- L'email viene normalizzata dall'API prima dell'inserimento; il vincolo
+-- protegge anche da scritture alternative o future regressioni.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.provider_user_invitations'::regclass
+      AND conname = 'ck_provider_invitation_email_normalized'
+  ) THEN
+    ALTER TABLE provider_user_invitations
+      ADD CONSTRAINT ck_provider_invitation_email_normalized
+      CHECK (email = lower(btrim(email)));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.provider_user_invitations'::regclass
+      AND conname = 'ck_provider_invitation_state_timestamps'
+  ) THEN
+    ALTER TABLE provider_user_invitations
+      ADD CONSTRAINT ck_provider_invitation_state_timestamps
+      CHECK (
+        (status = 'accepted'
+          AND accepted_at IS NOT NULL
+          AND revoked_at IS NULL)
+        OR
+        (status = 'revoked'
+          AND revoked_at IS NOT NULL
+          AND accepted_at IS NULL
+          AND accepted_by_user_id IS NULL)
+        OR
+        (status IN ('pending', 'expired')
+          AND accepted_at IS NULL
+          AND accepted_by_user_id IS NULL
+          AND revoked_at IS NULL)
+      );
+  END IF;
+END $$;
+

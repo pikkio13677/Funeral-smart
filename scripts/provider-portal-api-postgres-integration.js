@@ -69,6 +69,19 @@ async function main() {
       migrationClient.release();
     }
 
+    // Idempotence: applying the staged migration twice must not fail.
+    const repeatClient = await pool.connect();
+    try {
+      await repeatClient.query('BEGIN');
+      await repeatClient.query(migration);
+      await repeatClient.query('COMMIT');
+    } catch (error) {
+      await repeatClient.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      repeatClient.release();
+    }
+
     await pool.query(
       "INSERT INTO app_users(id,username,display_name,password_hash,role,active) VALUES($1,$2,$3,$4,'operator',TRUE)",
       [userId, 'ci_provider_' + suffix, 'Provider Portal Integration Test', 'test-only-not-a-real-password-hash']
@@ -89,6 +102,62 @@ async function main() {
       "INSERT INTO inquiry_provider_assignments(id,inquiry_id,provider_id,status) VALUES($1,$2,$3,'active'),($4,$5,$6,'active'),($7,$8,$3,'active')",
       [alphaAssignmentId, alphaInquiryId, alphaId, betaAssignmentId, betaInquiryId, betaId, rejectAssignmentId, rejectInquiryId]
     );
+
+    // Database-level cross-provider protection: a response or audit event
+    // cannot claim an assignment belonging to the other provider.
+    await assert.rejects(
+      pool.query(
+        "INSERT INTO provider_inquiry_responses(assignment_id,provider_id,status,reason) VALUES($1,$2,'accepted','Tentativo di associazione incrociata non consentito.')",
+        [alphaAssignmentId, betaId]
+      ),
+      error => error.code === '23503'
+    );
+    await assert.rejects(
+      pool.query(
+        "INSERT INTO provider_portal_audit_log(provider_id,assignment_id,action) VALUES($1,$2,'test.cross-provider')",
+        [betaId, alphaAssignmentId]
+      ),
+      error => error.code === '23503'
+    );
+
+    // Invitations must be stored normalized and state timestamps must agree.
+    await assert.rejects(
+      pool.query(
+        "INSERT INTO provider_user_invitations(provider_id,email,role,token_hash,expires_at) VALUES($1,'UPPER@example.invalid','provider_operator',$2,NOW()+INTERVAL '1 hour')",
+        [alphaId, crypto.createHash('sha256').update('invalid-email-test').digest('hex')]
+      ),
+      error => error.code === '23514'
+    );
+    await assert.rejects(
+      pool.query(
+        "INSERT INTO provider_user_invitations(provider_id,email,role,token_hash,status,expires_at) VALUES($1,'valid@example.invalid','provider_operator',$2,'accepted',NOW()+INTERVAL '1 hour')",
+        [alphaId, crypto.createHash('sha256').update('invalid-state-test').digest('hex')]
+      ),
+      error => error.code === '23514'
+    );
+
+    // Deleting an account must preserve the accepted invitation history:
+    // accepted_by_user_id is intentionally nullable with ON DELETE SET NULL.
+    const deletedActorId = crypto.randomUUID();
+    const deletedActorSuffix = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+    const deletedActorTokenHash = crypto.createHash('sha256').update('deleted-actor-' + deletedActorSuffix).digest('hex');
+    await pool.query(
+      "INSERT INTO app_users(id,username,display_name,password_hash,role,active) VALUES($1,$2,$3,$4,'operator',TRUE)",
+      [deletedActorId, 'ci_deleted_actor_' + deletedActorSuffix, 'Deleted Invitation Actor Test', 'test-only-not-a-real-password-hash']
+    );
+    await pool.query(
+      "INSERT INTO provider_user_invitations(provider_id,email,role,token_hash,status,accepted_by_user_id,expires_at,accepted_at) VALUES($1,$2,'provider_operator',$3,'accepted',$4,NOW()+INTERVAL '1 hour',NOW())",
+      [alphaId, 'deleted-actor-' + deletedActorSuffix + '@example.invalid', deletedActorTokenHash, deletedActorId]
+    );
+    await pool.query('DELETE FROM app_users WHERE id=$1', [deletedActorId]);
+    const retainedInvitation = await pool.query(
+      'SELECT status,accepted_at,accepted_by_user_id FROM provider_user_invitations WHERE token_hash=$1',
+      [deletedActorTokenHash]
+    );
+    assert.equal(retainedInvitation.rowCount, 1);
+    assert.equal(retainedInvitation.rows[0].status, 'accepted');
+    assert.ok(retainedInvitation.rows[0].accepted_at);
+    assert.equal(retainedInvitation.rows[0].accepted_by_user_id, null);
 
     server = http.createServer(app);
     await new Promise((resolve, reject) => {
@@ -181,6 +250,7 @@ async function main() {
     process.stdout.write('Provider portal PostgreSQL integration checks passed.\\n');
   } finally {
     if (server) await new Promise(resolve => server.close(resolve));
+    await pool.query('DELETE FROM provider_user_invitations WHERE provider_id = ANY($1::uuid[])', [[alphaId, betaId]]).catch(() => {});
     await pool.query('DELETE FROM provider_portal_audit_log WHERE user_id=$1', [userId]).catch(() => {});
     await pool.query('DELETE FROM provider_inquiry_responses WHERE assignment_id = ANY($1::uuid[])', [[alphaAssignmentId, betaAssignmentId, rejectAssignmentId]]).catch(() => {});
     await pool.query('DELETE FROM inquiry_provider_assignments WHERE id = ANY($1::uuid[])', [[alphaAssignmentId, betaAssignmentId, rejectAssignmentId]]).catch(() => {});

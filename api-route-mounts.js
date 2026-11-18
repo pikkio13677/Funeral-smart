@@ -33,8 +33,66 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
   authRouter.use(auth.router);
   app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), authRouter);
 
+  // Provider marketplace access is separately gated; it is never enabled by tenant cutover.
+  let providerPortal = null;
+  if (env.ENABLE_PROVIDER_PORTAL === 'true') {
+    const passThrough = (_req, _res, next) => next();
+    const providerApi = express.Router();
+    providerApi.use(auth.authenticate);
+    providerApi.use(async (_req, res, next) => {
+      try {
+        const schema = await pool.query(
+          `SELECT
+             to_regclass('public.providers') IS NOT NULL AS providers,
+             to_regclass('public.provider_user_access') IS NOT NULL AS provider_user_access,
+             to_regclass('public.provider_user_invitations') IS NOT NULL AS provider_user_invitations,
+             to_regclass('public.provider_inquiry_responses') IS NOT NULL AS provider_inquiry_responses,
+             to_regclass('public.provider_portal_audit_log') IS NOT NULL AS provider_portal_audit_log,
+             to_regclass('public.inquiry_provider_assignments') IS NOT NULL AS inquiry_provider_assignments,
+             to_regclass('public.inquiries') IS NOT NULL AS inquiries`
+        );
+        if (!schema.rowCount || Object.values(schema.rows[0]).some(value => value !== true)) {
+          return res.status(503).json({ error: 'Portale imprese non pronto: schema richiesto non disponibile.' });
+        }
+        return next();
+      } catch (_error) {
+        return res.status(503).json({ error: 'Verifica disponibilità portale imprese non riuscita.' });
+      }
+    });
+    providerApi.use((req, res, next) => {
+      if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+      let expectedOrigin;
+      try {
+        const configured = new URL(env.PUBLIC_APP_URL || '');
+        if (configured.protocol !== 'https:') throw new Error('HTTPS required');
+        expectedOrigin = configured.origin;
+      } catch (_error) {
+        return res.status(503).json({ error: 'Origine HTTPS del portale non configurata.' });
+      }
+      if (req.get('origin') !== expectedOrigin) {
+        return res.status(403).json({ error: 'Origine della richiesta non autorizzata.' });
+      }
+      return next();
+    });
+
+    const createProviderPortalRouter = require('./provider-portal-routes');
+    const createProviderPortalInvitationRouter = require('./provider-portal-invitation-routes');
+    // Invitation acceptance must run before providerContext: invitees have no provider membership yet.
+    providerApi.use(createProviderPortalInvitationRouter({
+      pool,
+      authenticate: passThrough,
+      sendInvitationEmail: emailNotifications?.notifyProviderUserInvitation,
+      publicAppUrl: env.PUBLIC_APP_URL
+    }));
+    providerApi.use(createProviderPortalRouter(pool, { authenticate: passThrough }));
+    app.use('/api/v1/provider-portal', rateLimit({
+      windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: 'draft-7', legacyHeaders: false
+    }), providerApi);
+    providerPortal = { enabled: true };
+  }
+
   if (!multiTenantEnabled) {
-    return { multiTenantEnabled: false, authRouter };
+    return { multiTenantEnabled: false, authRouter, providerPortal };
   }
 
   const tenantApi = createTenantApi({
@@ -64,7 +122,7 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
   });
   app.use('/api/v1/platform', marketplaceRouter);
 
-  return { multiTenantEnabled: true, authRouter, tenantApi, platformRouter, marketplaceRouter };
+  return { multiTenantEnabled: true, authRouter, tenantApi, platformRouter, marketplaceRouter, providerPortal };
 }
 
 module.exports = mountApiRouters;

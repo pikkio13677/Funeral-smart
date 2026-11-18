@@ -115,6 +115,19 @@ if (!multiTenantEnabled) {
   
 }
 
+// Provider portal pages remain inert until the provider API and migration are explicitly enabled.
+function sendProviderPortalPage(file) {
+  return (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+    res.sendFile(require('path').join(__dirname, file));
+  };
+}
+app.get('/provider/invito/accetta', sendProviderPortalPage('provider-invitation.html'));
+app.get('/provider/portale', sendProviderPortalPage('provider-portal.html'));
+
 // Pagina same-origin per accettare inviti aziendali. I dati restano gestiti dalle API protette.
 app.get('/invito/accetta', (_req, res) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
