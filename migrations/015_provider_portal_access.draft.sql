@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS provider_user_invitations (
   accepted_at TIMESTAMPTZ,
   revoked_at TIMESTAMPTZ,
   CHECK (expires_at > created_at),
-  CHECK ((status = 'accepted' AND accepted_at IS NOT NULL AND accepted_by_user_id IS NOT NULL)
+  CHECK ((status = 'accepted' AND accepted_at IS NOT NULL)
       OR status <> 'accepted')
 );
 CREATE INDEX IF NOT EXISTS idx_provider_user_invitations_provider_status
@@ -137,7 +137,6 @@ BEGIN
       CHECK (
         (status = 'accepted'
           AND accepted_at IS NOT NULL
-          AND accepted_by_user_id IS NOT NULL
           AND revoked_at IS NULL)
         OR
         (status = 'revoked'
