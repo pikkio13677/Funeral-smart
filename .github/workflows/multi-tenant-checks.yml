@@ -8,11 +8,13 @@ on:
       - "test/**"
       - "fix/**"
       - "security/**"
+      - "integration/**"
   push:
     branches:
       - 'feat/**'
       - 'fix/**'
       - 'security/**'
+      - 'integration/**'
 
 permissions:
   contents: read
