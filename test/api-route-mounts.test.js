@@ -99,9 +99,11 @@ test('provider invitation API is not mounted unless its dedicated feature flag i
 
   const enabled = fixtures(false, false, { providerInvitations: true });
   assert.equal(enabled.result.providerInvitationsEnabled, true);
-  const mount = enabled.mounts.find(item => item.path === '/api/v1/provider-portal');
-  assert.ok(mount);
-  assert.equal(mount.handlers.at(-1), enabled.result.providerInvitationRouter);
+  const mounts = enabled.mounts.filter(item => item.path === '/api/v1/provider-portal');
+  assert.equal(mounts.length, 3);
+  assert.equal(mounts[0].handlers.length, 1); // One rate limiter for the whole prefix.
+  assert.equal(mounts[1].handlers[0], enabled.result.providerInvitationRouter);
+  assert.equal(mounts[2].handlers[0], enabled.result.providerPortalRouter);
   assert.equal(enabled.result.multiTenantEnabled, false);
 });
 
@@ -109,4 +111,15 @@ test('provider invitation API is not implicitly enabled by multi-tenant mode', (
   const { result, mounts } = fixtures(true);
   assert.equal(result.providerInvitationsEnabled, false);
   assert.equal(mounts.some(item => item.path === '/api/v1/provider-portal'), false);
+});
+
+
+test('provider portal data APIs share the dedicated opt-in flag and stay disabled by default', () => {
+  const legacy = fixtures(false);
+  assert.equal(legacy.result.providerPortalRouter, null);
+  assert.equal(legacy.mounts.some(item => item.path === '/api/v1/provider-portal'), false);
+
+  const enabled = fixtures(false, false, { providerInvitations: true });
+  assert.ok(enabled.result.providerPortalRouter);
+  assert.equal(enabled.result.multiTenantEnabled, false);
 });
