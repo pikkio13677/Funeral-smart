@@ -136,6 +136,29 @@ async function main() {
       error => error.code === '23514'
     );
 
+    // Deleting an account must preserve the accepted invitation history:
+    // accepted_by_user_id is intentionally nullable with ON DELETE SET NULL.
+    const deletedActorId = crypto.randomUUID();
+    const deletedActorSuffix = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+    const deletedActorTokenHash = crypto.createHash('sha256').update('deleted-actor-' + deletedActorSuffix).digest('hex');
+    await pool.query(
+      "INSERT INTO app_users(id,username,display_name,password_hash,role,active) VALUES($1,$2,$3,$4,'operator',TRUE)",
+      [deletedActorId, 'ci_deleted_actor_' + deletedActorSuffix, 'Deleted Invitation Actor Test', 'test-only-not-a-real-password-hash']
+    );
+    await pool.query(
+      "INSERT INTO provider_user_invitations(provider_id,email,role,token_hash,status,accepted_by_user_id,expires_at,accepted_at) VALUES($1,$2,'provider_operator',$3,'accepted',$4,NOW()+INTERVAL '1 hour',NOW())",
+      [alphaId, 'deleted-actor-' + deletedActorSuffix + '@example.invalid', deletedActorTokenHash, deletedActorId]
+    );
+    await pool.query('DELETE FROM app_users WHERE id=$1', [deletedActorId]);
+    const retainedInvitation = await pool.query(
+      'SELECT status,accepted_at,accepted_by_user_id FROM provider_user_invitations WHERE token_hash=$1',
+      [deletedActorTokenHash]
+    );
+    assert.equal(retainedInvitation.rowCount, 1);
+    assert.equal(retainedInvitation.rows[0].status, 'accepted');
+    assert.ok(retainedInvitation.rows[0].accepted_at);
+    assert.equal(retainedInvitation.rows[0].accepted_by_user_id, null);
+
     server = http.createServer(app);
     await new Promise((resolve, reject) => {
       server.once('error', reject);
@@ -227,6 +250,7 @@ async function main() {
     process.stdout.write('Provider portal PostgreSQL integration checks passed.\\n');
   } finally {
     if (server) await new Promise(resolve => server.close(resolve));
+    await pool.query('DELETE FROM provider_user_invitations WHERE provider_id = ANY($1::uuid[])', [[alphaId, betaId]]).catch(() => {});
     await pool.query('DELETE FROM provider_portal_audit_log WHERE user_id=$1', [userId]).catch(() => {});
     await pool.query('DELETE FROM provider_inquiry_responses WHERE assignment_id = ANY($1::uuid[])', [[alphaAssignmentId, betaAssignmentId, rejectAssignmentId]]).catch(() => {});
     await pool.query('DELETE FROM inquiry_provider_assignments WHERE id = ANY($1::uuid[])', [[alphaAssignmentId, betaAssignmentId, rejectAssignmentId]]).catch(() => {});
