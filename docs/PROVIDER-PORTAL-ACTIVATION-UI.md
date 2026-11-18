@@ -16,3 +16,13 @@ Le pagine sono servite da Express. Il mount delle API provider è ora predispost
 Prima di qualsiasi attivazione occorrono revisione e test della migrazione 015 su PostgreSQL usa-e-getta, mount delle route dietro feature flag disabilitato per default, rate limiting e protezione CSRF/origin coerenti con l'app, test end-to-end di Alfa/Beta, MFA, token scaduti/riutilizzati, privacy recapiti e rollback audit.
 
 Nessuna migrazione, scrittura DB, modifica Render, email reale, merge o deploy è stata eseguita.
+
+## Migrazione 015 — hardening e verifica isolata
+
+La bozza 015 aggiunge inoltre:
+- FK composte tra (assignment_id, provider_id) su risposte e audit, così il database impedisce di attribuire a un'impresa l'incarico di un'altra;
+- vincolo che impone email invito già normalizzate in minuscolo;
+- coerenza tra stato invito e timestamp di accettazione/revoca;
+- indice univoco composto sull'identità dell'assegnazione, prerequisito delle FK.
+
+La pipeline applica 015 due volte in transazione su PostgreSQL usa-e-getta e verifica i vincoli; il test API ripete l'applicazione e tenta inserimenti cross-provider e stati invito incoerenti, che devono essere rifiutati dal database. La migrazione resta un file draft e non viene aggiunta a `migrate.js`.
