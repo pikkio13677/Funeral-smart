@@ -577,3 +577,73 @@ test('provider administrator cannot modify a membership belonging to another pro
   assert.equal(client.calls.some(call => call.sql.includes('provider.member.suspended')), false);
   assert.equal(client.calls.some(call => call.sql === 'ROLLBACK'), true);
 });
+
+
+test('provider administrators can promote an operator with atomic role-change audit', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM providers')) return { rowCount: 1, rows: [{ id: 'provider-alpha' }] };
+    if (sql.includes('FROM provider_user_access') && sql.includes('FOR UPDATE')) return { rowCount: 1, rows: [{
+      id: 'member-1', userId: 'operator-user', role: 'provider_operator', status: 'active'
+    }] };
+    return { rowCount: 1, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/members/:accessId/role', 'patch')({
+    user: { id: 'admin-user' },
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+    params: { accessId: '11111111-1111-4111-8111-111111111111' },
+    body: { role: 'provider_admin' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.role, 'provider_admin');
+  assert.equal(client.calls.some(call => call.sql.includes('UPDATE provider_user_access SET role')), true);
+  assert.equal(client.calls.some(call => call.args?.includes('provider.member.role_changed')), true);
+  assert.equal(client.calls.some(call => call.sql === 'COMMIT'), true);
+});
+
+test('last active administrator cannot be demoted to operator', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM providers')) return { rowCount: 1, rows: [{ id: 'provider-alpha' }] };
+    if (sql.includes('FROM provider_user_access') && sql.includes('FOR UPDATE')) return { rowCount: 1, rows: [{
+      id: 'admin-access', userId: 'admin-user', role: 'provider_admin', status: 'active'
+    }] };
+    if (sql.includes('SELECT COUNT(*)::int AS active_admins')) return { rowCount: 1, rows: [{ active_admins: 1 }] };
+    return { rowCount: 1, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/members/:accessId/role', 'patch')({
+    user: { id: 'admin-user' },
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+    params: { accessId: '11111111-1111-4111-8111-111111111111' },
+    body: { role: 'provider_operator' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 409);
+  assert.match(res.body.error, /ultimo amministratore attivo/);
+  assert.equal(client.calls.some(call => call.sql.includes('UPDATE provider_user_access SET role')), false);
+  assert.equal(client.calls.some(call => call.args?.includes('provider.member.role_changed')), false);
+  assert.equal(client.calls.some(call => call.sql === 'ROLLBACK'), true);
+});
+
+test('provider operators cannot change member roles', async () => {
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => { throw new Error('must not connect'); } },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/members/:accessId/role', 'patch')({
+    provider: { providerId: 'provider-alpha', role: 'provider_operator' },
+    params: { accessId: '11111111-1111-4111-8111-111111111111' },
+    body: { role: 'provider_admin' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 403);
+});

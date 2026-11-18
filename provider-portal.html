@@ -14,7 +14,7 @@ body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{ba
 <script>
 'use strict';
 const API='/api/v1/provider-portal',el=id=>document.getElementById(id);
-let rows=[],filter='all',selected='',decision='';
+let rows=[],filter='all',selected='',decision='',permissions={};
 function show(t,ok){el('message').textContent=t;el('message').className='message'+(ok?' ok':'');}
 async function api(path,options){const r=await fetch(path,{credentials:'same-origin',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options&&options.headers||{})}});const d=await r.json().catch(()=>({error:'Risposta server non valida'}));if(!r.ok)throw new Error(d.error||'Operazione non riuscita');return d;}
 function state(x){return x.responseStatus||'new';}
@@ -35,7 +35,7 @@ async function load(){
   const results=await Promise.all([api(API+'/me'),api(API+'/dashboard'),api(API+'/inquiries?limit=100&offset=0')]);
   el('business').textContent=results[0].data.businessName||'Portale impresa';const c=results[1].data.counts||{};
   el('total').textContent=c.activeCount??0;el('new').textContent=c.newCount??0;el('accepted').textContent=c.acceptedCount??0;el('rejected').textContent=c.rejectedCount??0;
-  rows=Array.isArray(results[2].data)?results[2].data:[];const isProviderAdmin=results[0].data.role==='provider_admin';el('team').classList.toggle('hidden',!isProviderAdmin);render();if(isProviderAdmin){await loadInvitations();await loadMembers();}
+  rows=Array.isArray(results[2].data)?results[2].data:[];permissions=results[0].data.permissions||{};const canManageTeam=permissions.manageInvitations===true&&permissions.manageMembers===true;el('team').classList.toggle('hidden',!canManageTeam);render();if(canManageTeam){await loadInvitations();await loadMembers();}
  }catch(e){show(e.message,false);el('list').textContent=e.message;}
 }
 function invitationStatus(status){
@@ -84,6 +84,7 @@ async function loadMembers(){
    const status=member.status==='active'?'Attivo':'Sospeso';
    meta.textContent=role+' · '+status+(member.accountActive===false?' · Account piattaforma disattivato':'');
    info.append(name,meta);item.append(info);
+   if(permissions.manageMemberRoles===true){const roleSelect=document.createElement('select');roleSelect.setAttribute('aria-label','Ruolo di '+(member.displayName||member.username||'collaboratore'));[['provider_operator','Collaboratore'],['provider_admin','Amministratore']].forEach(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;roleSelect.append(option);});roleSelect.value=member.role;const saveRole=document.createElement('button');saveRole.type='button';saveRole.textContent='Salva ruolo';saveRole.addEventListener('click',async()=>{if(roleSelect.value===member.role)return;if(!window.confirm('Vuoi modificare il ruolo di '+(member.displayName||member.username||'questo collaboratore')+'?'))return;saveRole.disabled=true;try{const done=await api(API+'/members/'+encodeURIComponent(member.accessId)+'/role',{method:'PATCH',body:JSON.stringify({role:roleSelect.value})});show(done.message||'Ruolo aggiornato.',true);await loadMembers();}catch(error){show(error.message,false);saveRole.disabled=false;await loadMembers();}});const roleActions=document.createElement('div');roleActions.className='actions';roleActions.append(roleSelect,saveRole);item.append(roleActions);}
    const action=document.createElement('button');action.type='button';
    action.textContent=member.status==='active'?'Sospendi accesso':'Riattiva accesso';
    action.className=member.status==='active'?'danger':'primary';

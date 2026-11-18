@@ -28,6 +28,13 @@ function createProviderPortalRouter(pool, options = {}) {
         providerId: req.provider.providerId,
         businessName: req.provider.businessName,
         role: req.provider.role,
+        permissions: {
+          viewInquiries: true,
+          respondToInquiries: true,
+          manageInvitations: req.provider.role === 'provider_admin',
+          manageMembers: req.provider.role === 'provider_admin',
+          manageMemberRoles: req.provider.role === 'provider_admin'
+        },
         status: 'verified'
       }
     });

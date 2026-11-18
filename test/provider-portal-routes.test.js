@@ -314,3 +314,40 @@ test('provider inquiry detail returns contacts only after accepted response', as
     assert.equal(JSON.stringify(body).includes('budget'), false);
   });
 });
+
+
+test('provider profile returns an explicit permission matrix for administrators', async () => {
+  const pool = fakePool();
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/me', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.deepEqual(body.data.permissions, {
+      viewInquiries: true,
+      respondToInquiries: true,
+      manageInvitations: true,
+      manageMembers: true,
+      manageMemberRoles: true
+    });
+  });
+});
+
+test('provider operators can view and respond to inquiries but cannot manage team', async () => {
+  const pool = fakePool({ accessRows: [{
+    providerId: PROVIDER_ID, role: 'provider_operator', businessName: 'Impresa Alfa'
+  }] });
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/me', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.deepEqual(body.data.permissions, {
+      viewInquiries: true,
+      respondToInquiries: true,
+      manageInvitations: false,
+      manageMembers: false,
+      manageMemberRoles: false
+    });
+  });
+});

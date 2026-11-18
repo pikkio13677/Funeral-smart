@@ -425,6 +425,88 @@ function createProviderPortalInvitationRouter({ pool, authenticate, sendInvitati
     }
   });
 
+
+  // Role changes are administrator-only and serialized to preserve one active admin.
+  router.patch('/members/:accessId/role', providerContext, async (req, res, next) => {
+    if (req.provider.role !== 'provider_admin') {
+      return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può modificare i ruoli.' });
+    }
+    const accessId = z.string().uuid().safeParse(req.params.accessId);
+    if (!accessId.success) return res.status(400).json({ error: 'Identificativo collaboratore non valido.' });
+    const parsed = z.object({ role: z.enum(['provider_admin', 'provider_operator']) }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Ruolo collaboratore non valido.' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const provider = await client.query(
+        "SELECT id FROM providers WHERE id = $1 AND status = 'verified' FOR UPDATE",
+        [req.provider.providerId]
+      );
+      if (!provider.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Impresa verificata non trovata.' });
+      }
+      const found = await client.query(
+        'SELECT id, user_id AS "userId", role, status FROM provider_user_access ' +
+        'WHERE id = $1 AND provider_id = $2 FOR UPDATE',
+        [accessId.data, req.provider.providerId]
+      );
+      if (!found.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Collaboratore non trovato.' });
+      }
+      const member = found.rows[0];
+      const nextRole = parsed.data.role;
+      if (!['active', 'suspended'].includes(member.status)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Il ruolo di questo accesso non può essere modificato nello stato attuale.' });
+      }
+      if (member.role === nextRole) {
+        await client.query('COMMIT');
+        return res.status(200).set('Cache-Control', 'no-store').json({
+          message: 'Il collaboratore ha già questo ruolo.',
+          data: { accessId: member.id, role: member.role, status: member.status }
+        });
+      }
+      if (member.role === 'provider_admin' && nextRole === 'provider_operator' && member.status === 'active') {
+        const admins = await client.query(
+          "SELECT COUNT(*)::int AS active_admins FROM provider_user_access " +
+          "WHERE provider_id = $1 AND role = 'provider_admin' AND status = 'active'",
+          [req.provider.providerId]
+        );
+        if (Number(admins.rows[0]?.active_admins || 0) <= 1) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Non puoi declassare l’ultimo amministratore attivo. Nomina prima un altro amministratore.' });
+        }
+      }
+      await client.query(
+        'UPDATE provider_user_access SET role = $1, updated_at = NOW() ' +
+        'WHERE id = $2 AND provider_id = $3 AND role = $4',
+        [nextRole, member.id, req.provider.providerId, member.role]
+      );
+      await client.query(
+        'INSERT INTO provider_portal_audit_log(provider_id, user_id, action, reason) VALUES($1, $2, $3, $4)',
+        [
+          req.provider.providerId,
+          req.user.id,
+          'provider.member.role_changed',
+          'Ruolo collaboratore ' + member.id + ' modificato da ' + member.role + ' a ' + nextRole
+        ]
+      );
+      await client.query('COMMIT');
+      return res.status(200).set('Cache-Control', 'no-store').json({
+        message: 'Ruolo del collaboratore aggiornato.',
+        data: { accessId: member.id, role: nextRole, status: member.status }
+      });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      return next(error);
+    } finally {
+      client.release();
+    }
+  });
+
   return router;
 }
 
