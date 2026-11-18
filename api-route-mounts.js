@@ -4,6 +4,7 @@ const express = require('express');
 const createTenantApi = require('./tenant-api-router');
 const createPlatformAccess = require('./platform-access');
 const createPlatformCompanyRouter = require('./platform-company-routes');
+const createPlatformMarketplaceRouter = require('./platform-marketplace-routes');
 const assertTenantCutoverReady = require('./tenant-cutover-guard');
 
 function mountApiRouters({ app, pool, auth, emailNotifications, env = process.env, rateLimit }) {
@@ -57,8 +58,13 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
     requirePlatformRole: platformAccess.requirePlatformRole
   });
   app.use('/api/v1/platform', platformRouter);
+  const marketplaceRouter = createPlatformMarketplaceRouter(pool, {
+    authenticate: auth.authenticate,
+    requirePlatformRole: platformAccess.requirePlatformRole
+  });
+  app.use('/api/v1/platform', marketplaceRouter);
 
-  return { multiTenantEnabled: true, authRouter, tenantApi, platformRouter };
+  return { multiTenantEnabled: true, authRouter, tenantApi, platformRouter, marketplaceRouter };
 }
 
 module.exports = mountApiRouters;
