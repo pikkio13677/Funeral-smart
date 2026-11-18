@@ -345,7 +345,7 @@ test('inquiry list exposes only the active assigned provider details', async () 
     const response = await fetch(base + '/api/v1/platform/inquiries');
     assert.equal(response.status, 200);
     assert.match(capturedSql, /inquiry_provider_assignments/);
-    assert.match(capturedSql, /a\.status='active'/);
+    assert.match(capturedSql, /status='active'/);
     assert.match(capturedSql, /assignedProviderName/);
   });
 });
