@@ -140,6 +140,84 @@ function createProviderPortalInvitationRouter({ pool, authenticate, sendInvitati
     return createInvitation(req.provider.providerId, req, res, next);
   });
 
+  // Only provider administrators can inspect invitation history for their own provider.
+  router.get('/invitations', providerContext, async (req, res, next) => {
+    if (req.provider.role !== 'provider_admin') {
+      return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può gestire gli inviti.' });
+    }
+    try {
+      const result = await pool.query(
+        "SELECT id, email, role, " +
+        "CASE WHEN status = 'pending' AND expires_at <= NOW() THEN 'expired' ELSE status END AS status, " +
+        "created_at AS \"createdAt\", expires_at AS \"expiresAt\", " +
+        "accepted_at AS \"acceptedAt\", revoked_at AS \"revokedAt\" " +
+        "FROM provider_user_invitations WHERE provider_id = $1 " +
+        "ORDER BY created_at DESC, id DESC LIMIT 50",
+        [req.provider.providerId]
+      );
+      return res.status(200).set('Cache-Control', 'no-store').json({ data: result.rows });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Revocation is provider-scoped, serialized with acceptance, and audited atomically.
+  router.delete('/invitations/:invitationId', providerContext, async (req, res, next) => {
+    if (req.provider.role !== 'provider_admin') {
+      return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può revocare gli inviti.' });
+    }
+    const invitationId = z.string().uuid().safeParse(req.params.invitationId);
+    if (!invitationId.success) return res.status(400).json({ error: 'Identificativo invito non valido.' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const found = await client.query(
+        'SELECT id, status, expires_at AS "expiresAt" FROM provider_user_invitations ' +
+        'WHERE id = $1 AND provider_id = $2 FOR UPDATE',
+        [invitationId.data, req.provider.providerId]
+      );
+      if (!found.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Invito non trovato.' });
+      }
+      const invite = found.rows[0];
+      if (invite.status !== 'pending') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Solo un invito in attesa può essere revocato.' });
+      }
+      if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+        await client.query(
+          "UPDATE provider_user_invitations SET status = 'expired' WHERE id = $1 AND status = 'pending'",
+          [invite.id]
+        );
+        await client.query('COMMIT');
+        return res.status(410).json({ error: 'L’invito è scaduto e non può essere revocato.' });
+      }
+
+      await client.query(
+        "UPDATE provider_user_invitations SET status = 'revoked', revoked_at = NOW() " +
+        "WHERE id = $1 AND provider_id = $2 AND status = 'pending'",
+        [invite.id, req.provider.providerId]
+      );
+      await client.query(
+        "INSERT INTO provider_portal_audit_log(provider_id, user_id, action, reason) " +
+        "VALUES($1, $2, 'provider.invitation.revoked', 'Invito revocato dall’amministratore dell’impresa')",
+        [req.provider.providerId, req.user.id]
+      );
+      await client.query('COMMIT');
+      return res.status(200).set('Cache-Control', 'no-store').json({
+        message: 'Invito revocato. Il collegamento non è più utilizzabile.',
+        data: { invitationId: invite.id, status: 'revoked' }
+      });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      return next(error);
+    } finally {
+      client.release();
+    }
+  });
+
   // Acceptance deliberately skips providerContext: the invitee has no provider access yet.
   router.post('/invitations/accept', async (req, res, next) => {
     if (!req.user?.id) return res.status(401).json({ error: 'Accedi con il tuo account prima di accettare l’invito.' });
