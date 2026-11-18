@@ -16,6 +16,8 @@ test('platform console uses same-origin cookie sessions and owner-only API endpo
   assert.match(scripts[0], /credentials:'same-origin'/);
   assert.match(scripts[0], /\/platform\/companies/);
   assert.match(scripts[0], /\/platform\/audit/);
+  assert.ok(html.includes('platform.provider_application.approved'));
+  assert.ok(html.includes('platform.inquiry.status_changed'));
   assert.match(scripts[0], /\/auth\/mfa\/verify-login/);
   assert.match(scripts[0], /\/auth\/mfa\/setup/);
   assert.match(scripts[0], /\/auth\/mfa\/enable/);
