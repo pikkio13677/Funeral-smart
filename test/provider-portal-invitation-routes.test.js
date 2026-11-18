@@ -387,3 +387,193 @@ test('accepted or already revoked invitations cannot be revoked again', async ()
     assert.equal(client.calls.some(call => call.sql === 'ROLLBACK'), true);
   }
 });
+
+
+test('provider administrators can list only active and suspended members of their provider', async () => {
+  let query;
+  const router = createRouter({
+    pool: {
+      query: async (sql, args) => {
+        query = { sql, args };
+        return { rowCount: 1, rows: [{ accessId: 'member-1', username: 'collega', displayName: 'Collaboratore', role: 'provider_operator', status: 'active' }] };
+      },
+      connect: async () => { throw new Error('GET must not open a transaction'); }
+    },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/members', 'get')({
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers['Cache-Control'], 'no-store');
+  assert.deepEqual(query.args, ['provider-alpha']);
+  assert.match(query.sql, /access\.provider_id = \$1/);
+  assert.match(query.sql, /access\.status IN \('active', 'suspended'\)/);
+  assert.doesNotMatch(query.sql, /token_hash|password_hash|totp_secret/);
+});
+
+test('provider operators cannot list or change provider members', async () => {
+  const router = createRouter({
+    pool: { query: async () => { throw new Error('must not query'); }, connect: async () => { throw new Error('must not connect'); } },
+    authenticate: (_req, _res, next) => next()
+  });
+  const list = response();
+  await handler(router, '/members', 'get')({
+    provider: { providerId: 'provider-alpha', role: 'provider_operator' }
+  }, list, error => { throw error; });
+  assert.equal(list.statusCode, 403);
+  const update = response();
+  await handler(router, '/members/:accessId/status', 'patch')({
+    provider: { providerId: 'provider-alpha', role: 'provider_operator' },
+    params: { accessId: '11111111-1111-4111-8111-111111111111' },
+    body: { status: 'suspended' }
+  }, update, error => { throw error; });
+  assert.equal(update.statusCode, 403);
+});
+
+test('member status endpoint rejects invalid UUID and invalid status without opening a transaction', async () => {
+  let connects = 0;
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => { connects++; throw new Error('must not connect'); } },
+    authenticate: (_req, _res, next) => next()
+  });
+  const invoke = handler(router, '/members/:accessId/status', 'patch');
+  const invalidId = response();
+  await invoke({ provider: { providerId: 'provider-alpha', role: 'provider_admin' }, params: { accessId: 'bad' }, body: { status: 'suspended' } }, invalidId, error => { throw error; });
+  assert.equal(invalidId.statusCode, 400);
+  const invalidStatus = response();
+  await invoke({ provider: { providerId: 'provider-alpha', role: 'provider_admin' }, params: { accessId: '11111111-1111-4111-8111-111111111111' }, body: { status: 'revoked' } }, invalidStatus, error => { throw error; });
+  assert.equal(invalidStatus.statusCode, 400);
+  assert.equal(connects, 0);
+});
+
+test('provider administrator can suspend a colleague with atomic audit', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM providers')) return { rowCount: 1, rows: [{ id: 'provider-alpha' }] };
+    if (sql.includes('FROM provider_user_access access JOIN app_users')) return { rowCount: 1, rows: [{
+      id: 'member-1', userId: 'operator-user', role: 'provider_operator', status: 'active', accountActive: true
+    }] };
+    return { rowCount: 1, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/members/:accessId/status', 'patch')({
+    user: { id: 'admin-user' },
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+    params: { accessId: '11111111-1111-4111-8111-111111111111' },
+    body: { status: 'suspended' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.status, 'suspended');
+  assert.equal(client.calls.some(call => call.sql.includes('FOR UPDATE')), true);
+  assert.equal(client.calls.some(call => call.args?.includes('provider.member.suspended')), true);
+  assert.equal(client.calls.some(call => call.sql === 'COMMIT'), true);
+});
+
+test('last active provider administrator cannot be suspended', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM providers')) return { rowCount: 1, rows: [{ id: 'provider-alpha' }] };
+    if (sql.includes('FROM provider_user_access access JOIN app_users')) return { rowCount: 1, rows: [{
+      id: 'admin-access', userId: 'admin-user', role: 'provider_admin', status: 'active', accountActive: true
+    }] };
+    if (sql.includes('SELECT COUNT(*)::int AS active_admins')) return { rowCount: 1, rows: [{ active_admins: 1 }] };
+    return { rowCount: 1, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/members/:accessId/status', 'patch')({
+    user: { id: 'admin-user' },
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+    params: { accessId: '11111111-1111-4111-8111-111111111111' },
+    body: { status: 'suspended' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 409);
+  assert.match(res.body.error, /ultimo amministratore attivo/);
+  assert.equal(client.calls.some(call => call.sql.includes('UPDATE provider_user_access SET status')), false);
+  assert.equal(client.calls.some(call => call.sql.includes('provider.member.suspended')), false);
+  assert.equal(client.calls.some(call => call.sql === 'ROLLBACK'), true);
+});
+
+test('suspending an administrator is allowed when another active administrator remains', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM providers')) return { rowCount: 1, rows: [{ id: 'provider-alpha' }] };
+    if (sql.includes('FROM provider_user_access access JOIN app_users')) return { rowCount: 1, rows: [{
+      id: 'admin-access', userId: 'admin-user', role: 'provider_admin', status: 'active', accountActive: true
+    }] };
+    if (sql.includes('SELECT COUNT(*)::int AS active_admins')) return { rowCount: 1, rows: [{ active_admins: 2 }] };
+    return { rowCount: 1, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/members/:accessId/status', 'patch')({
+    user: { id: 'admin-user' },
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+    params: { accessId: '11111111-1111-4111-8111-111111111111' },
+    body: { status: 'suspended' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.status, 'suspended');
+  assert.equal(client.calls.some(call => call.sql.includes('SELECT COUNT(*)::int AS active_admins')), true);
+});
+
+test('suspended member can be reactivated, but platform-disabled accounts stay blocked', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM providers')) return { rowCount: 1, rows: [{ id: 'provider-alpha' }] };
+    if (sql.includes('FROM provider_user_access access JOIN app_users')) return { rowCount: 1, rows: [{
+      id: 'member-1', userId: 'operator-user', role: 'provider_operator', status: 'suspended', accountActive: true
+    }] };
+    return { rowCount: 1, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/members/:accessId/status', 'patch')({
+    user: { id: 'admin-user' },
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+    params: { accessId: '11111111-1111-4111-8111-111111111111' },
+    body: { status: 'active' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.status, 'active');
+  assert.equal(client.calls.some(call => call.args?.includes('provider.member.reactivated')), true);
+  assert.equal(client.calls.some(call => call.sql === 'COMMIT'), true);
+});
+
+test('provider administrator cannot modify a membership belonging to another provider', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM providers')) return { rowCount: 1, rows: [{ id: 'provider-beta' }] };
+    if (sql.includes('FROM provider_user_access access JOIN app_users')) return { rowCount: 0, rows: [] };
+    return { rowCount: 0, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/members/:accessId/status', 'patch')({
+    user: { id: 'admin-user' },
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+    params: { accessId: '11111111-1111-4111-8111-111111111111' },
+    body: { status: 'suspended' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 404);
+  assert.equal(client.calls.some(call => call.sql.includes('provider.member.suspended')), false);
+  assert.equal(client.calls.some(call => call.sql === 'ROLLBACK'), true);
+});

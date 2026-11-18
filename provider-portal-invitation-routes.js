@@ -308,6 +308,123 @@ function createProviderPortalInvitationRouter({ pool, authenticate, sendInvitati
     }
   });
 
+
+  // Provider administrators manage only memberships belonging to their verified provider.
+  router.get('/members', providerContext, async (req, res, next) => {
+    if (req.provider.role !== 'provider_admin') {
+      return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può gestire i collaboratori.' });
+    }
+    try {
+      const result = await pool.query(
+        'SELECT access.id AS "accessId", access.user_id AS "userId", ' +
+        'user_account.username, user_account.display_name AS "displayName", ' +
+        'user_account.active AS "accountActive", access.role, access.status, ' +
+        'access.created_at AS "createdAt", access.updated_at AS "updatedAt" ' +
+        'FROM provider_user_access access ' +
+        'JOIN app_users user_account ON user_account.id = access.user_id ' +
+        "WHERE access.provider_id = $1 AND access.status IN ('active', 'suspended') " +
+        "ORDER BY CASE WHEN access.role = 'provider_admin' THEN 0 ELSE 1 END, user_account.display_name, user_account.username",
+        [req.provider.providerId]
+      );
+      return res.status(200).set('Cache-Control', 'no-store').json({ data: result.rows });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  // Provider row lock serializes membership changes with invitation acceptance and
+  // prevents concurrent requests from suspending the final active administrator.
+  router.patch('/members/:accessId/status', providerContext, async (req, res, next) => {
+    if (req.provider.role !== 'provider_admin') {
+      return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può modificare i collaboratori.' });
+    }
+    const accessId = z.string().uuid().safeParse(req.params.accessId);
+    if (!accessId.success) return res.status(400).json({ error: 'Identificativo collaboratore non valido.' });
+    const parsed = z.object({ status: z.enum(['active', 'suspended']) }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Stato collaboratore non valido.' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const provider = await client.query(
+        "SELECT id FROM providers WHERE id = $1 AND status = 'verified' FOR UPDATE",
+        [req.provider.providerId]
+      );
+      if (!provider.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Impresa verificata non trovata.' });
+      }
+
+      const found = await client.query(
+        'SELECT access.id, access.user_id AS "userId", access.role, access.status, ' +
+        'user_account.active AS "accountActive" ' +
+        'FROM provider_user_access access JOIN app_users user_account ON user_account.id = access.user_id ' +
+        'WHERE access.id = $1 AND access.provider_id = $2 FOR UPDATE OF access',
+        [accessId.data, req.provider.providerId]
+      );
+      if (!found.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Collaboratore non trovato.' });
+      }
+
+      const member = found.rows[0];
+      const nextStatus = parsed.data.status;
+      if (!['active', 'suspended'].includes(member.status)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Questo accesso non può essere modificato nello stato attuale.' });
+      }
+      if (nextStatus === 'active' && member.accountActive !== true) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'L’account utente è disattivato a livello di piattaforma e non può essere riattivato dal portale impresa.' });
+      }
+      if (member.status === nextStatus) {
+        await client.query('COMMIT');
+        return res.status(200).set('Cache-Control', 'no-store').json({
+          message: nextStatus === 'active' ? 'Collaboratore già attivo.' : 'Collaboratore già sospeso.',
+          data: { accessId: member.id, status: member.status }
+        });
+      }
+
+      if (nextStatus === 'suspended' && member.role === 'provider_admin' && member.status === 'active') {
+        const admins = await client.query(
+          "SELECT COUNT(*)::int AS active_admins FROM provider_user_access " +
+          "WHERE provider_id = $1 AND role = 'provider_admin' AND status = 'active'",
+          [req.provider.providerId]
+        );
+        if (Number(admins.rows[0]?.active_admins || 0) <= 1) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Non puoi sospendere l’ultimo amministratore attivo dell’impresa. Nomina prima un altro amministratore.' });
+        }
+      }
+
+      await client.query(
+        'UPDATE provider_user_access SET status = $1, updated_at = NOW() ' +
+        'WHERE id = $2 AND provider_id = $3 AND status = $4',
+        [nextStatus, member.id, req.provider.providerId, member.status]
+      );
+      await client.query(
+        'INSERT INTO provider_portal_audit_log(provider_id, user_id, action, reason) ' +
+        'VALUES($1, $2, $3, $4)',
+        [
+          req.provider.providerId,
+          req.user.id,
+          nextStatus === 'suspended' ? 'provider.member.suspended' : 'provider.member.reactivated',
+          'Accesso collaboratore ' + member.id + (nextStatus === 'suspended' ? ' sospeso' : ' riattivato')
+        ]
+      );
+      await client.query('COMMIT');
+      return res.status(200).set('Cache-Control', 'no-store').json({
+        message: nextStatus === 'active' ? 'Accesso del collaboratore riattivato.' : 'Accesso del collaboratore sospeso.',
+        data: { accessId: member.id, status: nextStatus }
+      });
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      return next(error);
+    } finally {
+      client.release();
+    }
+  });
+
   return router;
 }
 
