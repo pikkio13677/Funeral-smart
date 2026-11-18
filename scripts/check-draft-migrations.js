@@ -99,7 +99,7 @@ async function main() {
       process.stdout.write('Draft migration OK: 013_tenant_finalize_company_id.draft.sql after single-company backfill\n');
     } catch (error) {
       await client.query('ROLLBACK');
-      throw new Error('012_tenant_finalize_company_id.draft.sql failed after backfill: ' + error.message);
+      throw new Error('013_tenant_finalize_company_id.draft.sql failed after backfill: ' + error.message);
     }
 
     const checks = [
@@ -109,6 +109,7 @@ async function main() {
       ['platform_audit_log', 'platform_audit_log'],
       ['company_memberships', 'company_memberships'],
       ['company_invitations', 'company_invitations'],
+      ['email_verification_challenges', 'email_verification_challenges'],
       ['email_verification_challenges', 'email_verification_challenges'],
       ['customers.company_id', 'customers'],
       ['funeral_cases.company_id', 'funeral_cases'],
