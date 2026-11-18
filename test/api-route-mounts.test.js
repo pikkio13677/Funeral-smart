@@ -43,9 +43,11 @@ test('tenant mode mounts company, tenant and platform APIs on separate prefixes'
   assert.equal(result.multiTenantEnabled, true);
   assert.equal(mounts.filter(item => item.path === '/api/v1/auth').length, 3);
   assert.equal(mounts.filter(item => item.path === '/api/v1/admin').length, 1);
-  assert.equal(mounts.filter(item => item.path === '/api/v1/platform').length, 1);
+  assert.equal(mounts.filter(item => item.path === '/api/v1/platform').length, 2);
   assert.equal(mounts.find(item => item.path === '/api/v1/admin').handlers[0], result.tenantApi.router);
   assert.equal(result.tenantApi.router.stack[0].handle.name, 'authenticate');
+  assert.ok(result.marketplaceRouter);
+  assert.ok(mounts.some(item => item.path === '/api/v1/platform' && item.handlers[0] === result.marketplaceRouter));
 });
 
 test('tenant mode refuses to mount without explicit cutover approval', () => {
