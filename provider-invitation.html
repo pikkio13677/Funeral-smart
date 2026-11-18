@@ -17,7 +17,7 @@ function show(t,ok){el('message').textContent=t;el('message').className='msg'+(o
 async function api(path,options){const r=await fetch(path,{credentials:'same-origin',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options&&options.headers||{})}});const d=await r.json().catch(()=>({error:'Risposta non valida'}));if(!r.ok)throw new Error(d.error||'Operazione non riuscita');return d;}
 async function refresh(){const d=await api('/api/v1/auth/me');el('who').textContent='Accesso effettuato come '+(d.data.displayName||d.data.username)+'.';el('session').classList.remove('hidden');el('login').classList.add('hidden');}
 async function accept(){
-  if(!/^[a-f0-9]{64}$/.test(token))throw new Error('Link di invito non valido');
+  if(!/^[A-Za-z0-9_-]{43}$/.test(token))throw new Error('Link di invito non valido');
   if(accepting)return;
   accepting=true;
   const button=el('accept');
@@ -37,5 +37,5 @@ async function accept(){
 el('login').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('/api/v1/auth/login',{method:'POST',body:JSON.stringify({username:el('username').value.trim(),password:el('password').value})});el('password').value='';if(d.mfaRequired){el('login').classList.add('hidden');el('mfa').classList.remove('hidden');}else await refresh();}catch(x){show(x.message,false);}});
 el('mfa').addEventListener('submit',async e=>{e.preventDefault();try{await api('/api/v1/auth/mfa/verify-login',{method:'POST',body:JSON.stringify({code:el('code').value.trim()})});el('mfa').classList.add('hidden');await refresh();}catch(x){show(x.message,false);}});
 el('accept').addEventListener('click',async()=>{try{await accept();}catch(x){show(x.message,false);}});
-(async()=>{if(!/^[a-f0-9]{64}$/.test(token)){show('Link mancante o non valido. Richiedi un nuovo invito.',false);return;}try{await refresh();}catch(_){}})();
+(async()=>{if(!/^[A-Za-z0-9_-]{43}$/.test(token)){show('Link mancante o non valido. Richiedi un nuovo invito.',false);return;}try{await refresh();}catch(_){}})();
 </script></body></html>
