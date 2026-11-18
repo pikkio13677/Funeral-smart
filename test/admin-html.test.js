@@ -51,3 +51,8 @@ test('read-only tenant roles do not see mutation controls in the operational tab
   assert.equal((scripts[0].match(/canUpdateActiveResource\(\)/g) || []).length >= 3, true,
     'both action headers and row controls must use the same role guard');
 });
+
+test('legacy create controls match backend role permissions as well as tenant permissions', () => {
+  assert.match(scripts[0], /: \{admin:Object\.keys\(definitions\),manager:\[\],operator:\['cases','customers','tasks'\],warehouse:\['inventory'\],accounting:\['invoices'\]\}/);
+  assert.match(scripts[0], /return \(allowed\[role\]\|\|\[\]\)\.includes\(active\)/);
+});
