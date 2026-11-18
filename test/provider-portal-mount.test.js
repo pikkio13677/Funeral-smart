@@ -41,7 +41,7 @@ test('provider portal API is not mounted unless its dedicated flag is explicitly
 });
 
 test('enabled provider portal fails closed with 503 until all draft schema tables exist', async () => {
-  const pool = { async query() { return { rowCount: 1, rows: [{
+  const pool = { async connect() { return { async query() { return { rowCount: 0, rows: [] }; }, release() {} }; }, async query() { return { rowCount: 1, rows: [{
     providers: true,
     provider_user_access: false,
     provider_user_invitations: false,
