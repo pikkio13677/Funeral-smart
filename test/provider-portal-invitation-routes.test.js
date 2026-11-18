@@ -170,7 +170,7 @@ test('acceptance requires the invited email to be verified on the authenticated 
 });
 
 test('acceptance activates access only for the invited provider and writes an audit record atomically', async () => {
-  const client = makeClient(sql => {
+  const client = makeClient((sql, args = []) => {
     if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
     if (sql.includes('FROM provider_user_invitations')) return { rowCount: 1, rows: [{
       id: 'invite-1', providerId: 'provider-alpha', email: 'invited@example.com',
