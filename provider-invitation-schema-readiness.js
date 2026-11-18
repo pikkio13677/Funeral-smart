@@ -6,6 +6,7 @@ const REQUIRED_PROVIDER_INVITATION_TABLES = [
   'public.inquiry_provider_assignments',
   'public.provider_user_access',
   'public.provider_user_invitations',
+  'public.provider_inquiry_responses',
   'public.provider_portal_audit_log'
 ];
 
