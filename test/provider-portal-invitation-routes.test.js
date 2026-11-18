@@ -63,7 +63,7 @@ test('invitation creation stores only a token hash and emails the raw token over
     if (sql.includes('FROM provider_user_access')) return { rowCount: 0, rows: [] };
     if (sql.includes('FROM provider_user_invitations')) return { rowCount: 0, rows: [] };
     if (sql.includes('INSERT INTO provider_user_invitations')) {
-      assert.equal(args[0], 'provider-1');
+      assert.equal(args[0], '11111111-1111-4111-8111-111111111111');
       assert.equal(args[1], 'persona@example.com');
       assert.equal(args[2], 'provider_operator');
       assert.equal(args[3].length, 64);
