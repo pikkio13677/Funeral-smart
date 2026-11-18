@@ -12,6 +12,7 @@ const OTHER_PROVIDER_ID = '33333333-3333-4333-8333-333333333333';
 
 async function withServer(router, fn) {
   const app = express();
+  app.use(express.json());
   app.use('/api/v1/provider-portal', router);
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
