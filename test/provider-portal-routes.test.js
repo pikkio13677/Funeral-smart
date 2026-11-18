@@ -217,7 +217,8 @@ test('provider can accept an active assignment and response plus audit commit at
     assert.ok(statements.some(sql => sql.includes('assignment.provider_id = $2')));
     assert.ok(statements.some(sql => sql.includes('INSERT INTO provider_inquiry_responses')));
     assert.ok(statements.some(sql => sql.includes('INSERT INTO provider_portal_audit_log')));
-    assert.equal(statements.at(-1), 'COMMIT');
+    assert.ok(statements.includes('COMMIT'));
+    assert.equal(statements.at(-1), 'RELEASE');
     const responseInsert = pool.calls.find(call => call.sql.includes('INSERT INTO provider_inquiry_responses'));
     assert.deepEqual(responseInsert.args, [
       '44444444-4444-4444-8444-444444444444',
