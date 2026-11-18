@@ -121,6 +121,15 @@ app.get('/invito/accetta', (_req, res) => {
   res.sendFile(require('path').join(__dirname, 'invitation.html'));
 });
 
+// Pagina dedicata agli inviti del portale imprese: distinta dal flusso legacy aziendale.
+app.get('/provider/invito/accetta', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  res.sendFile(require('path').join(__dirname, 'provider-invitation-acceptance.html'));
+});
+
 // Console proprietario piattaforma: separata dall'area gestionale delle singole imprese.
 app.get('/platform', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
