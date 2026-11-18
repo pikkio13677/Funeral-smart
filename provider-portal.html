@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><title>FUNERAL SMART · Portale imprese</title>
 <style>
-body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{background:#173b35;color:white;padding:16px 22px;display:flex;justify-content:space-between}main{max-width:1100px;margin:24px auto;padding:0 16px}.muted{color:#687784}.panel,.stat{background:white;border:1px solid #e4e9ed;border-radius:12px;padding:16px;margin:14px 0}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat b{display:block;font-size:25px}.stat small{color:#687784}input,select,textarea{font:inherit;border:1px solid #d5dfe3;border-radius:8px;padding:10px}input{min-width:150px}button{border:1px solid #d5dfe3;border-radius:8px;padding:9px 12px;background:white;font-weight:650}button.primary{background:#176b52;color:white;border-color:#176b52}button.danger{color:#a33b37}.toolbar,.actions,.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbar input{flex:1}.item{padding:14px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.item:last-child{border:0}.meta{font-size:12px;color:#687784}.status{font-size:12px;font-weight:700}.hidden{display:none!important}.message{padding:11px;background:#fff3df;color:#715b31;border-radius:8px;margin:12px 0}.ok{background:#e7f3ee;color:#176b52}label{display:block;font-size:12px;font-weight:700;margin:10px 0 5px}textarea{width:100%;min-height:85px;box-sizing:border-box}dialog{border:0;border-radius:12px;padding:20px;width:min(500px,calc(100vw - 30px))}dialog::backdrop{background:#142b2bbd}@media(max-width:620px){.stats{grid-template-columns:repeat(2,1fr)}.item{display:block}}
+body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{background:#173b35;color:white;padding:16px 22px;display:flex;justify-content:space-between}main{max-width:1100px;margin:24px auto;padding:0 16px}.muted{color:#687784}.panel,.stat{background:white;border:1px solid #e4e9ed;border-radius:12px;padding:16px;margin:14px 0}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat b{display:block;font-size:25px}.stat small{color:#687784}input,select,textarea{font:inherit;border:1px solid #d5dfe3;border-radius:8px;padding:10px}input{min-width:150px}button{border:1px solid #d5dfe3;border-radius:8px;padding:9px 12px;background:white;font-weight:650}button.primary{background:#176b52;color:white;border-color:#176b52}button.danger{color:#a33b37}.toolbar,.actions,.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbar input{flex:1}.item{padding:14px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.item:last-child{border:0}.invite-item{padding:12px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.invite-item:last-child{border:0}.meta{font-size:12px;color:#687784}.status{font-size:12px;font-weight:700}.hidden{display:none!important}.message{padding:11px;background:#fff3df;color:#715b31;border-radius:8px;margin:12px 0}.ok{background:#e7f3ee;color:#176b52}label{display:block;font-size:12px;font-weight:700;margin:10px 0 5px}textarea{width:100%;min-height:85px;box-sizing:border-box}dialog{border:0;border-radius:12px;padding:20px;width:min(500px,calc(100vw - 30px))}dialog::backdrop{background:#142b2bbd}@media(max-width:620px){.stats{grid-template-columns:repeat(2,1fr)}.item{display:block}}
 </style></head><body>
 <header><div><b>FUNERAL SMART</b><div>Portale imprese partner</div></div><button id="logout">Esci</button></header>
 <main><h1 id="business">Portale impresa</h1><p class="muted">Richieste assegnate esclusivamente alla tua impresa.</p><div id="message" class="message hidden" role="status"></div>
 <section class="stats"><div class="stat"><b id="total">—</b><small>Attive</small></div><div class="stat"><b id="new">—</b><small>Nuove</small></div><div class="stat"><b id="accepted">—</b><small>Accettate</small></div><div class="stat"><b id="rejected">—</b><small>Rifiutate</small></div></section>
 <section class="panel"><h2>Richieste assegnate</h2><div class="toolbar"><input id="search" type="search" placeholder="Cerca città o servizio"><button data-filter="all" class="active">Tutte</button><button data-filter="new">Nuove</button><button data-filter="accepted">Accettate</button><button data-filter="rejected">Rifiutate</button></div><div id="list">Caricamento…</div></section>
-<section class="panel" id="team"><h2>Invita un collaboratore</h2><p class="muted">Solo l’amministratore dell’impresa può inviare inviti.</p><form id="invite"><div class="row"><div><label for="email">Email</label><input id="email" type="email" maxlength="254" required></div><div><label for="role">Ruolo</label><select id="role"><option value="provider_operator">Collaboratore</option><option value="provider_admin">Amministratore</option></select></div></div><button class="primary">Invia invito</button></form></section>
+<section class="panel" id="team"><h2>Invita un collaboratore</h2><p class="muted">Solo l’amministratore dell’impresa può inviare inviti.</p><form id="invite"><div class="row"><div><label for="email">Email</label><input id="email" type="email" maxlength="254" required></div><div><label for="role">Ruolo</label><select id="role"><option value="provider_operator">Collaboratore</option><option value="provider_admin">Amministratore</option></select></div></div><button class="primary">Invia invito</button></form><hr><div class="toolbar"><h3 style="margin:0;flex:1">Inviti collaboratori</h3><button id="refresh-invitations" type="button">Aggiorna</button></div><div id="invitation-list" aria-live="polite">Caricamento inviti…</div></section>
 </main>
 <dialog id="detail"><h2 id="detail-title">Dettaglio</h2><div id="detail-body"></div><button id="close-detail">Chiudi</button></dialog>
 <dialog id="response"><h2 id="response-title">Rispondi</h2><label for="reason">Motivazione obbligatoria (10–500 caratteri)</label><textarea id="reason" minlength="10" maxlength="500"></textarea><div class="actions"><button id="cancel">Annulla</button><button id="confirm" class="primary">Conferma</button></div></dialog>
@@ -35,8 +35,38 @@ async function load(){
   const results=await Promise.all([api(API+'/me'),api(API+'/dashboard'),api(API+'/inquiries?limit=100&offset=0')]);
   el('business').textContent=results[0].data.businessName||'Portale impresa';const c=results[1].data.counts||{};
   el('total').textContent=c.activeCount??0;el('new').textContent=c.newCount??0;el('accepted').textContent=c.acceptedCount??0;el('rejected').textContent=c.rejectedCount??0;
-  rows=Array.isArray(results[2].data)?results[2].data:[];el('team').classList.toggle('hidden',results[0].data.role!=='provider_admin');render();
+  rows=Array.isArray(results[2].data)?results[2].data:[];const isProviderAdmin=results[0].data.role==='provider_admin';el('team').classList.toggle('hidden',!isProviderAdmin);render();if(isProviderAdmin)await loadInvitations();
  }catch(e){show(e.message,false);el('list').textContent=e.message;}
+}
+function invitationStatus(status){
+ return status==='pending'?'In attesa':status==='accepted'?'Accettato':status==='revoked'?'Revocato':status==='expired'?'Scaduto':status;
+}
+async function loadInvitations(){
+ const list=el('invitation-list');list.textContent='Caricamento inviti…';
+ try{
+  const result=await api(API+'/invitations');const invitations=Array.isArray(result.data)?result.data:[];
+  list.replaceChildren();
+  if(!invitations.length){list.textContent='Non ci sono ancora inviti.';return;}
+  invitations.forEach(invite=>{
+   const item=document.createElement('article');item.className='invite-item';
+   const info=document.createElement('div');const email=document.createElement('b');email.textContent=invite.email;
+   const meta=document.createElement('div');meta.className='meta';
+   const role=invite.role==='provider_admin'?'Amministratore':'Collaboratore';
+   const expiry=invite.expiresAt?' · Scadenza: '+new Date(invite.expiresAt).toLocaleString('it-IT'):'';
+   meta.textContent=role+' · '+invitationStatus(invite.status)+expiry;info.append(email,meta);item.append(info);
+   if(invite.status==='pending'){
+    const revoke=document.createElement('button');revoke.className='danger';revoke.type='button';revoke.textContent='Revoca invito';
+    revoke.addEventListener('click',async()=>{
+     if(!window.confirm('Vuoi revocare l’invito per '+invite.email+'? Il link non sarà più utilizzabile.'))return;
+     revoke.disabled=true;
+     try{const done=await api(API+'/invitations/'+encodeURIComponent(invite.id),{method:'DELETE'});show(done.message||'Invito revocato.',true);await loadInvitations();}
+     catch(error){show(error.message,false);revoke.disabled=false;await loadInvitations();}
+    });
+    item.append(revoke);
+   }
+   list.append(item);
+  });
+ }catch(error){list.textContent=error.message;show(error.message,false);}
 }
 async function openDetail(id){
  try{const d=(await api(API+'/inquiries/'+encodeURIComponent(id))).data;el('detail-title').textContent=(d.city||'Richiesta')+' · '+(d.serviceType||'Servizio');const body=el('detail-body');body.replaceChildren();
@@ -45,8 +75,8 @@ async function openDetail(id){
 }
 function openResponse(id,status){selected=id;decision=status;el('response-title').textContent=status==='accepted'?'Accetta richiesta':'Rifiuta richiesta';el('reason').value='';el('response').showModal();}
 el('confirm').addEventListener('click',async()=>{const reason=el('reason').value.trim();if(reason.length<10||reason.length>500){show('La motivazione deve contenere 10–500 caratteri.',false);return;}try{await api(API+'/inquiries/'+encodeURIComponent(selected)+'/response',{method:'POST',body:JSON.stringify({status:decision,reason})});el('response').close();show('Risposta registrata.',true);await load();}catch(e){show(e.message,false);}});
-el('invite').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api(API+'/invitations',{method:'POST',body:JSON.stringify({email:el('email').value.trim(),role:el('role').value})});el('email').value='';show(d.message||'Invito inviato.',true);}catch(x){show(x.message,false);}});
+el('invite').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api(API+'/invitations',{method:'POST',body:JSON.stringify({email:el('email').value.trim(),role:el('role').value})});el('email').value='';show(d.message||'Invito inviato.',true);await loadInvitations();}catch(x){show(x.message,false);}});
 document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));render();}));
-el('search').addEventListener('input',render);el('close-detail').addEventListener('click',()=>el('detail').close());el('cancel').addEventListener('click',()=>el('response').close());
+el('search').addEventListener('input',render);el('refresh-invitations').addEventListener('click',loadInvitations);el('close-detail').addEventListener('click',()=>el('detail').close());el('cancel').addEventListener('click',()=>el('response').close());
 el('logout').addEventListener('click',async()=>{try{await api('/api/v1/auth/logout',{method:'POST'});}finally{location.assign('/admin');}});load();
 </script></body></html>
