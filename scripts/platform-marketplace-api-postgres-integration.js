@@ -139,6 +139,36 @@ async function main() {
     assert.equal(updatedInquiry.status, 200);
     assert.equal(updatedInquiry.data.data.status, 'reviewed');
 
+    const assigned = await call('/inquiries/' + inquiryId + '/assign', 'POST', {
+      providerId,
+      reason: 'Impresa verificata selezionata nel test'
+    });
+    assert.equal(assigned.status, 201);
+    assert.equal(assigned.data.data.providerId, providerId);
+
+    const activeHistory = await call('/inquiries/' + inquiryId + '/assignments');
+    assert.equal(activeHistory.status, 200);
+    assert.equal(activeHistory.data.data.length, 1);
+    assert.equal(activeHistory.data.data[0].status, 'active');
+
+    const assignedInquiry = await call('/inquiries?status=assigned');
+    assert.equal(assignedInquiry.status, 200);
+    const assignedRow = assignedInquiry.data.data.find(item => item.id === inquiryId);
+    assert.ok(assignedRow);
+    assert.equal(assignedRow.assignedProviderId, providerId);
+
+    const closedInquiry = await call('/inquiries/' + inquiryId + '/status', 'PATCH', {
+      status: 'closed',
+      reason: 'Percorso concluso nel test isolato'
+    });
+    assert.equal(closedInquiry.status, 200);
+    assert.equal(closedInquiry.data.data.status, 'closed');
+
+    const revokedHistory = await call('/inquiries/' + inquiryId + '/assignments');
+    assert.equal(revokedHistory.status, 200);
+    assert.equal(revokedHistory.data.data[0].status, 'revoked');
+    assert.ok(revokedHistory.data.data[0].revokedAt);
+
     const rejected = await call('/provider-applications/' + secondApplicationId + '/reject', 'POST', {
       reason: 'Candidatura rifiutata nel test isolato'
     });
@@ -155,6 +185,8 @@ async function main() {
       'platform.price_list.created',
       'platform.price_list.published',
       'platform.inquiry.status_changed',
+      'platform.inquiry.assigned',
+      'platform.inquiry.assignment_revoked',
       'platform.provider_application.rejected'
     ]) assert.ok(actions.includes(action), 'missing audit action: ' + action);
 
@@ -163,6 +195,7 @@ async function main() {
     if (server) await new Promise(resolve => server.close(resolve));
     await pool.query('DELETE FROM platform_audit_log WHERE actor_user_id=$1', [actorId]).catch(() => {});
     if (priceListId) await pool.query('DELETE FROM price_lists WHERE id=$1', [priceListId]).catch(() => {});
+    await pool.query('DELETE FROM inquiry_provider_assignments WHERE inquiry_id=$1', [inquiryId]).catch(() => {});
     if (providerId) await pool.query('DELETE FROM providers WHERE id=$1', [providerId]).catch(() => {});
     await pool.query('DELETE FROM provider_applications WHERE id = ANY($1::uuid[])', [[firstApplicationId, secondApplicationId]]).catch(() => {});
     await pool.query('DELETE FROM inquiries WHERE id=$1', [inquiryId]).catch(() => {});
