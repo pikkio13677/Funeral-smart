@@ -1,5 +1,5 @@
--- FUNERAL SMART — bozza migrazione 010: bootstrap proprietario piattaforma
--- STAGED / NON ESEGUITA. Richiede 009_platform_access.draft.sql.
+-- FUNERAL SMART — bozza migrazione 011: bootstrap proprietario piattaforma
+-- STAGED / NON ESEGUITA. Richiede 010_platform_access.draft.sql.
 -- Aggiunge un ruolo applicativo isolato: non è admin aziendale e non riceve membership.
 ALTER TABLE app_users DROP CONSTRAINT IF EXISTS app_users_role_check;
 ALTER TABLE app_users

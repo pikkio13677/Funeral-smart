@@ -10,14 +10,14 @@ const tenantTables = [
 ];
 
 const compositeForeignKeys = [
-  ['funeral_cases', 'fk_funeral_cases_tenant_customer'],
-  ['stock_movements', 'fk_stock_movements_tenant_item'],
-  ['stock_movements', 'fk_stock_movements_tenant_case'],
-  ['tasks', 'fk_tasks_tenant_case'],
-  ['tasks', 'fk_tasks_tenant_staff'],
-  ['invoices', 'fk_invoices_tenant_case'],
-  ['invoices', 'fk_invoices_tenant_customer'],
-  ['payments', 'fk_payments_tenant_invoice']
+  ['funeral_cases', 'fk_funeral_cases_company_customer'],
+  ['stock_movements', 'fk_stock_movements_company_item'],
+  ['stock_movements', 'fk_stock_movements_company_case'],
+  ['tasks', 'fk_tasks_company_case'],
+  ['tasks', 'fk_tasks_company_staff'],
+  ['invoices', 'fk_invoices_company_case'],
+  ['invoices', 'fk_invoices_company_customer'],
+  ['payments', 'fk_payments_company_invoice']
 ];
 
 const relationChecks = [

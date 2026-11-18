@@ -1,5 +1,5 @@
--- FUNERAL SMART — bozza migrazione 011: audit amministrativo piattaforma
--- STAGED / NON ESEGUITA. Dipende da 009, 010 e 005.
+-- FUNERAL SMART — bozza migrazione 012: audit amministrativo piattaforma
+-- STAGED / NON ESEGUITA. Dipende da 005, 010 e 011.
 -- NON registrare in migrate.js e NON applicare a DATABASE_URL/Render.
 CREATE TABLE IF NOT EXISTS platform_audit_log (
   id BIGSERIAL PRIMARY KEY,

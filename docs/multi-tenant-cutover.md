@@ -17,8 +17,8 @@ The tenant route modules are intentionally dormant until the production data mig
 3. The current owner decision is that all legacy managed data belongs to one initial company. Create and verify exactly one `companies` row using its real legal details; do not invent the company name or VAT number.
 4. Use `scripts/backfill-single-company.js` on the local restored clone. It is read-only by default, creates memberships matching existing supported account roles, leaves platform owners separate, links existing sessions, and leaves historical audit rows untouched. Review the dry-run report before a separately confirmed local-clone apply.
 5. Run the complete tenant integration suite and inspect row counts and foreign-key violations.
-6. Rehearse rollback from the pre-migration backup, including the new finalization migration 012; compare table counts and verify application reads after restore.
-7. On the restored clone, apply draft migrations 005–011, execute the reviewed single-company backfill in one transaction, verify all nine tenant tables and cross-company references, then apply draft migration 012 to set `company_id NOT NULL` and replace global code uniqueness with company-scoped unique indexes. Migration 012 must never run before the backfill.
+6. Rehearse rollback from the pre-migration backup, including the finalization migration 013; compare table counts and verify application reads after restore.
+7. On the restored clone, apply draft migrations 005–012 (including platform audit), execute the reviewed single-company backfill in one transaction, verify all nine tenant tables and cross-company references, then apply draft migration 013 to set `company_id NOT NULL` and replace global code uniqueness with company-scoped unique indexes. Migration 013 must never run before the backfill.
 8. Mount `companyContextRouter` after the existing auth router and mount the tenant router before the legacy admin router.
 9. Remove or isolate the legacy global business-data routes in the same cutover. They must never remain as a fall-through path for tenant resources.
 10. The admin UI now has a dormant company selector/switcher, tenant-role navigation, company member/invitation management, tenant activity log, task PATCH contract and logout. Keep its `TENANT_API_ENABLED` flag false until the reviewed migration and route cutover are complete.
@@ -39,4 +39,4 @@ Invitation onboarding is now prepared: the public site path redirects to the sam
 
 ## Safety boundary
 
-Until these gates are complete, `server.js` continues to use the legacy router and the new tenant API remains unmounted. Migration 012 is a separate finalization gate and is intentionally not included in `migrate.js`. No production database migration, backfill, merge or deployment is authorized by this preparation work.
+Until these gates are complete, `server.js` continues to use the legacy router and the new tenant API remains unmounted. Migration 013 is a separate finalization gate and is intentionally not included in `migrate.js`. No production database migration, backfill, merge or deployment is authorized by this preparation work.

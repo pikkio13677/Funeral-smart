@@ -1,4 +1,4 @@
--- FUNERAL SMART — bozza migrazione 009: identità della piattaforma
+-- FUNERAL SMART — bozza migrazione 010: identità della piattaforma
 -- STAGED / NON ESEGUITA: NON inserirla in migrate.js e NON applicarla a DATABASE_URL.
 -- Questa tabella è separata dai ruoli aziendali in app_users.role e company_memberships.role.
 -- Nessun utente viene promosso automaticamente: il bootstrap del proprietario richiede una procedura separata e controllata.

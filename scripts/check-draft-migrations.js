@@ -4,22 +4,27 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Client } = require('pg');
 const crypto = require('node:crypto');
-const { backfillSingleCompany } = require('./backfill-single-company');
+const { backfillSingleCompany, assertLocalDatabase } = require('./backfill-single-company');
 
 const migrationFiles = [
   '005_multi_tenant_foundation.draft.sql',
   '006_session_active_membership.draft.sql',
   '007_audit_invitations.draft.sql',
-  '008_tenant_composite_foreign_keys.draft.sql',
-  '009_platform_access.draft.sql',
-  '010_platform_owner_bootstrap.draft.sql',
-  '011_platform_audit_log.draft.sql'
+  '008_email_verification.draft.sql',
+  '009_tenant_composite_foreign_keys.draft.sql',
+  '010_platform_access.draft.sql',
+  '011_platform_owner_bootstrap.draft.sql',
+  '012_platform_audit_log.draft.sql'
 ];
 
 async function main() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is required for draft migration integration checks.');
   }
+
+  // This runner applies draft migrations and performs a disposable backfill.
+  // Refuse remote hosts and production mode even when invoked outside CI.
+  assertLocalDatabase(process.env.DATABASE_URL);
 
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
@@ -88,17 +93,17 @@ async function main() {
     if (!sessionCheck.rowCount) throw new Error('Single-company backfill did not link the existing session to its membership.');
 
     const finalizationSql = await fs.readFile(
-      path.join(__dirname, '..', 'migrations', '012_tenant_finalize_company_id.draft.sql'),
+      path.join(__dirname, '..', 'migrations', '013_tenant_finalize_company_id.draft.sql'),
       'utf8'
     );
     await client.query('BEGIN');
     try {
       await client.query(finalizationSql);
       await client.query('COMMIT');
-      process.stdout.write('Draft migration OK: 012_tenant_finalize_company_id.draft.sql after single-company backfill\n');
+      process.stdout.write('Draft migration OK: 013_tenant_finalize_company_id.draft.sql after single-company backfill\n');
     } catch (error) {
       await client.query('ROLLBACK');
-      throw new Error('012_tenant_finalize_company_id.draft.sql failed after backfill: ' + error.message);
+      throw new Error('013_tenant_finalize_company_id.draft.sql failed after backfill: ' + error.message);
     }
 
     const checks = [
@@ -108,6 +113,7 @@ async function main() {
       ['platform_audit_log', 'platform_audit_log'],
       ['company_memberships', 'company_memberships'],
       ['company_invitations', 'company_invitations'],
+      ['email_verification_challenges', 'email_verification_challenges'],
       ['customers.company_id', 'customers'],
       ['funeral_cases.company_id', 'funeral_cases'],
       ['staff.company_id', 'staff'],
@@ -156,14 +162,14 @@ async function main() {
     if (!ownerIndex.rowCount) throw new Error('Single active platform owner index missing.');
 
     const compositeConstraints = [
-      'fk_funeral_cases_tenant_customer',
-      'fk_stock_movements_tenant_item',
-      'fk_stock_movements_tenant_case',
-      'fk_tasks_tenant_case',
-      'fk_tasks_tenant_staff',
-      'fk_invoices_tenant_case',
-      'fk_invoices_tenant_customer',
-      'fk_payments_tenant_invoice'
+      'fk_funeral_cases_company_customer',
+      'fk_stock_movements_company_item',
+      'fk_stock_movements_company_case',
+      'fk_tasks_company_case',
+      'fk_tasks_company_staff',
+      'fk_invoices_company_case',
+      'fk_invoices_company_customer',
+      'fk_payments_company_invoice'
     ];
     for (const name of compositeConstraints) {
       const result = await client.query(
@@ -192,7 +198,6 @@ async function main() {
       if (!result.rowCount) throw new Error('Expected validated company foreign key missing: ' + name);
     }
 
-
     const finalizedColumns = await client.query(
       "SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='company_id' AND table_name = ANY($1::text[]) AND is_nullable='YES'",
       [['customers','funeral_cases','staff','vehicles','inventory_items','stock_movements','tasks','invoices','payments']]
@@ -219,7 +224,7 @@ async function main() {
     );
     if (oldGlobalConstraints.rowCount) throw new Error('Legacy global unique constraints were not removed after replacement.');
 
-    process.stdout.write('All draft tenant migrations and composite foreign keys verified on disposable PostgreSQL.\\n');
+    process.stdout.write('All draft tenant migrations and composite foreign keys verified on disposable PostgreSQL.\n');
   } finally {
     await client.end();
   }
