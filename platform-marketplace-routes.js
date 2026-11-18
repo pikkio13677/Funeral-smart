@@ -72,9 +72,19 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Richiesta non trovata.' });
       }
-      if (!['received', 'reviewed'].includes(inquiry.rows[0].status)) {
+      if (!['received', 'reviewed', 'assigned'].includes(inquiry.rows[0].status)) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'La richiesta non è disponibile per una nuova assegnazione.' });
+      }
+      if (inquiry.rows[0].status === 'assigned') {
+        const activeAssignment = await client.query(
+          "SELECT id FROM inquiry_provider_assignments WHERE inquiry_id=$1 AND status='active' FOR UPDATE",
+          [id.data]
+        );
+        if (activeAssignment.rowCount) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'La richiesta ha già un’impresa assegnataria attiva.' });
+        }
       }
       const provider = await client.query('SELECT id,status FROM providers WHERE id=$1 FOR UPDATE', [parsed.data.providerId]);
       if (!provider.rowCount) {
