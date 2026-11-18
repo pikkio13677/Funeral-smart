@@ -62,6 +62,27 @@ CREATE INDEX IF NOT EXISTS idx_tasks_company ON tasks(company_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_company ON invoices(company_id);
 CREATE INDEX IF NOT EXISTS idx_payments_company ON payments(company_id);
 
+-- FASE TRANSITORIA: conserviamo i vincoli UNIQUE globali creati dallo schema
+-- gestionale.sql (case_code, invoice_number e sku). company_id e' ancora nullable:
+-- rimuovere ora quei vincoli permetterebbe duplicati tra i record legacy con
+-- company_id NULL, perche' gli indici parziali sottostanti non li coprono.
+-- Gli indici per azienda vengono predisposti ora, ma i vincoli globali potranno
+-- essere rimossi SOLO in una migrazione successiva, dopo backfill completo,
+-- verifica dei duplicati e passaggio di company_id a NOT NULL.
+-- La targa resta globalmente univoca perche' identifica un veicolo fisico.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_funeral_cases_company_case_code
+  ON funeral_cases(company_id, case_code)
+  WHERE company_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_invoices_company_invoice_number
+  ON invoices(company_id, invoice_number)
+  WHERE company_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_inventory_items_company_sku
+  ON inventory_items(company_id, sku)
+  WHERE company_id IS NOT NULL AND sku IS NOT NULL;
+
+
 
 -- PASSI ANCORA NECESSARI PRIMA DI RENDERE company_id NOT NULL:
 -- 1. Creare/identificare l'azienda proprietaria dei dati già presenti.
