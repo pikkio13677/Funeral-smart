@@ -42,3 +42,12 @@ test('tenant admin UI requires MFA and provides an explicit company-scoped logou
   assert.match(scripts[0], /authRequest\('\/logout'/);
   assert.match(scripts[0], /function canCreateInActiveTenant/);
 });
+
+test('read-only tenant roles do not see mutation controls in the operational tables', () => {
+  assert.match(scripts[0], /function canUpdateActiveResource\(\)/);
+  assert.match(scripts[0], /manager:\['cases','tasks','inventory'\],operator:\['cases','tasks'\],warehouse:\['inventory'\],accounting:\['invoices'\]/);
+  assert.match(scripts[0], /manager:\[\],operator:\['cases','tasks'\],warehouse:\['inventory'\],accounting:\['invoices'\]/);
+  assert.match(scripts[0], /includes\(active\)&&canUpdateActiveResource\(\)/);
+  assert.equal((scripts[0].match(/canUpdateActiveResource\(\)/g) || []).length >= 3, true,
+    'both action headers and row controls must use the same role guard');
+});
