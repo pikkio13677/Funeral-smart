@@ -31,7 +31,8 @@ associazione attiva e provider verificato.
 |---|---|---|
 | GET `/me` | Profilo impresa e ruolo | Campi essenziali, niente dati interni piattaforma |
 | GET `/dashboard` | Contatori e richieste recenti | Solo assegnazioni attive del provider autenticato |
-| GET `/inquiries` | Elenco richieste | Paginazione limitata, filtri consentiti, no contatti prima dell'accettazione |
+| GET `/inquiries` | Elenco richieste | Paginazione limitata, campi minimizzati, mai contatti |
+| GET `/inquiries/:assignmentId` | Dettaglio incarico | Solo assegnazione attiva del provider; contatti nulli fino all'accettazione, poi solo email/telefono |
 | GET `/inquiries/:assignmentId` | Dettaglio richiesta | Verifica che assignment appartenga al provider e sia attivo |
 | POST `/inquiries/:assignmentId/response` | Accetta o rifiuta | Body stretto: esito e motivazione; transazione con audit |
 | GET `/inquiries/history` | Storico | Solo assegnazioni passate del medesimo provider, campi minimizzati |
@@ -96,14 +97,14 @@ Non mostra statistiche aggregate di altre imprese né dettagli personali nelle n
 
 A. Riconciliare e collaudare la catena 014/PR #69 e la presente migrazione 015.
 B. Implementare middleware provider context e test unitari di isolamento. (presente)
-C. Implementare read-only `/me`, `/dashboard`, `/inquiries` e test delle query/sicurezza. (presente; collaudo PostgreSQL dedicato aggiunto alla CI)
-D. Implementare risposta accetta/rifiuta con audit atomico. (presente; test PostgreSQL usa-e-getta aggiunti)
+C. Implementare read-only `/me`, `/dashboard`, `/inquiries`, dettaglio con contatti condizionati all'accettazione e test PostgreSQL. (presente; CI in esecuzione)
+D. Implementare risposta accetta/rifiuta con audit atomico. (presente; test unitari e PostgreSQL usa-e-getta aggiunti)
 E. Implementare inviti e gestione team, solo dopo test del flusso account.
 F. Costruire la UI dashboard e test accessibilità/responsive.
 G. Rieseguire suite completa e controllare CI prima di qualsiasi decisione di rilascio.
 
 ## Limiti di questa PR
 
-Middleware, API read-only e risposta accetta/rifiuta non montate, test unitari e integrazione PostgreSQL usa-e-getta, migrazione draft. Non modifica server.js, api-route-mounts.js o migrate.js;
+Middleware, API read-only, dettaglio e risposta accetta/rifiuta non montate, test unitari e integrazione PostgreSQL usa-e-getta, migrazione draft. Non modifica server.js, api-route-mounts.js o migrate.js;
 non abilita feature flag; non esegue migrazioni; non tocca Render o database persistenti;
 non invia email; non effettua merge o deploy.
