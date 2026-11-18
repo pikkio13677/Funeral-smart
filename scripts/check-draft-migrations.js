@@ -116,6 +116,50 @@ async function main() {
       throw new Error('014_platform_inquiry_assignments.draft.sql failed: ' + error.message);
     }
 
+    const providerPortalSql = await fs.readFile(
+      path.join(__dirname, '..', 'migrations', '015_provider_portal_access.draft.sql'),
+      'utf8'
+    );
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      await client.query('BEGIN');
+      try {
+        await client.query(providerPortalSql);
+        await client.query('COMMIT');
+        process.stdout.write('Draft migration OK: 015_provider_portal_access.draft.sql (pass ' + attempt + ')\\n');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw new Error('015_provider_portal_access.draft.sql failed on pass ' + attempt + ': ' + error.message);
+      }
+    }
+
+    const providerPortalTables = [
+      'provider_user_access',
+      'provider_user_invitations',
+      'provider_inquiry_responses',
+      'provider_portal_audit_log'
+    ];
+    for (const table of providerPortalTables) {
+      const result = await client.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1",
+        [table]
+      );
+      if (!result.rowCount) throw new Error('Provider portal migration table missing: ' + table);
+    }
+
+    const providerPortalConstraints = [
+      ['provider_inquiry_responses', 'fk_provider_response_assignment_provider'],
+      ['provider_portal_audit_log', 'fk_provider_audit_assignment_provider'],
+      ['provider_user_invitations', 'ck_provider_invitation_email_normalized'],
+      ['provider_user_invitations', 'ck_provider_invitation_state_timestamps']
+    ];
+    for (const [table, name] of providerPortalConstraints) {
+      const result = await client.query(
+        'SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=$1 AND t.relname=$2 AND c.conname=$3 AND c.convalidated',
+        ['public', table, name]
+      );
+      if (!result.rowCount) throw new Error('Provider portal migration constraint missing or not validated: ' + name);
+    }
+
     const assignmentObjects = await client.query(
       "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='inquiry_provider_assignments'"
     );
