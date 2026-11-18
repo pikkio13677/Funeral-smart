@@ -112,6 +112,12 @@ async function main() {
     assert.equal(dashboard.status, 200);
     assert.equal(dashboard.data.data.counts.newCount, 2);
 
+    const detailBeforeResponse = await call('/inquiries/' + alphaAssignmentId);
+    assert.equal(detailBeforeResponse.status, 200);
+    assert.equal(detailBeforeResponse.data.data.contactEmail, null);
+    assert.equal(detailBeforeResponse.data.data.contactPhone, null);
+    assert.equal(JSON.stringify(detailBeforeResponse.data).includes('NOT FOR PROVIDER'), false);
+
     const crossProvider = await call('/inquiries/' + betaAssignmentId + '/response', 'POST', {
       status: 'accepted',
       reason: 'Tentativo di accesso non autorizzato.'
@@ -136,6 +142,25 @@ async function main() {
     });
     assert.equal(reject.status, 201);
     assert.equal(reject.data.data.status, 'rejected');
+
+    const acceptedStatus = await pool.query(
+      'SELECT status FROM provider_inquiry_responses WHERE assignment_id=$1',
+      [alphaAssignmentId]
+    );
+    const detailAfterResponse = await call('/inquiries/' + alphaAssignmentId);
+    assert.equal(detailAfterResponse.status, 200);
+    if (acceptedStatus.rows[0].status === 'accepted') {
+      assert.equal(detailAfterResponse.data.data.contactEmail, 'alpha-' + suffix + '@example.invalid');
+      assert.equal(detailAfterResponse.data.data.contactPhone, '011000000');
+    } else {
+      assert.equal(detailAfterResponse.data.data.contactEmail, null);
+      assert.equal(detailAfterResponse.data.data.contactPhone, null);
+    }
+
+    const rejectedDetail = await call('/inquiries/' + rejectAssignmentId);
+    assert.equal(rejectedDetail.status, 200);
+    assert.equal(rejectedDetail.data.data.contactEmail, null);
+    assert.equal(rejectedDetail.data.data.contactPhone, null);
 
     const responses = await pool.query(
       'SELECT assignment_id,status,provider_id FROM provider_inquiry_responses WHERE assignment_id = ANY($1::uuid[])',
