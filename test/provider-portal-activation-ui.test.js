@@ -16,7 +16,7 @@ test('provider invitation uses existing login, MFA and authenticated acceptance'
   assert.match(invitation, /credentials:'same-origin'/);
   assert.match(invitation, /cache:'no-store'/);
   assert.match(invitation, /history\.replaceState/);
-  assert.ok(invitation.includes("if(!/^[a-f0-9]{64}$/.test(token))"));
+  assert.ok(invitation.includes("if(!/^[A-Za-z0-9_-]{43}$/.test(token))"));
   assert.match(invitation, /if\(accepting\)return/);
   assert.match(invitation, /button\.setAttribute\('aria-busy','true'\)/);
   assert.doesNotMatch(invitation, /invitation\/register|create account|crea account/i);
