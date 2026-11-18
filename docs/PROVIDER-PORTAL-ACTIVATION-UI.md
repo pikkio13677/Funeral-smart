@@ -11,7 +11,7 @@ Questa PR aggiunge le due pagine same-origin per completare il percorso utente p
 6. **Gestione:** ricerca, filtri, dettagli, accettazione/rifiuto con motivazione obbligatoria e inviti ai collaboratori per provider_admin.
 
 ## Stato di attivazione — importante
-Le pagine sono servite da Express, ma gli endpoint provider delle PR #74 e #76 e la migrazione 015 restano draft e non sono montati. Di conseguenza il portale non è ancora operativo in produzione: le chiamate alle API provider risponderanno non disponibili finché non sarà completata la fase di integrazione backend.
+Le pagine sono servite da Express. Il mount delle API provider è ora predisposto dietro `ENABLE_PROVIDER_PORTAL=true`, disabilitato per default. Il middleware controlla a ogni richiesta che tutte le tabelle necessarie esistano e fallisce con 503 se la migrazione 015/014 non è pronta; le mutazioni richiedono inoltre un header Origin uguale all'origine HTTPS configurata in `PUBLIC_APP_URL`. Le API non vengono quindi esposte finché il flag non viene esplicitamente attivato e lo schema non è presente.
 
 Prima di qualsiasi attivazione occorrono revisione e test della migrazione 015 su PostgreSQL usa-e-getta, mount delle route dietro feature flag disabilitato per default, rate limiting e protezione CSRF/origin coerenti con l'app, test end-to-end di Alfa/Beta, MFA, token scaduti/riutilizzati, privacy recapiti e rollback audit.
 
