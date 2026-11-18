@@ -91,7 +91,7 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
   }
 
   if (!multiTenantEnabled) {
-    return { multiTenantEnabled: false, authRouter };
+    return { multiTenantEnabled: false, authRouter, providerPortal };
   }
 
   const tenantApi = createTenantApi({
