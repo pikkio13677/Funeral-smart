@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Client } = require('pg');
 const crypto = require('node:crypto');
-const { backfillSingleCompany } = require('./backfill-single-company');
+const { backfillSingleCompany, assertLocalDatabase } = require('./backfill-single-company');
 
 const migrationFiles = [
   '005_multi_tenant_foundation.draft.sql',
@@ -21,6 +21,10 @@ async function main() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is required for draft migration integration checks.');
   }
+
+  // This runner applies draft migrations and performs a disposable backfill.
+  // Refuse remote hosts and production mode even when invoked outside CI.
+  assertLocalDatabase(process.env.DATABASE_URL);
 
   const client = new Client({
     connectionString: process.env.DATABASE_URL,
