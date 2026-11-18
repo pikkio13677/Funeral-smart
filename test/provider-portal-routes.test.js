@@ -27,7 +27,7 @@ function fakePool({ accessRows = [{
   providerId: PROVIDER_ID,
   role: 'provider_admin',
   businessName: 'Impresa Alfa'
-}], listRows = [] } = {}) {
+}], listRows = [], detailRows = [] } = {}) {
   const calls = [];
   return {
     calls,
@@ -36,6 +36,7 @@ function fakePool({ accessRows = [{
       if (sql.includes('FROM provider_user_access')) {
         return { rowCount: accessRows.length, rows: accessRows };
       }
+      if (sql.includes('assignment.id = $1')) return { rowCount: detailRows.length, rows: detailRows };
       if (sql.includes('COUNT(*) FILTER')) {
         return {
           rowCount: 1,
@@ -257,5 +258,59 @@ test('audit failure rolls back provider acceptance', async () => {
     const statements = pool.calls.filter(call => call.channel === 'client').map(call => call.sql);
     assert.ok(statements.includes('ROLLBACK'));
     assert.equal(statements.includes('COMMIT'), false);
+  });
+});
+
+
+test('provider inquiry detail hides family contacts until the assignment is accepted', async () => {
+  const assignmentId = '44444444-4444-4444-8444-444444444444';
+  const pool = fakePool({ detailRows: [{
+    assignmentId,
+    city: 'Torino',
+    serviceType: 'burial',
+    destinationCountry: null,
+    responseStatus: null,
+    contactEmail: null,
+    contactPhone: null
+  }] });
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/inquiries/' + assignmentId, {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.data.contactEmail, null);
+    assert.equal(body.data.contactPhone, null);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const query = pool.calls.find(call => call.sql.includes('assignment.id = $1'));
+    assert.deepEqual(query.args, [assignmentId, PROVIDER_ID]);
+    assert.match(query.sql, /CASE WHEN response.status = 'accepted' THEN inquiry.contact_email ELSE NULL END/);
+    assert.match(query.sql, /CASE WHEN response.status = 'accepted' THEN inquiry.contact_phone ELSE NULL END/);
+    assert.doesNotMatch(query.sql, /inquiry\.notes|inquiry\.budget_euro/);
+  });
+});
+
+test('provider inquiry detail returns contacts only after accepted response', async () => {
+  const assignmentId = '44444444-4444-4444-8444-444444444444';
+  const pool = fakePool({ detailRows: [{
+    assignmentId,
+    city: 'Torino',
+    serviceType: 'burial',
+    destinationCountry: null,
+    responseStatus: 'accepted',
+    contactEmail: 'family@example.invalid',
+    contactPhone: '011000000'
+  }] });
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/inquiries/' + assignmentId, {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.data.responseStatus, 'accepted');
+    assert.equal(body.data.contactEmail, 'family@example.invalid');
+    assert.equal(body.data.contactPhone, '011000000');
+    assert.equal(JSON.stringify(body).includes('notes'), false);
+    assert.equal(JSON.stringify(body).includes('budget'), false);
   });
 });
