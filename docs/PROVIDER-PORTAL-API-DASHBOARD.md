@@ -2,9 +2,10 @@
 
 ## Dipendenza e stato
 
-Specifica tecnica per la futura implementazione. Dipende dalla PR marketplace #69
+Specifica tecnica e prima implementazione read-only. Dipende dalla PR marketplace #69
 (assegnazioni 014) e dalla PR #73 (modello di accesso). La migrazione 015 è solo draft.
-Nessuna route viene montata da questa PR.
+Il modulo `provider-portal-routes.js` implementa GET `/me`, `/dashboard` e `/inquiries`,
+ma non è montato nel server e resta inattivo fino al collaudo dello schema.
 
 ## Accesso e identità
 
@@ -94,8 +95,8 @@ Non mostra statistiche aggregate di altre imprese né dettagli personali nelle n
 ## Sequenza implementativa
 
 A. Riconciliare e collaudare la catena 014/PR #69 e la presente migrazione 015.
-B. Implementare middleware provider context e test unitari di isolamento.
-C. Implementare read-only `/me`, `/dashboard`, `/inquiries` e test PostgreSQL.
+B. Implementare middleware provider context e test unitari di isolamento. (presente)
+C. Implementare read-only `/me`, `/dashboard`, `/inquiries` e test delle query/sicurezza. (presente; integrazione PostgreSQL ancora da eseguire)
 D. Implementare risposta accetta/rifiuta con audit atomico.
 E. Implementare inviti e gestione team, solo dopo test del flusso account.
 F. Costruire la UI dashboard e test accessibilità/responsive.
