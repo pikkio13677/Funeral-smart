@@ -57,13 +57,16 @@ async function main() {
 
   try {
     const migration = await fs.readFile(path.join(__dirname, '..', 'migrations', '015_provider_portal_access.draft.sql'), 'utf8');
-    await pool.query('BEGIN');
+    const migrationClient = await pool.connect();
     try {
-      await pool.query(migration);
-      await pool.query('COMMIT');
+      await migrationClient.query('BEGIN');
+      await migrationClient.query(migration);
+      await migrationClient.query('COMMIT');
     } catch (error) {
-      await pool.query('ROLLBACK');
+      await migrationClient.query('ROLLBACK').catch(() => {});
       throw error;
+    } finally {
+      migrationClient.release();
     }
 
     await pool.query(
