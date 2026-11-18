@@ -147,3 +147,113 @@ test('user without active provider access cannot read the portal', async () => {
     assert.equal(pool.calls.length, 1);
   });
 });
+
+
+function transactionalPool({ assignmentVisible = true, auditFails = false } = {}) {
+  const calls = [];
+  const pool = {
+    calls,
+    async query(sql, args) {
+      calls.push({ sql, args, channel: 'pool' });
+      if (sql.includes('FROM provider_user_access')) {
+        return { rowCount: 1, rows: [{
+          providerId: PROVIDER_ID,
+          role: 'provider_admin',
+          businessName: 'Impresa Alfa'
+        }] };
+      }
+      throw new Error('Unexpected pool SQL: ' + sql);
+    },
+    async connect() {
+      return {
+        async query(sql, args) {
+          calls.push({ sql, args, channel: 'client' });
+          if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
+            return { rowCount: 0, rows: [] };
+          }
+          if (sql.includes('FROM inquiry_provider_assignments')) {
+            return assignmentVisible
+              ? { rowCount: 1, rows: [{ id: '44444444-4444-4444-8444-444444444444', providerId: PROVIDER_ID, inquiryStatus: 'assigned' }] }
+              : { rowCount: 0, rows: [] };
+          }
+          if (sql.includes('FROM provider_inquiry_responses')) return { rowCount: 0, rows: [] };
+          if (sql.includes('INSERT INTO provider_inquiry_responses')) {
+            return { rowCount: 1, rows: [{
+              id: '55555555-5555-4555-8555-555555555555',
+              assignmentId: args[0],
+              status: args[2],
+              respondedAt: '2026-11-18T20:00:00.000Z'
+            }] };
+          }
+          if (sql.includes('INSERT INTO provider_portal_audit_log')) {
+            if (auditFails) throw new Error('simulated audit failure');
+            return { rowCount: 1, rows: [] };
+          }
+          throw new Error('Unexpected client SQL: ' + sql);
+        },
+        release() { calls.push({ sql: 'RELEASE', channel: 'client' }); }
+      };
+    }
+  };
+  return pool;
+}
+
+test('provider can accept an active assignment and response plus audit commit atomically', async () => {
+  const pool = transactionalPool();
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/inquiries/44444444-4444-4444-8444-444444444444/response', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-test-user', 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'accepted', reason: 'Possiamo prendere in carico il servizio.' })
+    });
+    const body = await response.json();
+    assert.equal(response.status, 201);
+    assert.equal(body.data.status, 'accepted');
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(JSON.stringify(body).includes('contact_email'), false);
+    const statements = pool.calls.filter(call => call.channel === 'client').map(call => call.sql);
+    assert.equal(statements[0], 'BEGIN');
+    assert.ok(statements.some(sql => sql.includes('assignment.provider_id = $2')));
+    assert.ok(statements.some(sql => sql.includes('INSERT INTO provider_inquiry_responses')));
+    assert.ok(statements.some(sql => sql.includes('INSERT INTO provider_portal_audit_log')));
+    assert.equal(statements.at(-1), 'COMMIT');
+    const responseInsert = pool.calls.find(call => call.sql.includes('INSERT INTO provider_inquiry_responses'));
+    assert.deepEqual(responseInsert.args, [
+      '44444444-4444-4444-8444-444444444444',
+      PROVIDER_ID,
+      'accepted',
+      'Possiamo prendere in carico il servizio.',
+      USER_ID
+    ]);
+  });
+});
+
+test('provider cannot respond to another provider assignment', async () => {
+  const pool = transactionalPool({ assignmentVisible: false });
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/inquiries/44444444-4444-4444-8444-444444444444/response', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-test-user', 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'rejected', reason: 'Non possiamo svolgere il servizio richiesto.' })
+    });
+    assert.equal(response.status, 404);
+    const statements = pool.calls.filter(call => call.channel === 'client').map(call => call.sql);
+    assert.ok(statements.includes('ROLLBACK'));
+    assert.equal(statements.some(sql => sql.includes('INSERT INTO provider_inquiry_responses')), false);
+  });
+});
+
+test('audit failure rolls back provider acceptance', async () => {
+  const pool = transactionalPool({ auditFails: true });
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/inquiries/44444444-4444-4444-8444-444444444444/response', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-test-user', 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'accepted', reason: 'Accettiamo la richiesta del servizio.' })
+    });
+    assert.equal(response.status, 500);
+    const statements = pool.calls.filter(call => call.channel === 'client').map(call => call.sql);
+    assert.ok(statements.includes('ROLLBACK'));
+    assert.equal(statements.includes('COMMIT'), false);
+  });
+});
