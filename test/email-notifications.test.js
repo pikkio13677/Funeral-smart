@@ -110,3 +110,31 @@ test('STAGING_MODE blocks every outbound email, including company invitations', 
   assert.equal(calls.length, 0);
   assert.ok(logs.some(message => message.includes('disabilitato esplicitamente')));
 });
+
+
+test('provider portal invitation sends a time-limited role-specific link', async () => {
+  const { calls, notifier } = setup();
+  await notifier.notifyProviderUserInvitation({
+    to: 'collaboratore@example.com',
+    businessName: 'Impresa Alfa',
+    role: 'provider_admin',
+    invitationUrl: 'https://example.invalid/provider/invito/accetta?token=provider-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.to[0], 'collaboratore@example.com');
+  assert.match(calls[0].body.subject, /Impresa Alfa/);
+  assert.match(calls[0].body.text, /Amministratore impresa/);
+  assert.match(calls[0].body.text, /provider-token/);
+});
+
+test('provider portal invitation fails closed when email delivery is unavailable', async () => {
+  const { notifier } = setup({ RESEND_API_KEY: '' });
+  await assert.rejects(() => notifier.notifyProviderUserInvitation({
+    to: 'collaboratore@example.com',
+    businessName: 'Impresa Alfa',
+    role: 'provider_operator',
+    invitationUrl: 'https://example.invalid/provider/invito/accetta?token=provider-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  }), /could not be delivered/);
+});
