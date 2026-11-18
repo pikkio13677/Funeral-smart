@@ -96,14 +96,14 @@ Non mostra statistiche aggregate di altre imprese né dettagli personali nelle n
 
 A. Riconciliare e collaudare la catena 014/PR #69 e la presente migrazione 015.
 B. Implementare middleware provider context e test unitari di isolamento. (presente)
-C. Implementare read-only `/me`, `/dashboard`, `/inquiries` e test delle query/sicurezza. (presente; integrazione PostgreSQL ancora da eseguire)
-D. Implementare risposta accetta/rifiuta con audit atomico.
+C. Implementare read-only `/me`, `/dashboard`, `/inquiries` e test delle query/sicurezza. (presente; collaudo PostgreSQL dedicato aggiunto alla CI)
+D. Implementare risposta accetta/rifiuta con audit atomico. (presente; test PostgreSQL usa-e-getta aggiunti)
 E. Implementare inviti e gestione team, solo dopo test del flusso account.
 F. Costruire la UI dashboard e test accessibilità/responsive.
 G. Rieseguire suite completa e controllare CI prima di qualsiasi decisione di rilascio.
 
 ## Limiti di questa PR
 
-Solo specifica e migrazione draft. Non modifica server.js, api-route-mounts.js o migrate.js;
+Middleware, API read-only e risposta accetta/rifiuta non montate, test unitari e integrazione PostgreSQL usa-e-getta, migrazione draft. Non modifica server.js, api-route-mounts.js o migrate.js;
 non abilita feature flag; non esegue migrazioni; non tocca Render o database persistenti;
 non invia email; non effettua merge o deploy.
