@@ -19,7 +19,7 @@ test('provider invitation schema preflight confirms every required table with on
 test('provider invitation schema preflight fails closed and names missing tables', async () => {
   await assert.rejects(
     () => assertReady({ async query() { return { rows: [{ table0:true, table1:true, table2:false, table3:false, table4:true, table5:false, table6:true }] }; } }),
-    /public\.inquiry_provider_assignments.*public\.provider_user_access.*public\.provider_portal_audit_log/
+    /public\.inquiry_provider_assignments.*public\.provider_user_access.*public\.provider_inquiry_responses/
   );
 });
 
