@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><title>FUNERAL SMART · Portale imprese</title>
+<style>
+body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{background:#173b35;color:white;padding:16px 22px;display:flex;justify-content:space-between}main{max-width:1100px;margin:24px auto;padding:0 16px}.muted{color:#687784}.panel,.stat{background:white;border:1px solid #e4e9ed;border-radius:12px;padding:16px;margin:14px 0}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat b{display:block;font-size:25px}.stat small{color:#687784}input,select,textarea{font:inherit;border:1px solid #d5dfe3;border-radius:8px;padding:10px}input{min-width:150px}button{border:1px solid #d5dfe3;border-radius:8px;padding:9px 12px;background:white;font-weight:650}button.primary{background:#176b52;color:white;border-color:#176b52}button.danger{color:#a33b37}.toolbar,.actions,.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbar input{flex:1}.item{padding:14px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.item:last-child{border:0}.meta{font-size:12px;color:#687784}.status{font-size:12px;font-weight:700}.hidden{display:none!important}.message{padding:11px;background:#fff3df;color:#715b31;border-radius:8px;margin:12px 0}.ok{background:#e7f3ee;color:#176b52}label{display:block;font-size:12px;font-weight:700;margin:10px 0 5px}textarea{width:100%;min-height:85px;box-sizing:border-box}dialog{border:0;border-radius:12px;padding:20px;width:min(500px,calc(100vw - 30px))}dialog::backdrop{background:#142b2bbd}@media(max-width:620px){.stats{grid-template-columns:repeat(2,1fr)}.item{display:block}}
+</style></head><body>
+<header><div><b>FUNERAL SMART</b><div>Portale imprese partner</div></div><button id="logout">Esci</button></header>
+<main><h1 id="business">Portale impresa</h1><p class="muted">Richieste assegnate esclusivamente alla tua impresa.</p><div id="message" class="message hidden" role="status"></div>
+<section class="stats"><div class="stat"><b id="total">—</b><small>Attive</small></div><div class="stat"><b id="new">—</b><small>Nuove</small></div><div class="stat"><b id="accepted">—</b><small>Accettate</small></div><div class="stat"><b id="rejected">—</b><small>Rifiutate</small></div></section>
+<section class="panel"><h2>Richieste assegnate</h2><div class="toolbar"><input id="search" type="search" placeholder="Cerca città o servizio"><button data-filter="all" class="active">Tutte</button><button data-filter="new">Nuove</button><button data-filter="accepted">Accettate</button><button data-filter="rejected">Rifiutate</button></div><div id="list">Caricamento…</div></section>
+<section class="panel" id="team"><h2>Invita un collaboratore</h2><p class="muted">Solo l’amministratore dell’impresa può inviare inviti.</p><form id="invite"><div class="row"><div><label for="email">Email</label><input id="email" type="email" maxlength="254" required></div><div><label for="role">Ruolo</label><select id="role"><option value="provider_operator">Collaboratore</option><option value="provider_admin">Amministratore</option></select></div></div><button class="primary">Invia invito</button></form></section>
+</main>
+<dialog id="detail"><h2 id="detail-title">Dettaglio</h2><div id="detail-body"></div><button id="close-detail">Chiudi</button></dialog>
+<dialog id="response"><h2 id="response-title">Rispondi</h2><label for="reason">Motivazione obbligatoria (10–500 caratteri)</label><textarea id="reason" minlength="10" maxlength="500"></textarea><div class="actions"><button id="cancel">Annulla</button><button id="confirm" class="primary">Conferma</button></div></dialog>
+<script>
+'use strict';
+const API='/api/v1/provider-portal',el=id=>document.getElementById(id);
+let rows=[],filter='all',selected='',decision='';
+function show(t,ok){el('message').textContent=t;el('message').className='message'+(ok?' ok':'');}
+async function api(path,options){const r=await fetch(path,{credentials:'same-origin',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options&&options.headers||{})}});const d=await r.json().catch(()=>({error:'Risposta server non valida'}));if(!r.ok)throw new Error(d.error||'Operazione non riuscita');return d;}
+function state(x){return x.responseStatus||'new';}
+function label(x){return x==='accepted'?'Accettata':x==='rejected'?'Rifiutata':'Nuova';}
+function render(){
+ const q=el('search').value.trim().toLocaleLowerCase('it');const list=el('list');list.replaceChildren();
+ const visible=rows.filter(x=>(filter==='all'||state(x)===filter)&&((String(x.city||'')+' '+String(x.serviceType||'')).toLocaleLowerCase('it').includes(q)));
+ if(!visible.length){list.textContent='Nessuna richiesta corrisponde ai filtri.';return;}
+ visible.forEach(x=>{
+  const article=document.createElement('article');article.className='item';const left=document.createElement('div');const title=document.createElement('b');title.textContent=(x.city||'Località non indicata')+' · '+(x.serviceType||'Servizio');const meta=document.createElement('div');meta.className='meta';meta.textContent='Ricevuta: '+(x.receivedAt?new Date(x.receivedAt).toLocaleString('it-IT'):'—')+(x.destinationCountry?' · '+x.destinationCountry:'');left.append(title,meta);
+  const right=document.createElement('div');const badge=document.createElement('span');badge.className='status';badge.textContent=label(state(x));right.append(badge);const actions=document.createElement('div');actions.className='actions';const detail=document.createElement('button');detail.textContent='Dettaglio';detail.addEventListener('click',()=>openDetail(x.assignmentId));actions.append(detail);
+  if(state(x)==='new'){const yes=document.createElement('button');yes.className='primary';yes.textContent='Accetta';yes.addEventListener('click',()=>openResponse(x.assignmentId,'accepted'));const no=document.createElement('button');no.className='danger';no.textContent='Rifiuta';no.addEventListener('click',()=>openResponse(x.assignmentId,'rejected'));actions.append(yes,no);}
+  right.append(actions);article.append(left,right);list.append(article);
+ });
+}
+async function load(){
+ try{
+  const results=await Promise.all([api(API+'/me'),api(API+'/dashboard'),api(API+'/inquiries?limit=100&offset=0')]);
+  el('business').textContent=results[0].data.businessName||'Portale impresa';const c=results[1].data.counts||{};
+  el('total').textContent=c.activeCount??0;el('new').textContent=c.newCount??0;el('accepted').textContent=c.acceptedCount??0;el('rejected').textContent=c.rejectedCount??0;
+  rows=Array.isArray(results[2].data)?results[2].data:[];el('team').classList.toggle('hidden',results[0].data.role!=='provider_admin');render();
+ }catch(e){show(e.message,false);el('list').textContent=e.message;}
+}
+async function openDetail(id){
+ try{const d=(await api(API+'/inquiries/'+encodeURIComponent(id))).data;el('detail-title').textContent=(d.city||'Richiesta')+' · '+(d.serviceType||'Servizio');const body=el('detail-body');body.replaceChildren();
+ [['Stato',label(d.responseStatus||'new')],['Destinazione',d.destinationCountry||'Non indicata'],['Email contatto',d.contactEmail||'Visibile solo dopo accettazione'],['Telefono',d.contactPhone||'Visibile solo dopo accettazione']].forEach(pair=>{const p=document.createElement('p');const b=document.createElement('b');b.textContent=pair[0]+': ';p.append(b,document.createTextNode(pair[1]));body.append(p);});el('detail').showModal();
+ }catch(e){show(e.message,false);}
+}
+function openResponse(id,status){selected=id;decision=status;el('response-title').textContent=status==='accepted'?'Accetta richiesta':'Rifiuta richiesta';el('reason').value='';el('response').showModal();}
+el('confirm').addEventListener('click',async()=>{const reason=el('reason').value.trim();if(reason.length<10||reason.length>500){show('La motivazione deve contenere 10–500 caratteri.',false);return;}try{await api(API+'/inquiries/'+encodeURIComponent(selected)+'/response',{method:'POST',body:JSON.stringify({status:decision,reason})});el('response').close();show('Risposta registrata.',true);await load();}catch(e){show(e.message,false);}});
+el('invite').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api(API+'/invitations',{method:'POST',body:JSON.stringify({email:el('email').value.trim(),role:el('role').value})});el('email').value='';show(d.message||'Invito inviato.',true);}catch(x){show(x.message,false);}});
+document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));render();}));
+el('search').addEventListener('input',render);el('close-detail').addEventListener('click',()=>el('detail').close());el('cancel').addEventListener('click',()=>el('response').close());
+el('logout').addEventListener('click',async()=>{try{await api('/api/v1/auth/logout',{method:'POST'});}finally{location.assign('/admin');}});load();
+</script></body></html>
