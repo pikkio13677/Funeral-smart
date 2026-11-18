@@ -139,6 +139,25 @@ async function main() {
     assert.equal(updatedInquiry.status, 200);
     assert.equal(updatedInquiry.data.data.status, 'reviewed');
 
+    const anonymizedInquiry = await call('/inquiries/' + inquiryId + '/anonymize', 'POST', {
+      reason: 'Richiesta anonimizzata nel test isolato'
+    });
+    assert.equal(anonymizedInquiry.status, 200);
+    assert.equal(anonymizedInquiry.data.data.status, 'deleted');
+    const anonymizedRow = await pool.query(
+      'SELECT city,service_type,contact_email,contact_phone,notes,budget_euro,destination_country,privacy_consent,anonymized_at FROM inquiries WHERE id=$1',
+      [inquiryId]
+    );
+    assert.equal(anonymizedRow.rows[0].city, '[dato rimosso]');
+    assert.equal(anonymizedRow.rows[0].service_type, '[dato rimosso]');
+    assert.equal(anonymizedRow.rows[0].contact_email, null);
+    assert.equal(anonymizedRow.rows[0].contact_phone, null);
+    assert.equal(anonymizedRow.rows[0].notes, null);
+    assert.equal(anonymizedRow.rows[0].budget_euro, null);
+    assert.equal(anonymizedRow.rows[0].destination_country, null);
+    assert.equal(anonymizedRow.rows[0].privacy_consent, false);
+    assert.ok(anonymizedRow.rows[0].anonymized_at);
+
     const rejected = await call('/provider-applications/' + secondApplicationId + '/reject', 'POST', {
       reason: 'Candidatura rifiutata nel test isolato'
     });
@@ -155,6 +174,7 @@ async function main() {
       'platform.price_list.created',
       'platform.price_list.published',
       'platform.inquiry.status_changed',
+      'platform.inquiry.anonymized',
       'platform.provider_application.rejected'
     ]) assert.ok(actions.includes(action), 'missing audit action: ' + action);
 
