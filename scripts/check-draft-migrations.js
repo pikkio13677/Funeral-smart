@@ -31,7 +31,7 @@ async function main() {
   try {
     for (const file of migrationFiles) {
       const sql = await fs.readFile(path.join(__dirname, '..', 'migrations', file), 'utf8');
-      if (/^\s*(BEGIN|COMMIT)\s*;/im.test(sql)) {
+      if (/^\\s*(BEGIN|COMMIT)\\s*;/im.test(sql)) {
         throw new Error(file + ' must not manage transactions; migrate.js/test runner owns them.');
       }
 
@@ -39,7 +39,7 @@ async function main() {
       try {
         await client.query(sql);
         await client.query('COMMIT');
-        process.stdout.write('Draft migration OK: ' + file + '\n');
+        process.stdout.write('Draft migration OK: ' + file + '\\n');
       } catch (error) {
         await client.query('ROLLBACK');
         throw new Error(file + ' failed: ' + error.message);
@@ -96,7 +96,7 @@ async function main() {
     try {
       await client.query(finalizationSql);
       await client.query('COMMIT');
-      process.stdout.write('Draft migration OK: 013_tenant_finalize_company_id.draft.sql after single-company backfill\n');
+      process.stdout.write('Draft migration OK: 013_tenant_finalize_company_id.draft.sql after single-company backfill\\n');
     } catch (error) {
       await client.query('ROLLBACK');
       throw new Error('013_tenant_finalize_company_id.draft.sql failed after backfill: ' + error.message);
@@ -109,7 +109,6 @@ async function main() {
       ['platform_audit_log', 'platform_audit_log'],
       ['company_memberships', 'company_memberships'],
       ['company_invitations', 'company_invitations'],
-      ['email_verification_challenges', 'email_verification_challenges'],
       ['email_verification_challenges', 'email_verification_challenges'],
       ['customers.company_id', 'customers'],
       ['funeral_cases.company_id', 'funeral_cases'],
@@ -195,7 +194,6 @@ async function main() {
       if (!result.rowCount) throw new Error('Expected validated company foreign key missing: ' + name);
     }
 
-
     const finalizedColumns = await client.query(
       "SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='company_id' AND table_name = ANY($1::text[]) AND is_nullable='YES'",
       [['customers','funeral_cases','staff','vehicles','inventory_items','stock_movements','tasks','invoices','payments']]
@@ -229,6 +227,6 @@ async function main() {
 }
 
 main().catch(error => {
-  process.stderr.write(error.stack + '\n');
+  process.stderr.write(error.stack + '\\n');
   process.exitCode = 1;
 });
