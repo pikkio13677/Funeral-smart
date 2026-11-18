@@ -33,12 +33,71 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
     if (!parsed.success) return res.status(400).json({ error: 'Filtri o paginazione richieste non validi.' });
     try {
       const result = await pool.query(
-        'SELECT id,city,service_type AS "serviceType",destination_country AS "destinationCountry",budget_euro AS "budgetEuro",notes,contact_email AS "contactEmail",contact_phone AS "contactPhone",privacy_consent AS "privacyConsent",status,created_at AS "createdAt" ' +
-        'FROM inquiries WHERE (($1::varchar IS NULL AND status <> \'deleted\') OR status=$1) ORDER BY created_at DESC,id DESC LIMIT $2',
+        'SELECT i.id,i.city,i.service_type AS "serviceType",i.destination_country AS "destinationCountry",i.budget_euro AS "budgetEuro",i.notes,i.contact_email AS "contactEmail",i.contact_phone AS "contactPhone",i.privacy_consent AS "privacyConsent",i.status,i.created_at AS "createdAt", ' +
+        'a.id AS "assignmentId",a.provider_id AS "assignedProviderId",p.business_name AS "assignedProviderName",a.assigned_at AS "assignedAt" ' +
+        'FROM inquiries i LEFT JOIN LATERAL (SELECT id,provider_id,assigned_at FROM inquiry_provider_assignments WHERE inquiry_id=i.id AND status=\'active\' ORDER BY assigned_at DESC LIMIT 1) a ON TRUE ' +
+        'LEFT JOIN providers p ON p.id=a.provider_id ' +
+        'WHERE (($1::varchar IS NULL AND i.status <> \'deleted\') OR i.status=$1) ORDER BY i.created_at DESC,i.id DESC LIMIT $2',
         [parsed.data.status || null, parsed.data.limit]
       );
       res.json({ data: result.rows });
     } catch (error) { next(error); }
+  });
+
+  router.get('/inquiries/:id/assignments', async (req, res, next) => {
+    const id = UUID.safeParse(req.params.id);
+    if (!id.success) return res.status(400).json({ error: 'Identificativo richiesta non valido.' });
+    try {
+      const result = await pool.query(
+        'SELECT a.id,a.provider_id AS "providerId",p.business_name AS "providerName",a.status,a.assigned_at AS "assignedAt",a.revoked_at AS "revokedAt",a.revocation_reason AS "revocationReason",assigned.username AS "assignedBy",revoked.username AS "revokedBy" ' +
+        'FROM inquiry_provider_assignments a JOIN providers p ON p.id=a.provider_id ' +
+        'LEFT JOIN app_users assigned ON assigned.id=a.assigned_by_user_id LEFT JOIN app_users revoked ON revoked.id=a.revoked_by_user_id ' +
+        'WHERE a.inquiry_id=$1 ORDER BY a.assigned_at DESC,a.id DESC',
+        [id.data]
+      );
+      res.json({ data: result.rows });
+    } catch (error) { next(error); }
+  });
+
+  router.post('/inquiries/:id/assign', async (req, res, next) => {
+    const id = UUID.safeParse(req.params.id);
+    const parsed = z.object({ providerId: UUID, reason: text(500, 10) }).strict().safeParse(req.body);
+    if (!id.success || !parsed.success) return res.status(400).json({ error: 'Richiesta, impresa o motivazione non valide.' });
+    let client;
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const inquiry = await client.query('SELECT id,status FROM inquiries WHERE id=$1 FOR UPDATE', [id.data]);
+      if (!inquiry.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Richiesta non trovata.' });
+      }
+      if (!['received', 'reviewed'].includes(inquiry.rows[0].status)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'La richiesta non è disponibile per una nuova assegnazione.' });
+      }
+      const provider = await client.query('SELECT id,status FROM providers WHERE id=$1 FOR UPDATE', [parsed.data.providerId]);
+      if (!provider.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Impresa non trovata.' });
+      }
+      if (provider.rows[0].status !== 'verified') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'La richiesta può essere assegnata soltanto a un’impresa verificata.' });
+      }
+      const assignment = await client.query(
+        "INSERT INTO inquiry_provider_assignments (inquiry_id,provider_id,assigned_by_user_id,status) VALUES ($1,$2,$3,'active') RETURNING id,provider_id AS \"providerId\",assigned_at AS \"assignedAt\",status",
+        [id.data, parsed.data.providerId, req.user.id]
+      );
+      await client.query("UPDATE inquiries SET status='assigned' WHERE id=$1", [id.data]);
+      await writeAudit(client, req, 'platform.inquiry.assigned', 'inquiry', id.data, parsed.data.reason);
+      await client.query('COMMIT');
+      res.status(201).json({ data: assignment.rows[0], message: 'Richiesta assegnata. L’assegnazione è registrata nello storico.' });
+    } catch (error) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      if (error.code === '23505') return res.status(409).json({ error: 'La richiesta ha già un’impresa assegnataria attiva.' });
+      next(error);
+    } finally { if (client) client.release(); }
   });
 
   router.patch('/inquiries/:id/status', async (req, res, next) => {
@@ -70,6 +129,15 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
       if (!(allowedTransitions[current.rows[0].status] || []).includes(parsed.data.status)) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'Transizione di stato non consentita per questa richiesta.' });
+      }
+      if (parsed.data.status === 'closed' && current.rows[0].status === 'assigned') {
+        const revoked = await client.query(
+          "UPDATE inquiry_provider_assignments SET status='revoked',revoked_at=NOW(),revoked_by_user_id=$2,revocation_reason=$3 WHERE inquiry_id=$1 AND status='active' RETURNING id",
+          [id.data, req.user.id, parsed.data.reason]
+        );
+        if (revoked.rowCount) {
+          await writeAudit(client, req, 'platform.inquiry.assignment_revoked', 'inquiry', id.data, parsed.data.reason);
+        }
       }
       const updated = await client.query(
         'UPDATE inquiries SET status=$1 WHERE id=$2 RETURNING id,status',
