@@ -18,7 +18,7 @@ ALTER TABLE invoices VALIDATE CONSTRAINT fk_invoices_tenant_case;
 ALTER TABLE invoices VALIDATE CONSTRAINT fk_invoices_tenant_customer;
 ALTER TABLE payments VALIDATE CONSTRAINT fk_payments_tenant_invoice;
 
-DO $
+DO $$
 DECLARE
   tenant_table TEXT;
   missing_count BIGINT;
