@@ -84,6 +84,36 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
     } finally { if (client) client.release(); }
   });
 
+  router.post('/inquiries/:id/anonymize', async (req, res, next) => {
+    const id = UUID.safeParse(req.params.id);
+    const parsed = z.object({ reason: text(500, 10) }).strict().safeParse(req.body);
+    if (!id.success || !parsed.success) return res.status(400).json({ error: 'Identificativo o motivazione non validi.' });
+    let client;
+    try {
+      client = await pool.connect();
+      await client.query('BEGIN');
+      const current = await client.query('SELECT id,status,anonymized_at AS "anonymizedAt" FROM inquiries WHERE id=$1 FOR UPDATE', [id.data]);
+      if (!current.rowCount) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Richiesta non trovata.' });
+      }
+      if (current.rows[0].status === 'deleted' || current.rows[0].anonymizedAt) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'La richiesta è già stata anonimizzata.' });
+      }
+      const anonymized = await client.query(
+        "UPDATE inquiries SET city='[dato rimosso]',service_type='[dato rimosso]',destination_country=NULL,budget_euro=NULL,notes=NULL,contact_email=NULL,contact_phone=NULL,privacy_consent=FALSE,status='deleted',anonymized_at=NOW() WHERE id=$1 RETURNING id,status,anonymized_at AS \"anonymizedAt\"",
+        [id.data]
+      );
+      await writeAudit(client, req, 'platform.inquiry.anonymized', 'inquiry', id.data, parsed.data.reason);
+      await client.query('COMMIT');
+      res.json({ data: anonymized.rows[0], message: 'Recapiti e contenuti della richiesta sono stati anonimizzati. La traccia tecnica minima resta conservata.' });
+    } catch (error) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      next(error);
+    } finally { if (client) client.release(); }
+  });
+
   router.get('/provider-applications', async (req, res, next) => {
     const parsed = z.object({
       status: z.enum(['pending', 'approved', 'rejected']).optional(),
