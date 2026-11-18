@@ -65,5 +65,7 @@ jobs:
         run: node --check scripts/platform-company-api-postgres-integration.js && node scripts/platform-company-api-postgres-integration.js
       - name: Test platform marketplace API on disposable PostgreSQL
         run: node --check scripts/platform-marketplace-api-postgres-integration.js && RUN_PLATFORM_MARKETPLACE_POSTGRES_TESTS=true node scripts/platform-marketplace-api-postgres-integration.js
+      - name: Test provider portal API on disposable PostgreSQL
+        run: node --check scripts/provider-portal-api-postgres-integration.js && RUN_PROVIDER_PORTAL_POSTGRES_TESTS=true node scripts/provider-portal-api-postgres-integration.js
       - name: Check and run read-only tenant backfill preflight
         run: node --check scripts/tenant-backfill-preflight.js && node scripts/tenant-backfill-preflight.js
