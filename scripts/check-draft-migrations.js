@@ -159,14 +159,14 @@ async function main() {
     if (!ownerIndex.rowCount) throw new Error('Single active platform owner index missing.');
 
     const compositeConstraints = [
-      'fk_funeral_cases_tenant_customer',
-      'fk_stock_movements_tenant_item',
-      'fk_stock_movements_tenant_case',
-      'fk_tasks_tenant_case',
-      'fk_tasks_tenant_staff',
-      'fk_invoices_tenant_case',
-      'fk_invoices_tenant_customer',
-      'fk_payments_tenant_invoice'
+      'fk_funeral_cases_company_customer',
+      'fk_stock_movements_company_item',
+      'fk_stock_movements_company_case',
+      'fk_tasks_company_case',
+      'fk_tasks_company_staff',
+      'fk_invoices_company_case',
+      'fk_invoices_company_customer',
+      'fk_payments_company_invoice'
     ];
     for (const name of compositeConstraints) {
       const result = await client.query(
