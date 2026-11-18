@@ -39,9 +39,9 @@ Registrare inoltre il numero di utenti attivi per ruolo, le relazioni esistenti 
 
 ## 4. Preparazione schema tenant
 
-Sul clone locale, applicare in sequenza le migrazioni 005–011 con transazione per file. Non eseguire la 012 in questa fase.
+Sul clone locale, applicare in sequenza le migrazioni draft 005–012 con transazione per file. La migrazione 012 crea l’audit della piattaforma; NON eseguire la 013, che finalizza i tenant, in questa fase.
 
-Dopo 005–011, eseguire lo script read-only:
+Dopo 005–012, eseguire lo script read-only:
 
 ```bash
 NODE_ENV=test DATABASE_URL=postgres://localhost/funeral_smart_tenant_rehearsal \
@@ -76,12 +76,12 @@ Dopo il backfill:
 2. verificare zero relazioni cross-company;
 3. verificare le 8 FK composte e le 9 FK verso `companies`;
 4. verificare la membership attiva di ogni utente aziendale;
-5. applicare la bozza 012 soltanto sul clone;
-6. verificare `company_id NOT NULL` sulle nove tabelle e i quattro indici unici per azienda;
+5. verificare la presenza della tabella `platform_audit_log` creata dalla migrazione 012;
+6. applicare la bozza 013 soltanto sul clone, dopo il backfill e tutte le verifiche;
 7. eseguire i test PostgreSQL Alfa/Beta e la suite applicativa;
 8. provare il rollback ripristinando il dump originale in un secondo database nuovo.
 
-La migrazione 012 rimuove i vincoli globali su codice pratica, targa, SKU e numero fattura soltanto dopo la creazione e verifica dei corrispondenti indici unici per azienda.
+La migrazione 013 rimuove i vincoli globali su codice pratica, targa, SKU e numero fattura soltanto dopo la creazione e verifica dei corrispondenti indici unici per azienda.
 
 ## 7. Criterio di arresto
 
