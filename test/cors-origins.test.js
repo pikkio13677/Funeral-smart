@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const getAllowedOrigins = require('../cors-origins');
 
 const STAGING_ORIGIN = 'https://funeral-smart-web-staging.onrender.com';
@@ -44,4 +46,12 @@ test('production origin defaults are not accidentally mutated', () => {
   const first = getAllowedOrigins({ STAGING_MODE: 'true', CORS_ORIGIN: STAGING_ORIGIN });
   first.push('https://attacker.example');
   assert.equal(getAllowedOrigins.PRODUCTION_ORIGINS.includes('https://attacker.example'), false);
+});
+
+
+test('server uses the dedicated environment-aware CORS allowlist', () => {
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  assert.match(server, /require\('\.\/cors-origins'\)/);
+  assert.match(server, /getAllowedOrigins\(process\.env\)/);
+  assert.doesNotMatch(server, /const allowedOrigins = \[\.\.\.new Set\(\[/);
 });
