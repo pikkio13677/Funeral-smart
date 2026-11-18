@@ -16,6 +16,9 @@ test('provider invitation uses existing login, MFA and authenticated acceptance'
   assert.match(invitation, /credentials:'same-origin'/);
   assert.match(invitation, /cache:'no-store'/);
   assert.match(invitation, /history\.replaceState/);
+  assert.ok(invitation.includes("if(!/^[A-Za-z0-9_-]{43}$/.test(token))"));
+  assert.match(invitation, /if\(accepting\)return/);
+  assert.match(invitation, /button\.setAttribute\('aria-busy','true'\)/);
   assert.doesNotMatch(invitation, /invitation\/register|create account|crea account/i);
 });
 
@@ -43,5 +46,6 @@ test('server serves the two portal pages with no-store and no-referrer protectio
   assert.match(server, /app\.get\('\/provider\/portale'/);
   assert.match(server, /Cache-Control', 'no-store'/);
   assert.match(server, /Referrer-Policy', 'no-referrer'/);
+  assert.match(server, /X-Robots-Tag', 'noindex, nofollow, noarchive'/);
   assert.match(server, /frame-ancestors 'none'/);
 });
