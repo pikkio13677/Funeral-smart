@@ -41,6 +41,40 @@ async function main() {
   let alfaServer;
   let betaServer;
   await client.query('BEGIN');
+  // Route transactions use savepoints on the fixture connection so the whole
+  // Alfa/Beta integration scenario can still be rolled back at the end.
+  let tenantTransactionSequence = 0;
+  const tenantPool = {
+    query: (...args) => client.query(...args),
+    async connect() {
+      const savepoint = 'tenant_api_' + (++tenantTransactionSequence);
+      let active = false;
+      return {
+        async query(sql, args) {
+          if (sql === 'BEGIN') {
+            await client.query('SAVEPOINT ' + savepoint);
+            active = true;
+            return { rows: [], rowCount: 0 };
+          }
+          if (sql === 'COMMIT') {
+            if (active) await client.query('RELEASE SAVEPOINT ' + savepoint);
+            active = false;
+            return { rows: [], rowCount: 0 };
+          }
+          if (sql === 'ROLLBACK') {
+            if (active) {
+              await client.query('ROLLBACK TO SAVEPOINT ' + savepoint);
+              await client.query('RELEASE SAVEPOINT ' + savepoint);
+            }
+            active = false;
+            return { rows: [], rowCount: 0 };
+          }
+          return client.query(sql, args);
+        },
+        release() {}
+      };
+    }
+  };
   try {
     const alfa = (await client.query("INSERT INTO companies (legal_name) VALUES ('Alfa Test S.r.l.') RETURNING id")).rows[0].id;
     const beta = (await client.query("INSERT INTO companies (legal_name) VALUES ('Beta Test S.r.l.') RETURNING id")).rows[0].id;
@@ -270,13 +304,13 @@ async function main() {
         req.tenant = { companyId, membershipId, role: 'admin' };
         next();
       });
-      app.use('/admin', createTenantCustomersCasesRouter(client));
-      app.use('/admin', createTenantStaffVehiclesRouter(client));
-      app.use('/admin', createTenantInventoryTasksRouter(client));
-      app.use('/admin', createTenantInvoicesPaymentsRouter(client));
-      app.use('/admin', createTenantDashboardRouter(client));
-      app.use('/admin', createTenantAuditRouter(client));
-      app.use('/admin', createTenantCompanyAdminRouter(client));
+      app.use('/admin', createTenantCustomersCasesRouter(tenantPool));
+      app.use('/admin', createTenantStaffVehiclesRouter(tenantPool));
+      app.use('/admin', createTenantInventoryTasksRouter(tenantPool));
+      app.use('/admin', createTenantInvoicesPaymentsRouter(tenantPool));
+      app.use('/admin', createTenantDashboardRouter(tenantPool));
+      app.use('/admin', createTenantAuditRouter(tenantPool));
+      app.use('/admin', createTenantCompanyAdminRouter(tenantPool));
       return app;
     }
 
