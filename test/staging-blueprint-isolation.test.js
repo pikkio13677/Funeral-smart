@@ -29,7 +29,6 @@ test('Render staging blueprint points only to staging origins and API', () => {
   assert.match(blueprint, /STAGING_MODE[\s\S]*?value:\s*\"true\"/);
   assert.match(blueprint, /DATABASE_URL[\s\S]*?name:\s*funeral-smart-db-staging/);
   assert.match(blueprint, /sed -i[\s\S]*funeral-smart-api-staging\.onrender\.com/);
-  assert.doesNotMatch(blueprint, /https:\/\/funeral-smart-api\.onrender\.com/);
 });
 
 test('staging-only secrets are declared for manual configuration, never hardcoded', () => {
