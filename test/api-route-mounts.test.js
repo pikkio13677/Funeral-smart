@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const express = require('express');
 const mountApiRouters = require('../api-route-mounts');
 
-function fixtures(enabled, approved = enabled) {
+function fixtures(enabled, approved = enabled, options = {}) {
   const mounts = [];
   const app = { use(path, ...handlers) { mounts.push({ path, handlers }); } };
   const pool = {
@@ -24,7 +24,8 @@ function fixtures(enabled, approved = enabled) {
     env: {
       ENABLE_MULTI_TENANT: enabled ? 'true' : 'false',
       MULTI_TENANT_CUTOVER_APPROVED: approved ? 'true' : 'false',
-      PUBLIC_APP_URL: 'https://example.invalid'
+      PUBLIC_APP_URL: 'https://example.invalid',
+      ENABLE_PROVIDER_PORTAL_INVITATIONS: options.providerInvitations ? 'true' : 'false'
     }
   });
   return { mounts, result };
@@ -88,4 +89,24 @@ test('tenant mode blocks URL-encoded global user administration paths', () => {
     json() { return this; }
   }, () => assert.fail('encoded global user route should be blocked'));
   assert.equal(statusCode, 404);
+});
+
+
+test('provider invitation API is not mounted unless its dedicated feature flag is true', () => {
+  const disabled = fixtures(false);
+  assert.equal(disabled.result.providerInvitationsEnabled, false);
+  assert.equal(disabled.mounts.some(item => item.path === '/api/v1/provider-portal'), false);
+
+  const enabled = fixtures(false, false, { providerInvitations: true });
+  assert.equal(enabled.result.providerInvitationsEnabled, true);
+  const mount = enabled.mounts.find(item => item.path === '/api/v1/provider-portal');
+  assert.ok(mount);
+  assert.equal(mount.handlers.at(-1), enabled.result.providerInvitationRouter);
+  assert.equal(enabled.result.multiTenantEnabled, false);
+});
+
+test('provider invitation API is not implicitly enabled by multi-tenant mode', () => {
+  const { result, mounts } = fixtures(true);
+  assert.equal(result.providerInvitationsEnabled, false);
+  assert.equal(mounts.some(item => item.path === '/api/v1/provider-portal'), false);
 });
