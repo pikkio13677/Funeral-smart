@@ -6,7 +6,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'provider-portal-preview.html'), 'utf8');
-const scripts = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)].map(match => match[1]);
+const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1]);
 
 test('provider portal preview has one syntactically valid demo script', () => {
   assert.equal(scripts.length, 1);
@@ -17,7 +17,7 @@ test('provider portal preview is explicitly demo-only and never calls the live A
   assert.match(html, /Modalità anteprima/);
   assert.match(html, /dati dimostrativi/);
   assert.match(html, /Nessun dato è stato inviato al server/);
-  assert.doesNotMatch(scripts[0], /fetch\\s*\\(|XMLHttpRequest|WebSocket/);
+  assert.doesNotMatch(scripts[0], /fetch\s*\(|XMLHttpRequest|WebSocket/);
 });
 
 test('provider portal preview exposes only assigned-request demo fields and protects contact details', () => {
