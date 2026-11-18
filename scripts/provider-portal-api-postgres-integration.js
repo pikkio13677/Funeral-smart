@@ -69,6 +69,19 @@ async function main() {
       migrationClient.release();
     }
 
+    // Idempotence: applying the staged migration twice must not fail.
+    const repeatClient = await pool.connect();
+    try {
+      await repeatClient.query('BEGIN');
+      await repeatClient.query(migration);
+      await repeatClient.query('COMMIT');
+    } catch (error) {
+      await repeatClient.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      repeatClient.release();
+    }
+
     await pool.query(
       "INSERT INTO app_users(id,username,display_name,password_hash,role,active) VALUES($1,$2,$3,$4,'operator',TRUE)",
       [userId, 'ci_provider_' + suffix, 'Provider Portal Integration Test', 'test-only-not-a-real-password-hash']
@@ -88,6 +101,39 @@ async function main() {
     await pool.query(
       "INSERT INTO inquiry_provider_assignments(id,inquiry_id,provider_id,status) VALUES($1,$2,$3,'active'),($4,$5,$6,'active'),($7,$8,$3,'active')",
       [alphaAssignmentId, alphaInquiryId, alphaId, betaAssignmentId, betaInquiryId, betaId, rejectAssignmentId, rejectInquiryId]
+    );
+
+    // Database-level cross-provider protection: a response or audit event
+    // cannot claim an assignment belonging to the other provider.
+    await assert.rejects(
+      pool.query(
+        "INSERT INTO provider_inquiry_responses(assignment_id,provider_id,status,reason) VALUES($1,$2,'accepted','Tentativo di associazione incrociata non consentito.')",
+        [alphaAssignmentId, betaId]
+      ),
+      error => error.code === '23503'
+    );
+    await assert.rejects(
+      pool.query(
+        "INSERT INTO provider_portal_audit_log(provider_id,assignment_id,action) VALUES($1,$2,'test.cross-provider')",
+        [betaId, alphaAssignmentId]
+      ),
+      error => error.code === '23503'
+    );
+
+    // Invitations must be stored normalized and state timestamps must agree.
+    await assert.rejects(
+      pool.query(
+        "INSERT INTO provider_user_invitations(provider_id,email,role,token_hash,expires_at) VALUES($1,'UPPER@example.invalid','provider_operator',$2,NOW()+INTERVAL '1 hour')",
+        [alphaId, crypto.createHash('sha256').update('invalid-email-test').digest('hex')]
+      ),
+      error => error.code === '23514'
+    );
+    await assert.rejects(
+      pool.query(
+        "INSERT INTO provider_user_invitations(provider_id,email,role,token_hash,status,expires_at) VALUES($1,'valid@example.invalid','provider_operator',$2,'accepted',NOW()+INTERVAL '1 hour')",
+        [alphaId, crypto.createHash('sha256').update('invalid-state-test').digest('hex')]
+      ),
+      error => error.code === '23514'
     );
 
     server = http.createServer(app);
