@@ -241,3 +241,149 @@ test('provider operators cannot invite colleagues through their provider context
   await invoke({ provider: { role: 'provider_operator', providerId: 'provider-alpha' }, user: { id: 'u1' }, body: {} }, res, e => { throw e; });
   assert.equal(res.statusCode, 403);
 });
+
+
+test('provider administrators can list only their provider invitations without token material', async () => {
+  let query;
+  const router = createRouter({
+    pool: {
+      query: async (sql, args) => {
+        query = { sql, args };
+        return { rowCount: 1, rows: [{ id: 'invite-1', email: 'person@example.com', role: 'provider_operator', status: 'pending' }] };
+      },
+      connect: async () => { throw new Error('GET must not open a transaction'); }
+    },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/invitations', 'get')({
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers['Cache-Control'], 'no-store');
+  assert.deepEqual(query.args, ['provider-alpha']);
+  assert.match(query.sql, /WHERE provider_id = \$1/);
+  assert.match(query.sql, /CASE WHEN status = 'pending'/);
+  assert.doesNotMatch(query.sql, /token_hash/);
+  assert.equal(res.body.data[0].email, 'person@example.com');
+});
+
+test('provider operators cannot list or revoke invitations', async () => {
+  const router = createRouter({
+    pool: { query: async () => { throw new Error('must not query'); }, connect: async () => { throw new Error('must not connect'); } },
+    authenticate: (_req, _res, next) => next()
+  });
+  const list = response();
+  await handler(router, '/invitations', 'get')({
+    provider: { providerId: 'provider-alpha', role: 'provider_operator' }
+  }, list, error => { throw error; });
+  assert.equal(list.statusCode, 403);
+  const revoke = response();
+  await handler(router, '/invitations/:invitationId', 'delete')({
+    provider: { providerId: 'provider-alpha', role: 'provider_operator' },
+    params: { invitationId: '11111111-1111-4111-8111-111111111111' }
+  }, revoke, error => { throw error; });
+  assert.equal(revoke.statusCode, 403);
+});
+
+test('provider administrator revocation is provider-scoped and audited in the same transaction', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM provider_user_invitations')) return { rowCount: 1, rows: [{
+      id: '11111111-1111-4111-8111-111111111111',
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 60000)
+    }] };
+    return { rowCount: 1, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/invitations/:invitationId', 'delete')({
+    user: { id: 'provider-admin-user' },
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+    params: { invitationId: '11111111-1111-4111-8111-111111111111' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.data.status, 'revoked');
+  assert.equal(client.calls.some(call => call.sql.includes("SET status = 'revoked', revoked_at = NOW()") && call.args[1] === 'provider-alpha'), true);
+  assert.equal(client.calls.some(call => call.sql.includes('provider.invitation.revoked') && call.args[1] === 'provider-admin-user'), true);
+  assert.equal(client.calls.some(call => call.sql === 'COMMIT'), true);
+  assert.equal(client.calls.some(call => call.sql === 'ROLLBACK'), false);
+});
+
+test('provider administrator cannot revoke an invitation belonging to another provider', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM provider_user_invitations')) return { rowCount: 0, rows: [] };
+    return { rowCount: 0, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/invitations/:invitationId', 'delete')({
+    user: { id: 'provider-admin-user' },
+    provider: { providerId: 'provider-beta', role: 'provider_admin' },
+    params: { invitationId: '11111111-1111-4111-8111-111111111111' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 404);
+  assert.equal(client.calls.some(call => call.sql.includes('provider.invitation.revoked')), false);
+  assert.equal(client.calls.some(call => call.sql === 'ROLLBACK'), true);
+});
+
+test('expired invitation cannot be revoked and is marked expired instead', async () => {
+  const client = makeClient(sql => {
+    if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+    if (sql.includes('FROM provider_user_invitations')) return { rowCount: 1, rows: [{
+      id: '11111111-1111-4111-8111-111111111111',
+      status: 'pending',
+      expiresAt: new Date(Date.now() - 1000)
+    }] };
+    return { rowCount: 1, rows: [] };
+  });
+  const router = createRouter({
+    pool: { query: async () => ({}), connect: async () => client },
+    authenticate: (_req, _res, next) => next()
+  });
+  const res = response();
+  await handler(router, '/invitations/:invitationId', 'delete')({
+    user: { id: 'provider-admin-user' },
+    provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+    params: { invitationId: '11111111-1111-4111-8111-111111111111' }
+  }, res, error => { throw error; });
+  assert.equal(res.statusCode, 410);
+  assert.equal(client.calls.some(call => call.sql.includes("SET status = 'expired'")), true);
+  assert.equal(client.calls.some(call => call.sql.includes('provider.invitation.revoked')), false);
+  assert.equal(client.calls.some(call => call.sql === 'COMMIT'), true);
+});
+
+test('accepted or already revoked invitations cannot be revoked again', async () => {
+  for (const status of ['accepted', 'revoked']) {
+    const client = makeClient(sql => {
+      if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rowCount: 0, rows: [] };
+      if (sql.includes('FROM provider_user_invitations')) return { rowCount: 1, rows: [{
+        id: '11111111-1111-4111-8111-111111111111',
+        status,
+        expiresAt: new Date(Date.now() + 60000)
+      }] };
+      return { rowCount: 1, rows: [] };
+    });
+    const router = createRouter({
+      pool: { query: async () => ({}), connect: async () => client },
+      authenticate: (_req, _res, next) => next()
+    });
+    const res = response();
+    await handler(router, '/invitations/:invitationId', 'delete')({
+      user: { id: 'provider-admin-user' },
+      provider: { providerId: 'provider-alpha', role: 'provider_admin' },
+      params: { invitationId: '11111111-1111-4111-8111-111111111111' }
+    }, res, error => { throw error; });
+    assert.equal(res.statusCode, 409);
+    assert.equal(client.calls.some(call => call.sql.includes("SET status = 'revoked'")), false);
+    assert.equal(client.calls.some(call => call.sql === 'ROLLBACK'), true);
+  }
+});
