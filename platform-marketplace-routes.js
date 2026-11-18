@@ -123,7 +123,7 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
       const allowedTransitions = {
         received: ['reviewed', 'closed'],
         reviewed: ['closed'],
-        assigned: [],
+        assigned: ['closed'],
         closed: []
       };
       if (!(allowedTransitions[current.rows[0].status] || []).includes(parsed.data.status)) {
