@@ -102,6 +102,29 @@ async function main() {
       throw new Error('013_tenant_finalize_company_id.draft.sql failed after backfill: ' + error.message);
     }
 
+    const assignmentMigration = await fs.readFile(
+      path.join(__dirname, '..', 'migrations', '014_platform_inquiry_assignments.draft.sql'),
+      'utf8'
+    );
+    await client.query('BEGIN');
+    try {
+      await client.query(assignmentMigration);
+      await client.query('COMMIT');
+      process.stdout.write('Draft migration OK: 014_platform_inquiry_assignments.draft.sql\\n');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw new Error('014_platform_inquiry_assignments.draft.sql failed: ' + error.message);
+    }
+
+    const assignmentObjects = await client.query(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='inquiry_provider_assignments'"
+    );
+    if (!assignmentObjects.rowCount) throw new Error('Platform inquiry assignment table missing.');
+    const activeAssignmentIndex = await client.query(
+      "SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='uq_inquiry_provider_assignments_one_active'"
+    );
+    if (!activeAssignmentIndex.rowCount) throw new Error('Single-active-inquiry-assignment unique index missing.');
+
     const checks = [
       ['companies', 'companies'],
       ['platform_access', 'platform_access'],
