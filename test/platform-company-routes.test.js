@@ -153,3 +153,20 @@ test('audit cursor rejects BIGSERIAL overflow and unexpected fields', () => {
   assert.equal(decodeAuditCursor(encode({ ...valid, id: '9223372036854775808' })), undefined);
   assert.equal(decodeAuditCursor(encode({ ...valid, extra: 'ignored-before-hardening' })), undefined);
 });
+
+
+test('audit filters accept platform marketplace actions and resource types', async () => {
+  let captured;
+  const pool = {
+    query: async (sql, values) => {
+      captured = { sql, values };
+      return { rowCount: 0, rows: [] };
+    },
+    connect: async () => { throw new Error('unexpected'); }
+  };
+  await withServer(createRouter(pool, authOptions()), async base => {
+    const response = await fetch(base + '/api/v1/platform/audit?action=platform.provider_application.approved&resource=provider_application&resourceId=' + COMPANY_ID);
+    assert.equal(response.status, 200);
+    assert.deepEqual(captured.values, ['platform.provider_application.approved', 'provider_application', COMPANY_ID, 26]);
+  });
+});
