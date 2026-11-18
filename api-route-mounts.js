@@ -77,13 +77,14 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
 
     const createProviderPortalRouter = require('./provider-portal-routes');
     const createProviderPortalInvitationRouter = require('./provider-portal-invitation-routes');
-    providerApi.use(createProviderPortalRouter(pool, { authenticate: passThrough }));
+    // Invitation acceptance must run before providerContext: invitees have no provider membership yet.
     providerApi.use(createProviderPortalInvitationRouter({
       pool,
       authenticate: passThrough,
       sendInvitationEmail: emailNotifications?.notifyProviderUserInvitation,
       publicAppUrl: env.PUBLIC_APP_URL
     }));
+    providerApi.use(createProviderPortalRouter(pool, { authenticate: passThrough }));
     app.use('/api/v1/provider-portal', rateLimit({
       windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: 'draft-7', legacyHeaders: false
     }), providerApi);
