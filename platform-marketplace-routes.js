@@ -25,6 +25,14 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
     );
   }
 
+  // Record collection access without copying personal data into the audit log.
+  async function writeCollectionReadAudit(req, action, resource) {
+    await pool.query(
+      'INSERT INTO platform_audit_log (actor_user_id,actor_username,action,resource,resource_id,reason,ip_address) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [req.user.id, req.user.username || null, action, resource, 'collection', 'Consultazione elenco dati', req.ip || null]
+    );
+  }
+
   router.get('/inquiries', async (req, res, next) => {
     const parsed = z.object({
       status: z.enum(['received', 'reviewed', 'assigned', 'closed', 'deleted']).optional(),
@@ -37,6 +45,7 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
         'FROM inquiries WHERE (($1::varchar IS NULL AND status <> \'deleted\') OR status=$1) ORDER BY created_at DESC,id DESC LIMIT $2',
         [parsed.data.status || null, parsed.data.limit]
       );
+      await writeCollectionReadAudit(req, 'platform.inquiry.list_viewed', 'inquiry');
       res.json({ data: result.rows });
     } catch (error) { next(error); }
   });
@@ -96,6 +105,7 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
         'FROM provider_applications WHERE ($1::varchar IS NULL OR status=$1) ORDER BY created_at DESC,id DESC LIMIT $2',
         [parsed.data.status || null, parsed.data.limit]
       );
+      await writeCollectionReadAudit(req, 'platform.provider_application.list_viewed', 'provider_application');
       res.json({ data: result.rows });
     } catch (error) { next(error); }
   });
@@ -169,12 +179,13 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
     } finally { if (client) client.release(); }
   });
 
-  router.get('/providers', async (_req, res, next) => {
+  router.get('/providers', async (req, res, next) => {
     try {
       const result = await pool.query(
         "SELECT id,business_name AS \"businessName\",vat_number AS \"vatNumber\",city,province,email,phone,website,status,verification_date AS \"verificationDate\",created_at AS \"createdAt\" " +
         "FROM providers ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'verified' THEN 1 ELSE 2 END,business_name LIMIT 300"
       );
+      await writeCollectionReadAudit(req, 'platform.provider.list_viewed', 'provider');
       res.json({ data: result.rows });
     } catch (error) { next(error); }
   });
@@ -224,12 +235,13 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
     message: 'La data di fine validità non può precedere quella iniziale.'
   });
 
-  router.get('/price-lists', async (_req, res, next) => {
+  router.get('/price-lists', async (req, res, next) => {
     try {
       const result = await pool.query(
         'SELECT pl.id,pl.provider_id AS "providerId",p.business_name AS "businessName",p.status AS "providerStatus",pl.service_type_id AS "serviceTypeId",st.label AS "serviceLabel",pl.title,pl.total_euro AS "totalEuro",pl.vat_included AS "vatIncluded",pl.included_items AS "includedItems",pl.excluded_items AS "excludedItems",pl.third_party_costs_note AS "thirdPartyCostsNote",pl.valid_from AS "validFrom",pl.valid_until AS "validUntil",pl.published,pl.created_at AS "createdAt" ' +
         'FROM price_lists pl JOIN providers p ON p.id=pl.provider_id JOIN service_types st ON st.id=pl.service_type_id ORDER BY p.business_name,pl.created_at DESC LIMIT 300'
       );
+      await writeCollectionReadAudit(req, 'platform.price_list.list_viewed', 'price_list');
       res.json({ data: result.rows });
     } catch (error) { next(error); }
   });

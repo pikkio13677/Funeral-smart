@@ -213,8 +213,13 @@ test('price list creation refuses unverified providers', async () => {
 
 test('inquiry list hides logically deleted records unless explicitly requested', async () => {
   let captured;
+  const calls = [];
   const pool = {
-    async query(sql, args) { captured = { sql, args }; return { rowCount: 0, rows: [] }; },
+    async query(sql, args) {
+      calls.push({ sql, args });
+      if (sql.startsWith('SELECT id,city')) captured = { sql, args };
+      return { rowCount: 0, rows: [] };
+    },
     async connect() { throw new Error('unexpected'); }
   };
   await withServer(createRouter(pool, authOptions()), async base => {
@@ -225,6 +230,30 @@ test('inquiry list hides logically deleted records unless explicitly requested',
     const deleted = await fetch(base + '/api/v1/platform/inquiries?status=deleted');
     assert.equal(deleted.status, 200);
     assert.deepEqual(captured.args, ['deleted', 50]);
+    const readAudits = calls.filter(call => call.sql.startsWith('INSERT INTO platform_audit_log'));
+    assert.equal(readAudits.length, 2);
+    assert.equal(readAudits[0].args[2], 'platform.inquiry.list_viewed');
+    assert.equal(readAudits[0].args[3], 'inquiry');
+    assert.equal(readAudits[0].args[4], 'collection');
+    assert.equal(readAudits[0].args[5], 'Consultazione elenco dati');
+    assert.equal(JSON.stringify(readAudits).includes('contact_email'), false);
+  });
+});
+
+test('collection data is not returned when its read audit cannot be recorded', async () => {
+  const pool = {
+    async query(sql) {
+      if (sql.startsWith('SELECT id,city')) return { rowCount: 1, rows: [{ id: INQUIRY_ID, contact_email: 'private@example.invalid' }] };
+      if (sql.startsWith('INSERT INTO platform_audit_log')) throw new Error('audit unavailable');
+      throw new Error('unexpected query');
+    },
+    async connect() { throw new Error('unexpected'); }
+  };
+  await withServer(createRouter(pool, authOptions()), async base => {
+    const response = await fetch(base + '/api/v1/platform/inquiries');
+    assert.equal(response.status, 500);
+    const body = await response.text();
+    assert.equal(body.includes('private@example.invalid'), false);
   });
 });
 
