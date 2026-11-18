@@ -245,3 +245,55 @@ test('closed inquiries cannot be reopened through the status endpoint', async ()
     assert.equal(pool.calls.some(call => call.sql.startsWith('UPDATE inquiries')), false);
   });
 });
+
+
+test('inquiry anonymization removes contact details and audit commits atomically', async () => {
+  const pool = fakePool(async sql => {
+    if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+    if (sql.startsWith('SELECT id,status,anonymized_at')) return {
+      rowCount: 1, rows: [{ id: INQUIRY_ID, status: 'reviewed', anonymizedAt: null }]
+    };
+    if (sql.startsWith('UPDATE inquiries SET city=')) return {
+      rowCount: 1, rows: [{ id: INQUIRY_ID, status: 'deleted', anonymizedAt: new Date().toISOString() }]
+    };
+    return { rowCount: 1, rows: [] };
+  });
+  await withServer(createRouter(pool, authOptions()), async base => {
+    const response = await fetch(base + '/api/v1/platform/inquiries/' + INQUIRY_ID + '/anonymize', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reason: 'Richiesta di anonimizzazione verificata' })
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.data.status, 'deleted');
+    assert.match(body.message, /anonimizzati/);
+    const update = pool.calls.find(call => call.sql.startsWith('UPDATE inquiries SET city='));
+    assert.match(update.sql, /contact_email=NULL/);
+    assert.match(update.sql, /contact_phone=NULL/);
+    assert.match(update.sql, /notes=NULL/);
+    assert.match(update.sql, /anonymized_at=NOW\(\)/);
+    assert.ok(pool.calls.some(call => call.sql.startsWith('INSERT INTO platform_audit_log')));
+    assert.equal(pool.calls.at(-1).sql, 'COMMIT');
+  });
+});
+
+test('already deleted inquiry cannot be anonymized twice', async () => {
+  const pool = fakePool(async sql => {
+    if (sql === 'BEGIN' || sql === 'ROLLBACK') return { rowCount: 0, rows: [] };
+    if (sql.startsWith('SELECT id,status,anonymized_at')) return {
+      rowCount: 1, rows: [{ id: INQUIRY_ID, status: 'deleted', anonymizedAt: null }]
+    };
+    return { rowCount: 0, rows: [] };
+  });
+  await withServer(createRouter(pool, authOptions()), async base => {
+    const response = await fetch(base + '/api/v1/platform/inquiries/' + INQUIRY_ID + '/anonymize', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reason: 'Seconda richiesta di anonimizzazione' })
+    });
+    assert.equal(response.status, 409);
+    assert.ok(pool.calls.some(call => call.sql === 'ROLLBACK'));
+    assert.equal(pool.calls.some(call => call.sql.startsWith('UPDATE inquiries SET city=')), false);
+  });
+});
