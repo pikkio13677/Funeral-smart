@@ -110,7 +110,7 @@ async function main() {
     try {
       await client.query(assignmentMigration);
       await client.query('COMMIT');
-      process.stdout.write('Draft migration OK: 014_platform_inquiry_assignments.draft.sql\\n');
+      process.stdout.write('Draft migration OK: 014_platform_inquiry_assignments.draft.sql\n');
     } catch (error) {
       await client.query('ROLLBACK');
       throw new Error('014_platform_inquiry_assignments.draft.sql failed: ' + error.message);
