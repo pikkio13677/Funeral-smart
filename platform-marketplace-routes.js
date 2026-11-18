@@ -34,7 +34,7 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
     try {
       const result = await pool.query(
         'SELECT id,city,service_type AS "serviceType",destination_country AS "destinationCountry",budget_euro AS "budgetEuro",notes,contact_email AS "contactEmail",contact_phone AS "contactPhone",privacy_consent AS "privacyConsent",status,created_at AS "createdAt" ' +
-        'FROM inquiries WHERE ($1::varchar IS NULL OR status=$1) ORDER BY created_at DESC,id DESC LIMIT $2',
+        'FROM inquiries WHERE (($1::varchar IS NULL AND status <> \'deleted\') OR status=$1) ORDER BY created_at DESC,id DESC LIMIT $2',
         [parsed.data.status || null, parsed.data.limit]
       );
       res.json({ data: result.rows });
@@ -44,7 +44,7 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
   router.patch('/inquiries/:id/status', async (req, res, next) => {
     const id = UUID.safeParse(req.params.id);
     const parsed = z.object({
-      status: z.enum(['reviewed', 'assigned', 'closed', 'deleted']),
+      status: z.enum(['reviewed', 'assigned', 'closed']),
       reason: text(500, 10)
     }).strict().safeParse(req.body);
     if (!id.success || !parsed.success) return res.status(400).json({ error: 'Stato o motivazione della richiesta non validi.' });
@@ -60,6 +60,16 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
       if (current.rows[0].status === 'deleted') {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'La richiesta è già stata eliminata logicamente.' });
+      }
+      const allowedTransitions = {
+        received: ['reviewed', 'closed'],
+        reviewed: ['assigned', 'closed'],
+        assigned: ['closed'],
+        closed: []
+      };
+      if (!(allowedTransitions[current.rows[0].status] || []).includes(parsed.data.status)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Transizione di stato non consentita per questa richiesta.' });
       }
       if (current.rows[0].status === parsed.data.status) {
         await client.query('ROLLBACK');
