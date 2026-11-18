@@ -44,7 +44,7 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
   router.patch('/inquiries/:id/status', async (req, res, next) => {
     const id = UUID.safeParse(req.params.id);
     const parsed = z.object({
-      status: z.enum(['reviewed', 'assigned', 'closed']),
+      status: z.enum(['reviewed', 'closed']),
       reason: text(500, 10)
     }).strict().safeParse(req.body);
     if (!id.success || !parsed.success) return res.status(400).json({ error: 'Stato o motivazione della richiesta non validi.' });
@@ -63,8 +63,8 @@ function createPlatformMarketplaceRouter(pool, options = {}) {
       }
       const allowedTransitions = {
         received: ['reviewed', 'closed'],
-        reviewed: ['assigned', 'closed'],
-        assigned: ['closed'],
+        reviewed: ['closed'],
+        assigned: [],
         closed: []
       };
       if (!(allowedTransitions[current.rows[0].status] || []).includes(parsed.data.status)) {
