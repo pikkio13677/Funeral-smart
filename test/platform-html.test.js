@@ -33,3 +33,11 @@ test('platform console does not persist authentication or MFA secrets in browser
   assert.match(html, /autocomplete="off"/);
   assert.match(html, /noindex,nofollow/);
 });
+
+test('platform console supports verified-provider inquiry assignment and assignment history', () => {
+  assert.match(scripts[0], /data-assign-inquiry/);
+  assert.match(scripts[0], /\/platform\/inquiries\/.*\/assign/);
+  assert.match(scripts[0], /\/assignments/);
+  assert.match(scripts[0], /status==='verified'/);
+  assert.match(html, /platform\.inquiry\.assigned/);
+});
