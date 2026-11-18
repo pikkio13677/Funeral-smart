@@ -141,6 +141,13 @@ function createTenantCompanyAdminRouter(pool) {
          RETURNING id AS "membershipId", user_id AS "userId", role, status`,
         values
       );
+      // Record permission changes in the same transaction as the membership update.
+      // The tenant audit FK verifies actor, membership and company consistency.
+      await client.query(
+        `INSERT INTO audit_log(user_id, username, action, resource, resource_id, company_id, membership_id, ip_address)
+         VALUES($1, $2, 'company.membership.updated', 'company_membership', $3, $4, $5, $6)`,
+        [req.user.id, req.user.username || null, id.data, req.tenant.companyId, req.tenant.membershipId, req.ip || null]
+      );
       await client.query('COMMIT');
       return res.json({ data: result.rows[0] });
     } catch (error) {

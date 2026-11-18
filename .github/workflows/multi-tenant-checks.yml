@@ -6,9 +6,13 @@ on:
       - main
       - "feat/**"
       - "test/**"
+      - "fix/**"
+      - "security/**"
   push:
     branches:
-      - feat/multi-azienda-foundation
+      - 'feat/**'
+      - 'fix/**'
+      - 'security/**'
 
 permissions:
   contents: read

@@ -1,7 +1,6 @@
 'use strict';
 
 // Platform privileges are independent from app_users.role and tenant membership roles.
-// This middleware is intentionally not mounted until platform routes are reviewed.
 module.exports = function createPlatformAccess(pool) {
   if (!pool || typeof pool.query !== 'function') {
     throw new TypeError('A PostgreSQL-compatible pool is required.');
@@ -20,21 +19,22 @@ module.exports = function createPlatformAccess(pool) {
 
       try {
         const result = await pool.query(
-          `SELECT pa.role
-           FROM platform_access pa
-           JOIN app_users u ON u.id = pa.user_id
-           WHERE pa.user_id = $1
-             AND pa.status = 'active'
-             AND u.active = TRUE
-             AND pa.role = ANY($2::varchar[])`,
+          'SELECT pa.role, (u.totp_enabled_at IS NOT NULL) AS "mfaEnabled" ' +
+          'FROM platform_access pa JOIN app_users u ON u.id = pa.user_id ' +
+          'WHERE pa.user_id = $1 AND pa.status = \'active\' AND u.active = TRUE ' +
+          'AND pa.role = ANY($2::varchar[])',
           [req.user.id, roles]
         );
 
         if (!result.rowCount) {
           return res.status(403).json({ error: 'Permessi di piattaforma insufficienti.' });
         }
+        if (!result.rows[0].mfaEnabled) {
+          return res.status(403).json({ error: 'Attiva la verifica in due passaggi prima di accedere alla console piattaforma.' });
+        }
 
-        // Never infer platform privileges from req.user.role (including 'admin').
+        // Platform roles come only from an active database grant; MFA is required
+        // for both owner and support regardless of the legacy application role.
         req.platformAccess = Object.freeze({ role: result.rows[0].role });
         return next();
       } catch (error) {

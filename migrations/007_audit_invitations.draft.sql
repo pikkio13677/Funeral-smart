@@ -93,7 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_company_user_created
 -- Nel database viene conservato esclusivamente il digest SHA-256 esadecimale.
 CREATE TABLE IF NOT EXISTS company_invitations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+  company_id UUID NOT NULL,
   email VARCHAR(254) NOT NULL,
   role VARCHAR(24) NOT NULL
     CHECK (role IN ('admin', 'manager', 'operator', 'warehouse', 'accounting')),
@@ -110,9 +110,11 @@ CREATE TABLE IF NOT EXISTS company_invitations (
   CHECK ((status = 'accepted') = (accepted_at IS NOT NULL)),
   CHECK ((status = 'revoked') = (revoked_at IS NOT NULL)),
   CHECK (status <> 'pending' OR expires_at > created_at),
-  FOREIGN KEY (invited_by_membership_id, company_id)
-    REFERENCES company_memberships(id, company_id)
-    ON DELETE RESTRICT
+  CONSTRAINT fk_company_invitations_company
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_company_invitations_inviter_membership
+    FOREIGN KEY (invited_by_membership_id, company_id)
+    REFERENCES company_memberships(id, company_id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS idx_company_invitations_company_status

@@ -66,3 +66,28 @@ test('missing administrator recipient skips only administrator notices', async (
   assert.equal(calls.length, 1);
   assert.equal(calls[0].body.to[0], 'cliente@example.com');
 });
+
+
+test('company invitation sends a time-limited link to the invited address', async () => {
+  const { calls, notifier } = setup();
+  await notifier.notifyCompanyInvitation({
+    to: 'nuovo.membro@example.com',
+    companyName: 'Impresa di prova',
+    invitationUrl: 'https://example.invalid/invito/accetta?token=test-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.to[0], 'nuovo.membro@example.com');
+  assert.match(calls[0].body.text, /Impresa di prova/);
+  assert.match(calls[0].body.text, /token=test-token/);
+});
+
+test('company invitation fails closed when the email provider is unavailable', async () => {
+  const { notifier } = setup({ RESEND_API_KEY: '' });
+  await assert.rejects(() => notifier.notifyCompanyInvitation({
+    to: 'nuovo.membro@example.com',
+    companyName: 'Impresa di prova',
+    invitationUrl: 'https://example.invalid/invito/accetta?token=test-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  }), /could not be delivered/);
+});

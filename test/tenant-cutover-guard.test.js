@@ -9,10 +9,21 @@ test('keeps the dormant tenant API disabled by default', () => {
   assert.doesNotThrow(() => assertTenantCutoverReady({}));
 });
 
-test('fails closed if multi-tenant mode is enabled before route cutover', () => {
+test('blocks multi-tenant mode unless the separate cutover approval is explicit', () => {
   assert.throws(
     () => assertTenantCutoverReady({ ENABLE_MULTI_TENANT: 'true' }),
-    /tenant API and legacy-route cutover are not mounted/
+    /MULTI_TENANT_CUTOVER_APPROVED/
+  );
+  assert.doesNotThrow(() => assertTenantCutoverReady({
+    ENABLE_MULTI_TENANT: 'true',
+    MULTI_TENANT_CUTOVER_APPROVED: 'true'
+  }));
+});
+
+test('does not allow an approval flag without multi-tenant mode', () => {
+  assert.throws(
+    () => assertTenantCutoverReady({ MULTI_TENANT_CUTOVER_APPROVED: 'true' }),
+    /cannot be set while ENABLE_MULTI_TENANT is false/
   );
 });
 

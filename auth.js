@@ -297,10 +297,13 @@ module.exports = function createAuth(pool) {
       const recoveryCodes = Array.from({ length: 10 }, () => crypto.randomBytes(5).toString('hex').toUpperCase());
       const hashes = recoveryCodes.map(code => tokenHash(code));
       await pool.query('UPDATE app_users SET totp_secret_enc=totp_pending_secret_enc,totp_pending_secret_enc=NULL,totp_enabled_at=NOW(),recovery_codes_hashes=$1,updated_at=NOW() WHERE id=$2', [hashes, req.user.id]);
-      const currentSession = req.cookies?.[SESSION_COOKIE];
-      if (currentSession) await pool.query('DELETE FROM app_sessions WHERE user_id=$1 AND token_hash<>$2', [req.user.id, tokenHash(currentSession)]);
+      // Enabling MFA must invalidate every session, including the session used
+      // for setup. Otherwise a pre-MFA session could enter platform routes merely
+      // because the account now has totp_enabled_at set.
+      await pool.query('DELETE FROM app_sessions WHERE user_id=$1', [req.user.id]);
       await audit(req.user, req, 'auth.mfa.enabled');
-      res.json({ message: 'Verifica in due passaggi attivata. Conserva i codici di recupero: saranno mostrati una sola volta.', recoveryCodes });
+      res.clearCookie(SESSION_COOKIE, cookieOptions());
+      res.json({ message: 'Verifica in due passaggi attivata. Accedi di nuovo con il codice Authenticator. Conserva i codici di recupero: saranno mostrati una sola volta.', recoveryCodes });
     } catch (e) { next(e); }
   });
 

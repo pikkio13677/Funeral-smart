@@ -8,9 +8,10 @@ const { Pool } = require('pg');
 const { z } = require('zod');
 const emailNotifications = require('./email-notifications')();
 const assertTenantCutoverReady = require('./tenant-cutover-guard');
+const assertTenantSchemaReady = require('./tenant-cutover-readiness');
+const mountApiRouters = require('./api-route-mounts');
 
-// The tenant API is deliberately not mounted in this release candidate.
-// Fail closed if someone enables the feature flag before the complete cutover.
+// Tenant routes require a separate approval flag and a read-only database preflight before the listener opens.
 assertTenantCutoverReady(process.env);
 
 const app = express();
@@ -58,7 +59,8 @@ const inquirySchema = z.object({
 }).refine(v => Boolean(v.contactEmail || v.contactPhone), { message: 'Inserire almeno un recapito per poter essere ricontattati.' });
 
 const auth = require('./auth')(pool);
-app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
+const routeMounts = mountApiRouters({ app, pool, auth, emailNotifications, env: process.env, rateLimit });
+const multiTenantEnabled = routeMounts.multiTenantEnabled;
 
 app.get('/api/health', async (_req, res) => {
   try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'funeral-smart-api', database: 'connected' }); }
@@ -106,6 +108,7 @@ app.get('/api/v1/price-lists', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+if (!multiTenantEnabled) {
 app.post('/api/v1/inquiries', async (req, res, next) => {
   const parsed = inquirySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
@@ -146,23 +149,36 @@ app.post('/api/v1/provider-applications', async (req, res, next) => {
   } catch (e) { if (e.code === '23505') return res.status(409).json({ error: 'Partita IVA già presente in una candidatura.' }); next(e); }
 });
 
-app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, async (_req, res, next) => {
-  try { const { rows } = await pool.query('SELECT id, city, service_type AS "serviceType", destination_country AS "destinationCountry", budget_euro AS "budgetEuro", notes, contact_email AS "contactEmail", contact_phone AS "contactPhone", status, created_at AS "createdAt" FROM inquiries ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
-  catch (e) { next(e); }
-});
+}
 
-app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize, async (_req, res, next) => {
-  try { const { rows } = await pool.query('SELECT id, business_name AS "businessName", vat_number AS "vatNumber", city, province, email, phone, website, status, created_at AS "createdAt" FROM provider_applications ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
-  catch (e) { next(e); }
-});
-
-// Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
-app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
+if (!multiTenantEnabled) {
+  app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, async (_req, res, next) => {
+    try { const { rows } = await pool.query('SELECT id, city, service_type AS "serviceType", destination_country AS "destinationCountry", budget_euro AS "budgetEuro", notes, contact_email AS "contactEmail", contact_phone AS "contactPhone", status, created_at AS "createdAt" FROM inquiries ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
+    catch (e) { next(e); }
+  });
+  
+  app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize, async (_req, res, next) => {
+    try { const { rows } = await pool.query('SELECT id, business_name AS "businessName", vat_number AS "vatNumber", city, province, email, phone, website, status, created_at AS "createdAt" FROM provider_applications ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
+    catch (e) { next(e); }
+  });
+  
+  // Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
+  app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
+  
+}
 
 // Pagina same-origin per accettare inviti aziendali. I dati restano gestiti dalle API protette.
 app.get('/invito/accetta', (_req, res) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
   res.sendFile(require('path').join(__dirname, 'invitation.html'));
+});
+
+// Console proprietario piattaforma: separata dall'area gestionale delle singole imprese.
+app.get('/platform', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  res.sendFile(require('path').join(__dirname, 'platform.html'));
 });
 
 // Area gestionale web: disponibile sullo stesso servizio Render all'indirizzo /admin.
@@ -177,5 +193,18 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Errore interno. Riprova più tardi.' });
 });
 
-app.listen(port, () => console.log(`FUNERAL SMART API in ascolto sulla porta ${port}`));
+async function startServer() {
+  if (multiTenantEnabled) {
+    const readiness = await assertTenantSchemaReady(pool);
+    console.log('Tenant cutover preflight superato:', readiness);
+  }
+  app.listen(port, () => console.log(`FUNERAL SMART API in ascolto sulla porta ${port}`));
+}
+
+startServer().catch(async error => {
+  console.error('AVVIO BLOCCATO:', error.message);
+  await pool.end();
+  process.exitCode = 1;
+});
+
 process.on('SIGTERM', async () => { await pool.end(); process.exit(0); });
