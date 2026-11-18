@@ -131,6 +131,8 @@ async function main() {
     const inquiries = await call('/inquiries?status=received');
     assert.equal(inquiries.status, 200);
     assert.ok(inquiries.data.data.some(item => item.id === inquiryId));
+    assert.equal((await call('/providers')).status, 200);
+    assert.equal((await call('/price-lists')).status, 200);
 
     const updatedInquiry = await call('/inquiries/' + inquiryId + '/status', 'PATCH', {
       status: 'reviewed',
@@ -155,6 +157,10 @@ async function main() {
       'platform.price_list.created',
       'platform.price_list.published',
       'platform.inquiry.status_changed',
+      'platform.inquiry.list_viewed',
+      'platform.provider_application.list_viewed',
+      'platform.provider.list_viewed',
+      'platform.price_list.list_viewed',
       'platform.provider_application.rejected'
     ]) assert.ok(actions.includes(action), 'missing audit action: ' + action);
 
