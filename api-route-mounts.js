@@ -47,10 +47,12 @@ function mountApiRouters({ app, pool, auth, emailNotifications, env = process.en
       sendInvitationEmail: emailNotifications?.notifyProviderUserInvitation,
       publicAppUrl: env.PUBLIC_APP_URL
     });
-    const providerPortalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false });
-    app.use('/api/v1/provider-portal', providerPortalLimiter, providerInvitationRouter);
+    app.use('/api/v1/provider-portal',
+      rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: 'draft-7', legacyHeaders: false })
+    );
+    app.use('/api/v1/provider-portal', providerInvitationRouter);
     providerPortalRouter = createProviderPortalRouter(pool, { authenticate: auth.authenticate });
-    app.use('/api/v1/provider-portal', providerPortalLimiter, providerPortalRouter);
+    app.use('/api/v1/provider-portal', providerPortalRouter);
   }
 
   if (!multiTenantEnabled) {
