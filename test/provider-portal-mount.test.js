@@ -3,6 +3,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 const mountApiRouters = require('../api-route-mounts');
 
 async function withApp(configure, run) {
@@ -60,4 +62,9 @@ test('enabled provider portal fails closed with 503 until all draft schema table
     const body = await response.json();
     assert.match(body.error, /schema richiesto non disponibile/i);
   });
+});
+
+test('invitation router is mounted before provider membership middleware', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api-route-mounts.js'), 'utf8');
+  assert.ok(source.indexOf('createProviderPortalInvitationRouter({') < source.indexOf('createProviderPortalRouter(pool'));
 });
