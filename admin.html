@@ -96,14 +96,11 @@ function allowedTabs(){
 }
 function renderTabs(){const nav=$('tabs');nav.replaceChildren();const ids=allowedTabs();if(!ids.includes(active))active=ids[0]||'cases';ids.forEach(id=>{const b=document.createElement('button');b.className='tab'+(id===active?' active':'');b.textContent=id==='users'?'Utenti':id==='company'?'Azienda e membri':id==='security'?'Sicurezza MFA':id==='audit'?'Registro attività':definitions[id].label;b.onclick=()=>{active=id;renderTabs();renderModule();};nav.append(b);});}
 function canCreateInActiveTenant(){
- if(!TENANT_API_ENABLED)return effectiveRole()!=='manager';
  const role=effectiveRole();
- if(role==='admin')return true;
- if(role==='manager')return ['cases','customers','inventory','tasks'].includes(active);
- if(role==='operator')return ['cases','customers','tasks'].includes(active);
- if(role==='warehouse')return active==='inventory';
- if(role==='accounting')return active==='invoices';
- return false;
+ const allowed=TENANT_API_ENABLED
+  ? {admin:Object.keys(definitions),manager:['cases','customers','inventory','tasks'],operator:['cases','customers','tasks'],warehouse:['inventory'],accounting:['invoices']}
+  : {admin:Object.keys(definitions),manager:[],operator:['cases','customers','tasks'],warehouse:['inventory'],accounting:['invoices']};
+ return (allowed[role]||[]).includes(active);
 }
 function canUpdateActiveResource(){
  const role=effectiveRole();
