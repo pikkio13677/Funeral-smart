@@ -7,6 +7,7 @@ const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const { z } = require('zod');
 const emailNotifications = require('./email-notifications')();
+const stagingSubmissionGuard = require('./staging-submission-guard')();
 const assertTenantCutoverReady = require('./tenant-cutover-guard');
 const assertTenantSchemaReady = require('./tenant-cutover-readiness');
 const mountApiRouters = require('./api-route-mounts');
@@ -19,6 +20,8 @@ const port = Number(process.env.PORT || 10000);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined });
 
 app.disable('x-powered-by');
+// Render terminates TLS at its proxy; trust exactly one proxy hop for client IP rate limits.
+app.set('trust proxy', 1);
 app.use(helmet());
 const allowedOrigins = [...new Set(['https://pikkio13677.github.io', 'https://funeral-smart-api.onrender.com', 'https://funeral-smart-web.onrender.com', 'https://funeralsmartapp.com', 'https://www.funeralsmartapp.com', ...(process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean)])];
 app.use(cors({ credentials: true, origin(origin, cb) {
@@ -35,6 +38,7 @@ app.use((req, _res, next) => {
 });
 app.use(express.json({ limit: '30kb' }));
 app.use('/api/v1/', rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-7', legacyHeaders: false }));
+const publicSubmissionLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false });
 
 const citySchema = z.string().trim().min(2).max(100);
 const providerSchema = z.object({
@@ -109,7 +113,7 @@ app.get('/api/v1/price-lists', async (req, res, next) => {
 });
 
 if (!multiTenantEnabled) {
-app.post('/api/v1/inquiries', async (req, res, next) => {
+app.post('/api/v1/inquiries', stagingSubmissionGuard, publicSubmissionLimiter, async (req, res, next) => {
   const parsed = inquirySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
   const v = parsed.data;
@@ -129,7 +133,7 @@ app.post('/api/v1/inquiries', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/api/v1/provider-applications', async (req, res, next) => {
+app.post('/api/v1/provider-applications', stagingSubmissionGuard, publicSubmissionLimiter, async (req, res, next) => {
   const parsed = providerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
   const v = parsed.data;

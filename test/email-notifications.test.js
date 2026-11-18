@@ -91,3 +91,22 @@ test('company invitation fails closed when the email provider is unavailable', a
     expiresAt: new Date('2026-11-20T10:00:00.000Z')
   }), /could not be delivered/);
 });
+
+
+test('STAGING_MODE blocks every outbound email, including company invitations', async () => {
+  const { calls, logs, notifier } = setup({ STAGING_MODE: 'true' });
+  await notifier.notifyInquiry({
+    id: 45, city: 'Brescia', serviceType: 'Cremazione', contactEmail: 'cliente@example.com'
+  });
+  await notifier.notifyProviderApplication({
+    id: 11, businessName: 'Impresa di prova', city: 'Brescia', email: 'impresa@example.com'
+  });
+  await assert.rejects(() => notifier.notifyCompanyInvitation({
+    to: 'nuovo.membro@example.com',
+    companyName: 'Impresa di prova',
+    invitationUrl: 'https://example.invalid/invito/accetta?token=test-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  }), /could not be delivered/);
+  assert.equal(calls.length, 0);
+  assert.ok(logs.some(message => message.includes('disabilitato esplicitamente')));
+});

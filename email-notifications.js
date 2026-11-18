@@ -8,6 +8,10 @@ function escapeHtml(value) {
 
 function createEmailNotifications({ env = process.env, fetchImpl = global.fetch, logger = console } = {}) {
   async function send(to, subject, lines) {
+    if (env.STAGING_MODE === 'true') {
+      logger.warn('[email] Invio disabilitato esplicitamente in staging.');
+      return false;
+    }
     if (!to || !env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL) {
       logger.warn('[email] Invio saltato: configurazione Resend o destinatario assente.');
       return false;
