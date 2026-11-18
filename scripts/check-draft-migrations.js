@@ -102,6 +102,20 @@ async function main() {
       throw new Error('013_tenant_finalize_company_id.draft.sql failed after backfill: ' + error.message);
     }
 
+    const anonymizationSql = await fs.readFile(
+      path.join(__dirname, '..', 'migrations', '014_inquiry_anonymization.draft.sql'),
+      'utf8'
+    );
+    await client.query('BEGIN');
+    try {
+      await client.query(anonymizationSql);
+      await client.query('COMMIT');
+      process.stdout.write('Draft migration OK: 014_inquiry_anonymization.draft.sql after tenant finalization\n');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw new Error('014_inquiry_anonymization.draft.sql failed: ' + error.message);
+    }
+
     const checks = [
       ['companies', 'companies'],
       ['platform_access', 'platform_access'],
@@ -109,6 +123,7 @@ async function main() {
       ['platform_audit_log', 'platform_audit_log'],
       ['company_memberships', 'company_memberships'],
       ['company_invitations', 'company_invitations'],
+      ['inquiries.anonymized_at', 'inquiries'],
       ['email_verification_challenges', 'email_verification_challenges'],
       ['customers.company_id', 'customers'],
       ['funeral_cases.company_id', 'funeral_cases'],
@@ -139,6 +154,11 @@ async function main() {
           );
       if (!result.rowCount) throw new Error('Expected database object missing: ' + label);
     }
+
+    const inquiryAnonymizationConstraint = await client.query(
+      "SELECT 1 FROM pg_constraint WHERE conname='ck_inquiries_contact_required_unless_deleted' AND convalidated AND conrelid='public.inquiries'::regclass"
+    );
+    if (!inquiryAnonymizationConstraint.rowCount) throw new Error('Inquiry anonymization contact constraint missing or not validated.');
 
     const ownerRoleConstraint = await client.query(
       "SELECT 1 FROM pg_constraint WHERE conname = 'app_users_role_check' AND pg_get_constraintdef(oid) LIKE '%platform_owner%'"
