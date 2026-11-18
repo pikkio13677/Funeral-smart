@@ -89,29 +89,47 @@ Se i conteggi non coincidono, una relazione è ambigua, manca una membership, un
 
 ## 8. Evidenze del backup cifrato e restore test
 
-**Test storico completato il 15 novembre 2026, in ambiente locale/temporaneo isolato:**
+**Backup originale del 12 novembre 2026; verifica documentale e hash ripetuta il 18 novembre 2026.**
 
-- Backup del 12 novembre identificato come cifrato con AES-256-CBC, salt e PBKDF2 a 200.000 iterazioni.
-- Decrittografia della copia cifrata completata con esito riportato come `VERIFICA SUPERATA`; la password è rimasta privata e non è inclusa nel repository o in questo documento.
-- `pg_restore --list` ha riconosciuto correttamente l'archivio PostgreSQL.
-- Il restore locale temporaneo è stato riportato come riuscito, con controllo su 20 tabelle.
-- Il database originale/di produzione non è stato modificato.
+### Integrità dei file
 
-**Limite delle evidenze conservate:** non sono disponibili in questo report i comandi esatti, gli hash SHA-256, i conteggi riga per riga, il dettaglio delle sequenze o un confronto puntuale tra il dump e il database ripristinato. Pertanto il test storico dimostra la riuscita della decrittografia, il riconoscimento dell'archivio e il restore delle 20 tabelle, ma non documenta ancora un confronto completo dei dati.
+- File cifrato: `funeral-smart-20261112-175532.dump.enc`, 48.688 byte. L'intestazione è `Salted__`, coerente con il formato OpenSSL salted.
+- SHA-256 del file cifrato: `ad7ef7f9e77be89e37464205778972502ee125fd886d8c0e826bf7ec7eabe81c`.
+- Sono state confrontate tre copie archiviate del file cifrato: dimensione e SHA-256 coincidono.
+- File dump decifrato: formato PostgreSQL Custom, intestazione `PGDMP`, 48.665 byte.
+- SHA-256 del dump: `d908945e14e60bf6de677677e6c7a374fd2eb8ee0cf13c9e95af0a9d328779be`.
+- Il valore SHA-256 del dump coincide con quello registrato il 13 novembre per il file decifrato di verifica e per il dump originale.
+
+### Decrittografia e leggibilità dell'archivio
+
+- Il 13 novembre 2026 la decrittografia è stata completata con esito positivo usando OpenSSL AES-256-CBC, PBKDF2 e 200.000 iterazioni (`openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000`). La passphrase è rimasta privata e non è riportata qui.
+- Nella stessa sessione, il dump decifrato ha superato `pg_restore --list`: formato CUSTOM, 111 voci TOC, compressione gzip, database sorgente `funeral_smart`, PostgreSQL sorgente 18.6 e pg_dump 18.2.
+- L'elenco includeva 20 tabelle pubbliche, dati, indici, vincoli e la sequenza `audit_log_id_seq`.
+
+### Ripristino isolato
+
+- Il 13 novembre 2026 il dump è stato ripristinato nel database temporaneo locale `funeral_test`, su `127.0.0.1:5432`, con:
+  `pg_restore --verbose --exit-on-error --no-owner --no-privileges -h 127.0.0.1 -p 5432 -d funeral_test`.
+- L'output riportato dall'utente è arrivato alla creazione dei vincoli FK senza errori; il successivo conteggio ha restituito 20 tabelle.
+- Nessuna operazione è stata eseguita sul database di produzione o su Render.
+- La verifica del 18 novembre ha ricalcolato gli hash dei file archiviati e ha confermato l'intestazione OpenSSL, il formato Custom del dump e l'identità delle tre copie cifrate. La decrittografia non è stata ripetuta in questa sessione perché la passphrase non viene trasferita o condivisa.
+
+### Limiti residui
+
+Il test di restore locale e la corrispondenza SHA-256 del dump decifrato sono documentati. Non sono invece conservati report completi con conteggi riga per riga di tutte le tabelle, confronto con una fotografia del database sorgente, verifica esplicita dei valori delle sequenze o un report separato di tutti i controlli referenziali. Questi controlli restano necessari per una prova di integrità dei dati più completa.
 
 Per un prossimo controllo ripetibile:
-1. Conservare intatto il file cifrato originale e lavorare su una copia.
-2. Calcolare SHA-256 del file cifrato e della copia e verificare che coincidano.
-3. Identificare il formato e il metodo di cifratura effettivamente usati; non indovinare opzioni o formato.
-4. Decifrare soltanto una copia in una cartella locale con permessi riservati. La chiave deve essere fornita localmente tramite il metodo sicuro previsto dallo strumento, mai incollata in chat o in GitHub.
-5. Verificare il dump decifrato con `pg_restore --list`. Se il comando non riconosce l'archivio o segnala errori, fermarsi: non tentare un restore parziale.
-6. Se serve una nuova prova, ripristinare il dump in un database PostgreSQL locale, vuoto e usa-e-getta.
-7. Confrontare conteggi delle tabelle, sequenze e integrità referenziale con una fotografia di riferimento, senza esportare dati personali.
-8. Registrare soltanto esito, data, versione dello schema e conteggi aggregati. Non condividere dump, dati personali, chiavi o passphrase.
+1. Conservare intatti i file originali e lavorare su copie locali.
+2. Ricalcolare SHA-256 prima e dopo ogni copia; registrare separatamente hash del cifrato e del dump decifrato.
+3. Decifrare una copia localmente con i parametri verificati; fornire la passphrase soltanto al prompt/strumento locale, mai in chat o in GitHub.
+4. Verificare il dump con `pg_restore --list`; in caso di errore fermarsi senza tentare un restore parziale.
+5. Ripristinare in un database PostgreSQL locale, vuoto e usa-e-getta.
+6. Confrontare conteggi di tutte le tabelle, sequenze e integrità referenziale con una fotografia di riferimento, senza esportare dati personali.
+7. Registrare soltanto esito, data, versione dello schema, conteggi aggregati e hash. Non condividere dump, dati personali, chiavi o passphrase.
 
 ## 9. Limiti del collaudo automatico e attività ancora aperte
 
-- I workflow GitHub su PostgreSQL usa-e-getta verificano schema, migrazioni draft, isolamento Alfa/Beta, bootstrap e API. **Non sostituiscono** il restore test del backup effettivo.
+- I workflow GitHub su PostgreSQL usa-e-getta verificano schema, migrazioni draft, isolamento Alfa/Beta, bootstrap e API. **Non sostituiscono** il restore test del backup effettivo, che è stato eseguito localmente come descritto sopra.
 - La documentazione del repository indica ancora come attività da realizzare i backup automatici, la retention e i test periodici di ripristino. Non considerare quindi già disponibile un servizio automatico completo solo perché il database è ospitato su Render.
-- Il restore storico del backup cifrato è riuscito; restano da produrre evidenze ripetibili su hash, conteggi, sequenze e confronto completo dei dati.
+- Restano da produrre evidenze ripetibili sui conteggi riga per riga, sulle sequenze e sul confronto completo dei dati del dump ripristinato.
 - Nessun test descritto in questa procedura autorizza l'uso del database di produzione, la modifica di Render, l'attivazione di flag tenant, il merge o il deploy.
