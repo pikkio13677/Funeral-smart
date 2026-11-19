@@ -7,12 +7,22 @@ const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 const { z } = require('zod');
 const emailNotifications = require('./email-notifications')();
+const stagingSubmissionGuard = require('./staging-submission-guard')();
+const assertTenantCutoverReady = require('./tenant-cutover-guard');
+const assertTenantSchemaReady = require('./tenant-cutover-readiness');
+const mountApiRouters = require('./api-route-mounts');
+const createPublicIntakeRouter = require('./public-intake-routes');
+
+// Tenant routes require a separate approval flag and a read-only database preflight before the listener opens.
+assertTenantCutoverReady(process.env);
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined });
 
 app.disable('x-powered-by');
+// Render terminates TLS at its proxy; trust exactly one proxy hop for client IP rate limits.
+app.set('trust proxy', 1);
 app.use(helmet());
 const allowedOrigins = [...new Set(['https://pikkio13677.github.io', 'https://funeral-smart-api.onrender.com', 'https://funeral-smart-web.onrender.com', 'https://funeralsmartapp.com', 'https://www.funeralsmartapp.com', ...(process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean)])];
 app.use(cors({ credentials: true, origin(origin, cb) {
@@ -29,31 +39,19 @@ app.use((req, _res, next) => {
 });
 app.use(express.json({ limit: '30kb' }));
 app.use('/api/v1/', rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: 'draft-7', legacyHeaders: false }));
+const publicSubmissionLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false });
 
-const citySchema = z.string().trim().min(2).max(100);
-const providerSchema = z.object({
-  businessName: z.string().trim().min(2).max(180),
-  vatNumber: z.string().trim().min(8).max(20),
-  city: citySchema,
-  province: z.string().trim().max(80).optional().default(''),
-  email: z.string().trim().email().max(254),
-  phone: z.string().trim().max(40).optional().default(''),
-  website: z.string().trim().url().max(500).optional().or(z.literal('')),
-  acceptsVerification: z.literal(true)
-});
-const inquirySchema = z.object({
-  city: citySchema,
-  serviceType: z.enum(['Sepoltura', 'Cremazione', 'Rimpatrio internazionale', 'Non so, desidero assistenza']),
-  destinationCountry: z.string().trim().max(100).optional().default(''),
-  budgetEuro: z.number().int().positive().max(100000).optional(),
-  notes: z.string().trim().max(1500).optional().default(''),
-  contactEmail: z.string().trim().email().max(254).optional(),
-  contactPhone: z.string().trim().max(40).optional(),
-  privacyConsent: z.literal(true)
-}).refine(v => Boolean(v.contactEmail || v.contactPhone), { message: 'Inserire almeno un recapito per poter essere ricontattati.' });
+// Public family and provider intake is platform-scoped and remains mounted in tenant mode.
+app.use('/api/v1', createPublicIntakeRouter({
+  pool,
+  emailNotifications,
+  stagingSubmissionGuard,
+  submissionLimiter: publicSubmissionLimiter
+}));
 
 const auth = require('./auth')(pool);
-app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
+const routeMounts = mountApiRouters({ app, pool, auth, emailNotifications, env: process.env, rateLimit });
+const multiTenantEnabled = routeMounts.multiTenantEnabled;
 
 app.get('/api/health', async (_req, res) => {
   try { await pool.query('SELECT 1'); res.json({ status: 'ok', service: 'funeral-smart-api', database: 'connected' }); }
@@ -101,58 +99,49 @@ app.get('/api/v1/price-lists', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-app.post('/api/v1/inquiries', async (req, res, next) => {
-  const parsed = inquirySchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
-  const v = parsed.data;
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO inquiries (city, service_type, destination_country, budget_euro, notes, contact_email, contact_phone, privacy_consent, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'received') RETURNING id, created_at AS "createdAt"`,
-      [v.city, v.serviceType, v.destinationCountry || null, v.budgetEuro || null, v.notes || null, v.contactEmail || null, v.contactPhone || null, true]
-    );
-    await emailNotifications.notifyInquiry({
-      id: rows[0].id,
-      city: v.city,
-      serviceType: v.serviceType,
-      contactEmail: v.contactEmail
-    });
-    res.status(201).json({ data: rows[0], message: 'Richiesta ricevuta. Non è ancora stata inoltrata a un’impresa.' });
-  } catch (e) { next(e); }
+if (!multiTenantEnabled) {
+  app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, async (_req, res, next) => {
+    try { const { rows } = await pool.query('SELECT id, city, service_type AS "serviceType", destination_country AS "destinationCountry", budget_euro AS "budgetEuro", notes, contact_email AS "contactEmail", contact_phone AS "contactPhone", status, created_at AS "createdAt" FROM inquiries ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
+    catch (e) { next(e); }
+  });
+  
+  app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize, async (_req, res, next) => {
+    try { const { rows } = await pool.query('SELECT id, business_name AS "businessName", vat_number AS "vatNumber", city, province, email, phone, website, status, created_at AS "createdAt" FROM provider_applications ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
+    catch (e) { next(e); }
+  });
+  
+  // Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
+  app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
+  
+}
+
+// Provider portal pages remain inert until the provider API and migration are explicitly enabled.
+function sendProviderPortalPage(file) {
+  return (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+    res.sendFile(require('path').join(__dirname, file));
+  };
+}
+app.get('/provider/invito/accetta', sendProviderPortalPage('provider-invitation.html'));
+app.get('/provider/portale', sendProviderPortalPage('provider-portal.html'));
+
+// Pagina same-origin per accettare inviti aziendali. I dati restano gestiti dalle API protette.
+app.get('/invito/accetta', (_req, res) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  res.sendFile(require('path').join(__dirname, 'invitation.html'));
 });
 
-app.post('/api/v1/provider-applications', async (req, res, next) => {
-  const parsed = providerSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: 'Dati non validi', details: parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })) });
-  const v = parsed.data;
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO provider_applications (business_name, vat_number, city, province, email, phone, website, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'pending') RETURNING id, created_at AS "createdAt"`,
-      [v.businessName, v.vatNumber, v.city, v.province, v.email, v.phone, v.website || null]
-    );
-    await emailNotifications.notifyProviderApplication({
-      id: rows[0].id,
-      businessName: v.businessName,
-      city: v.city,
-      email: v.email
-    });
-    res.status(201).json({ data: rows[0], message: 'Candidatura ricevuta: l’impresa non è ancora pubblicata né verificata.' });
-  } catch (e) { if (e.code === '23505') return res.status(409).json({ error: 'Partita IVA già presente in una candidatura.' }); next(e); }
+// Console proprietario piattaforma: separata dall'area gestionale delle singole imprese.
+app.get('/platform', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  res.sendFile(require('path').join(__dirname, 'platform.html'));
 });
-
-app.get('/api/v1/admin/inquiries', auth.authenticate, auth.authorize, async (_req, res, next) => {
-  try { const { rows } = await pool.query('SELECT id, city, service_type AS "serviceType", destination_country AS "destinationCountry", budget_euro AS "budgetEuro", notes, contact_email AS "contactEmail", contact_phone AS "contactPhone", status, created_at AS "createdAt" FROM inquiries ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
-  catch (e) { next(e); }
-});
-
-app.get('/api/v1/admin/provider-applications', auth.authenticate, auth.authorize, async (_req, res, next) => {
-  try { const { rows } = await pool.query('SELECT id, business_name AS "businessName", vat_number AS "vatNumber", city, province, email, phone, website, status, created_at AS "createdAt" FROM provider_applications ORDER BY created_at DESC LIMIT 200'); res.json({ data: rows }); }
-  catch (e) { next(e); }
-});
-
-// Area gestionale protetta: tutte le rotte richiedono ADMIN_API_KEY.
-app.use('/api/v1/admin', auth.authenticate, auth.authorize, require('./admin-routes')(pool, (_req, _res, next) => next()));
 
 // Area gestionale web: disponibile sullo stesso servizio Render all'indirizzo /admin.
 app.get('/admin', (_req, res) => {
@@ -166,5 +155,18 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Errore interno. Riprova più tardi.' });
 });
 
-app.listen(port, () => console.log(`FUNERAL SMART API in ascolto sulla porta ${port}`));
+async function startServer() {
+  if (multiTenantEnabled) {
+    const readiness = await assertTenantSchemaReady(pool);
+    console.log('Tenant cutover preflight superato:', readiness);
+  }
+  app.listen(port, () => console.log(`FUNERAL SMART API in ascolto sulla porta ${port}`));
+}
+
+startServer().catch(async error => {
+  console.error('AVVIO BLOCCATO:', error.message);
+  await pool.end();
+  process.exitCode = 1;
+});
+
 process.on('SIGTERM', async () => { await pool.end(); process.exit(0); });

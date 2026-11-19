@@ -66,3 +66,75 @@ test('missing administrator recipient skips only administrator notices', async (
   assert.equal(calls.length, 1);
   assert.equal(calls[0].body.to[0], 'cliente@example.com');
 });
+
+
+test('company invitation sends a time-limited link to the invited address', async () => {
+  const { calls, notifier } = setup();
+  await notifier.notifyCompanyInvitation({
+    to: 'nuovo.membro@example.com',
+    companyName: 'Impresa di prova',
+    invitationUrl: 'https://example.invalid/invito/accetta?token=test-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.to[0], 'nuovo.membro@example.com');
+  assert.match(calls[0].body.text, /Impresa di prova/);
+  assert.match(calls[0].body.text, /token=test-token/);
+});
+
+test('company invitation fails closed when the email provider is unavailable', async () => {
+  const { notifier } = setup({ RESEND_API_KEY: '' });
+  await assert.rejects(() => notifier.notifyCompanyInvitation({
+    to: 'nuovo.membro@example.com',
+    companyName: 'Impresa di prova',
+    invitationUrl: 'https://example.invalid/invito/accetta?token=test-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  }), /could not be delivered/);
+});
+
+
+test('STAGING_MODE blocks every outbound email, including company invitations', async () => {
+  const { calls, logs, notifier } = setup({ STAGING_MODE: 'true' });
+  await notifier.notifyInquiry({
+    id: 45, city: 'Brescia', serviceType: 'Cremazione', contactEmail: 'cliente@example.com'
+  });
+  await notifier.notifyProviderApplication({
+    id: 11, businessName: 'Impresa di prova', city: 'Brescia', email: 'impresa@example.com'
+  });
+  await assert.rejects(() => notifier.notifyCompanyInvitation({
+    to: 'nuovo.membro@example.com',
+    companyName: 'Impresa di prova',
+    invitationUrl: 'https://example.invalid/invito/accetta?token=test-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  }), /could not be delivered/);
+  assert.equal(calls.length, 0);
+  assert.ok(logs.some(message => message.includes('disabilitato esplicitamente')));
+});
+
+
+test('provider portal invitation sends a time-limited role-specific link', async () => {
+  const { calls, notifier } = setup();
+  await notifier.notifyProviderUserInvitation({
+    to: 'collaboratore@example.com',
+    businessName: 'Impresa Alfa',
+    role: 'provider_admin',
+    invitationUrl: 'https://example.invalid/provider/invito/accetta?token=provider-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.to[0], 'collaboratore@example.com');
+  assert.match(calls[0].body.subject, /Impresa Alfa/);
+  assert.match(calls[0].body.text, /Amministratore impresa/);
+  assert.match(calls[0].body.text, /provider-token/);
+});
+
+test('provider portal invitation fails closed when email delivery is unavailable', async () => {
+  const { notifier } = setup({ RESEND_API_KEY: '' });
+  await assert.rejects(() => notifier.notifyProviderUserInvitation({
+    to: 'collaboratore@example.com',
+    businessName: 'Impresa Alfa',
+    role: 'provider_operator',
+    invitationUrl: 'https://example.invalid/provider/invito/accetta?token=provider-token',
+    expiresAt: new Date('2026-11-20T10:00:00.000Z')
+  }), /could not be delivered/);
+});

@@ -1,0 +1,71 @@
+name: Multi-tenant branch checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - "feat/**"
+      - "test/**"
+      - "fix/**"
+      - "security/**"
+      - "integration/**"
+  push:
+    branches:
+      - 'feat/**'
+      - 'fix/**'
+      - 'security/**'
+      - 'integration/**'
+
+permissions:
+  contents: read
+
+jobs:
+  node-checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: funeral_smart_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d funeral_smart_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/funeral_smart_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies without creating a lockfile
+        run: npm install --no-package-lock --ignore-scripts
+      - name: Check JavaScript syntax
+        run: npm run check
+      - name: Run isolated unit tests
+        run: npm test
+      - name: Build baseline schema on disposable PostgreSQL
+        run: node migrate.js
+      - name: Apply and verify draft tenant migrations on disposable PostgreSQL
+        run: npm run test:migrations
+      - name: Check PostgreSQL tenant integration test syntax
+        run: node --check scripts/tenant-postgres-integration.js
+      - name: Test Alfa/Beta tenant isolation on disposable PostgreSQL
+        run: node scripts/tenant-postgres-integration.js
+      - name: Test one-time platform owner bootstrap on disposable PostgreSQL
+        run: node scripts/platform-owner-bootstrap-integration.js
+      - name: Test platform company API on disposable PostgreSQL
+        run: node --check scripts/platform-company-api-postgres-integration.js && node scripts/platform-company-api-postgres-integration.js
+      - name: Test platform marketplace API on disposable PostgreSQL
+        run: node --check scripts/platform-marketplace-api-postgres-integration.js && RUN_PLATFORM_MARKETPLACE_POSTGRES_TESTS=true node scripts/platform-marketplace-api-postgres-integration.js
+      - name: Test provider portal API on disposable PostgreSQL
+        run: node --check scripts/provider-portal-api-postgres-integration.js && RUN_PROVIDER_PORTAL_POSTGRES_TESTS=true node scripts/provider-portal-api-postgres-integration.js
+      - name: Check and run read-only tenant backfill preflight
+        run: node --check scripts/tenant-backfill-preflight.js && node scripts/tenant-backfill-preflight.js
