@@ -27,13 +27,13 @@ function fakePool({ accessRows = [{
   providerId: PROVIDER_ID,
   role: 'provider_admin',
   businessName: 'Impresa Alfa'
-}], listRows = [], detailRows = [], auditRows = [] } = {}) {
+}], listRows = [], detailRows = [], auditRows = [], analyticsSummary = null, trendRows = [] } = {}) {
   const calls = [];
   return {
     calls,
     async query(sql, args) {
       calls.push({ sql, args });
-      if (sql.includes('FROM provider_portal_audit_log')) return { rowCount: auditRows.length, rows: auditRows };
+      if (sql.includes('WITH bounds AS')) return { rowCount: 1, rows: [analyticsSummary || { monthRequests: 3, monthAccepted: 2, monthRejected: 1, averageResponseHours: '4.5', activeMembers: 2 }] };\n      if (sql.includes('WITH months AS')) return { rowCount: trendRows.length, rows: trendRows };\n      if (sql.includes('FROM provider_portal_audit_log')) return { rowCount: auditRows.length, rows: auditRows };
       if (sql.includes('FROM provider_user_access')) {
         return { rowCount: accessRows.length, rows: accessRows };
       }
@@ -431,5 +431,76 @@ test('provider profile grants activity-log permission only to administrators', a
     });
     const body = await response.json();
     assert.equal(body.data.permissions.viewActivityLog, false);
+  });
+});
+
+
+test('provider administrators can read monthly business analytics scoped to their provider', async () => {
+  const pool = fakePool({
+    analyticsSummary: {
+      monthRequests: 8, monthAccepted: 5, monthRejected: 2,
+      averageResponseHours: '3.5', activeMembers: 4
+    },
+    trendRows: [
+      { month: '2026-10', requestCount: 6, responseCount: 5, acceptedCount: 4, rejectedCount: 1 },
+      { month: '2026-11', requestCount: 8, responseCount: 7, acceptedCount: 5, rejectedCount: 2 }
+    ]
+  });
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/dashboard/analytics', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(body.data.summary.monthRequests, 8);
+    assert.equal(body.data.summary.averageResponseHours, '3.5');
+    assert.equal(body.data.summary.activeMembers, 4);
+    assert.equal(body.data.trend.length, 2);
+    assert.equal(body.data.trend[1].acceptedCount, 5);
+    const queries = pool.calls.filter(call => call.sql.includes('WITH bounds AS') || call.sql.includes('WITH months AS'));
+    assert.equal(queries.length, 2);
+    for (const query of queries) {
+      assert.deepEqual(query.args, [PROVIDER_ID]);
+      assert.match(query.sql, /provider_id = \$1/);
+      assert.doesNotMatch(query.sql, /contact_email|contact_phone|reason|budget_euro/);
+    }
+    assert.match(queries[0].sql, /provider_user_access/);
+    assert.match(queries[0].sql, /responded_at - assignment\.assigned_at/);
+    assert.match(queries[1].sql, /generate_series/);
+  });
+});
+
+test('provider operators cannot read business analytics', async () => {
+  const pool = fakePool({ accessRows: [{
+    providerId: PROVIDER_ID, role: 'provider_operator', businessName: 'Impresa Alfa'
+  }] });
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/dashboard/analytics', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    assert.equal(response.status, 403);
+    assert.equal(pool.calls.some(call => call.sql.includes('WITH bounds AS') || call.sql.includes('WITH months AS')), false);
+  });
+});
+
+test('provider profile grants business analytics only to administrators', async () => {
+  const adminPool = fakePool();
+  await withServer(createProviderPortalRouter(adminPool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/me', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.equal(body.data.permissions.viewBusinessAnalytics, true);
+  });
+  const operatorPool = fakePool({ accessRows: [{
+    providerId: PROVIDER_ID, role: 'provider_operator', businessName: 'Impresa Alfa'
+  }] });
+  await withServer(createProviderPortalRouter(operatorPool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/me', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.equal(body.data.permissions.viewBusinessAnalytics, false);
   });
 });
