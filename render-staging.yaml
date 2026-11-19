@@ -1,4 +1,6 @@
 # Blueprint separato per il collaudo: non usare il database di produzione.
+# npm start esegue solo le migrazioni base 001-004 definite in migrate.js.
+# Le migrazioni draft 005-015 e i moduli tenant/provider restano disattivati.
 services:
   - type: web
     name: funeral-smart-api-staging
@@ -29,6 +31,10 @@ services:
       - key: PUBLIC_APP_URL
         value: https://funeral-smart-web-staging.onrender.com
       - key: ENABLE_MULTI_TENANT
+        value: "false"
+      - key: MULTI_TENANT_CUTOVER_APPROVED
+        value: "false"
+      - key: ENABLE_PROVIDER_PORTAL
         value: "false"
 
   - type: web
