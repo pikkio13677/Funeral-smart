@@ -41,6 +41,40 @@ async function main() {
   let alfaServer;
   let betaServer;
   await client.query('BEGIN');
+  // Route transactions use savepoints on the fixture connection so the whole
+  // Alfa/Beta integration scenario can still be rolled back at the end.
+  let tenantTransactionSequence = 0;
+  const tenantPool = {
+    query: (...args) => client.query(...args),
+    async connect() {
+      const savepoint = 'tenant_api_' + (++tenantTransactionSequence);
+      let active = false;
+      return {
+        async query(sql, args) {
+          if (sql === 'BEGIN') {
+            await client.query('SAVEPOINT ' + savepoint);
+            active = true;
+            return { rows: [], rowCount: 0 };
+          }
+          if (sql === 'COMMIT') {
+            if (active) await client.query('RELEASE SAVEPOINT ' + savepoint);
+            active = false;
+            return { rows: [], rowCount: 0 };
+          }
+          if (sql === 'ROLLBACK') {
+            if (active) {
+              await client.query('ROLLBACK TO SAVEPOINT ' + savepoint);
+              await client.query('RELEASE SAVEPOINT ' + savepoint);
+            }
+            active = false;
+            return { rows: [], rowCount: 0 };
+          }
+          return client.query(sql, args);
+        },
+        release() {}
+      };
+    }
+  };
   try {
     const alfa = (await client.query("INSERT INTO companies (legal_name) VALUES ('Alfa Test S.r.l.') RETURNING id")).rows[0].id;
     const beta = (await client.query("INSERT INTO companies (legal_name) VALUES ('Beta Test S.r.l.') RETURNING id")).rows[0].id;
@@ -270,13 +304,13 @@ async function main() {
         req.tenant = { companyId, membershipId, role: 'admin' };
         next();
       });
-      app.use('/admin', createTenantCustomersCasesRouter(client));
-      app.use('/admin', createTenantStaffVehiclesRouter(client));
-      app.use('/admin', createTenantInventoryTasksRouter(client));
-      app.use('/admin', createTenantInvoicesPaymentsRouter(client));
-      app.use('/admin', createTenantDashboardRouter(client));
-      app.use('/admin', createTenantAuditRouter(client));
-      app.use('/admin', createTenantCompanyAdminRouter(client));
+      app.use('/admin', createTenantCustomersCasesRouter(tenantPool));
+      app.use('/admin', createTenantStaffVehiclesRouter(tenantPool));
+      app.use('/admin', createTenantInventoryTasksRouter(tenantPool));
+      app.use('/admin', createTenantInvoicesPaymentsRouter(tenantPool));
+      app.use('/admin', createTenantDashboardRouter(tenantPool));
+      app.use('/admin', createTenantAuditRouter(tenantPool));
+      app.use('/admin', createTenantCompanyAdminRouter(tenantPool));
       return app;
     }
 
@@ -361,6 +395,43 @@ async function main() {
     });
     assert.equal(crossTenantCreate.status, 400,
       'Alfa must not create a case linked to a Beta customer');
+
+    // Attempt cross-tenant writes against every remaining ID-addressed operational module.
+    // Each request is sent as Alfa while targeting a known Beta UUID.
+    async function expectCrossTenantDenied(path, options, label) {
+      const response = await fetch(alfaServer.baseUrl + path, options);
+      assert.equal(response.status, 404, label + ' must be hidden outside the active tenant');
+    }
+    const jsonOptions = body => ({
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    await expectCrossTenantDenied('/admin/staff/' + staffBeta + '/active', jsonOptions({ active: false }), 'Cross-tenant staff update');
+    await expectCrossTenantDenied('/admin/vehicles/' + vehicleBeta + '/status', jsonOptions({ status: 'inactive' }), 'Cross-tenant vehicle update');
+    await expectCrossTenantDenied('/admin/inventory/' + itemBeta + '/movements', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ movementType: 'in', quantity: 1, reason: 'cross tenant probe' })
+    }, 'Cross-tenant inventory movement');
+    await expectCrossTenantDenied('/admin/tasks/' + taskBeta, jsonOptions({ title: 'Altered by Alfa' }), 'Cross-tenant task update');
+    await expectCrossTenantDenied('/admin/invoices/' + invoiceBeta + '/payments', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ amount: 1, method: 'cross tenant probe' })
+    }, 'Cross-tenant invoice payment');
+    await expectCrossTenantDenied('/admin/company/members/' + betaMembership, jsonOptions({ role: 'manager' }), 'Cross-tenant membership update');
+
+    const betaStaffState = await client.query('SELECT active FROM staff WHERE id=$1 AND company_id=$2', [staffBeta, beta]);
+    assert.equal(betaStaffState.rows[0].active, true, 'Denied request must not deactivate Beta staff');
+    const betaVehicleState = await client.query('SELECT status FROM vehicles WHERE id=$1 AND company_id=$2', [vehicleBeta, beta]);
+    assert.equal(betaVehicleState.rows[0].status, 'available', 'Denied request must not change Beta vehicle');
+    const betaItemState = await client.query('SELECT quantity FROM inventory_items WHERE id=$1 AND company_id=$2', [itemBeta, beta]);
+    assert.equal(Number(betaItemState.rows[0].quantity), 9, 'Denied request must not change Beta stock');
+    const betaTaskState = await client.query('SELECT title FROM tasks WHERE id=$1 AND company_id=$2', [taskBeta, beta]);
+    assert.equal(betaTaskState.rows[0].title, 'Attività Beta', 'Denied request must not change Beta task');
+    const betaPaymentCount = await client.query('SELECT COUNT(*)::int AS total FROM payments WHERE invoice_id=$1 AND company_id=$2', [invoiceBeta, beta]);
+    assert.equal(betaPaymentCount.rows[0].total, 1, 'Denied request must not create a Beta invoice payment');
+    const betaMembershipState = await client.query('SELECT role FROM company_memberships WHERE id=$1 AND company_id=$2', [betaMembership, beta]);
+    assert.equal(betaMembershipState.rows[0].role, 'admin', 'Denied request must not change Beta membership role');
 
     const betaStatus = await client.query(
       'SELECT status FROM funeral_cases WHERE id = $1 AND company_id = $2',
