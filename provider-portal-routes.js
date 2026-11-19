@@ -33,7 +33,8 @@ function createProviderPortalRouter(pool, options = {}) {
           respondToInquiries: true,
           manageInvitations: req.provider.role === 'provider_admin',
           manageMembers: req.provider.role === 'provider_admin',
-          manageMemberRoles: req.provider.role === 'provider_admin'
+          manageMemberRoles: req.provider.role === 'provider_admin',
+          viewActivityLog: req.provider.role === 'provider_admin'
         },
         status: 'verified'
       }
@@ -246,6 +247,48 @@ function createProviderPortalRouter(pool, options = {}) {
     } finally {
       if (client) client.release();
     }
+  });
+
+
+  // Audit timeline is visible only to provider administrators and never returns free-text reasons.
+  router.get('/activity', async (req, res, next) => {
+    if (req.provider.role !== 'provider_admin') {
+      return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può consultare il registro attività.' });
+    }
+    const parsed = querySchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Parametri di paginazione non validi.' });
+    }
+    try {
+      const result = await pool.query(
+        `SELECT audit.id,
+                audit.action,
+                audit.created_at AS "createdAt",
+                actor.display_name AS "actorDisplayName",
+                actor.username AS "actorUsername",
+                inquiry.city,
+                inquiry.service_type AS "serviceType"
+         FROM provider_portal_audit_log audit
+         LEFT JOIN app_users actor ON actor.id = audit.user_id
+         LEFT JOIN inquiry_provider_assignments assignment
+           ON assignment.id = audit.assignment_id
+          AND assignment.provider_id = audit.provider_id
+         LEFT JOIN inquiries inquiry ON inquiry.id = assignment.inquiry_id
+         WHERE audit.provider_id = $1
+         ORDER BY audit.created_at DESC, audit.id DESC
+         LIMIT $2 OFFSET $3`,
+        [req.provider.providerId, parsed.data.limit, parsed.data.offset]
+      );
+      res.set('Cache-Control', 'no-store');
+      res.json({
+        data: result.rows,
+        pagination: {
+          limit: parsed.data.limit,
+          offset: parsed.data.offset,
+          returned: result.rows.length
+        }
+      });
+    } catch (error) { next(error); }
   });
 
   return router;

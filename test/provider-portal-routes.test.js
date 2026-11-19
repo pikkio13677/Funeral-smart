@@ -27,12 +27,13 @@ function fakePool({ accessRows = [{
   providerId: PROVIDER_ID,
   role: 'provider_admin',
   businessName: 'Impresa Alfa'
-}], listRows = [], detailRows = [] } = {}) {
+}], listRows = [], detailRows = [], auditRows = [] } = {}) {
   const calls = [];
   return {
     calls,
     async query(sql, args) {
       calls.push({ sql, args });
+      if (sql.includes('FROM provider_portal_audit_log')) return { rowCount: auditRows.length, rows: auditRows };
       if (sql.includes('FROM provider_user_access')) {
         return { rowCount: accessRows.length, rows: accessRows };
       }
@@ -328,7 +329,8 @@ test('provider profile returns an explicit permission matrix for administrators'
       respondToInquiries: true,
       manageInvitations: true,
       manageMembers: true,
-      manageMemberRoles: true
+      manageMemberRoles: true,
+      viewActivityLog: true
     });
   });
 });
@@ -347,7 +349,87 @@ test('provider operators can view and respond to inquiries but cannot manage tea
       respondToInquiries: true,
       manageInvitations: false,
       manageMembers: false,
-      manageMemberRoles: false
+      manageMemberRoles: false,
+      viewActivityLog: false
     });
+  });
+});
+
+
+test('provider administrators can read a provider-scoped activity timeline without free-text reasons', async () => {
+  const pool = fakePool({ auditRows: [{
+    id: '17',
+    action: 'provider.member.suspended',
+    createdAt: '2026-11-19T10:00:00.000Z',
+    actorDisplayName: 'Admin Alfa',
+    actorUsername: 'admin-alfa',
+    city: null,
+    serviceType: null
+  }] });
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/activity?limit=20&offset=5', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(body.pagination, { limit: 20, offset: 5, returned: 1 });
+    assert.equal(body.data[0].action, 'provider.member.suspended');
+    assert.equal(body.data[0].actorDisplayName, 'Admin Alfa');
+    assert.equal(JSON.stringify(body).includes('reason'), false);
+    const query = pool.calls.find(call => call.sql.includes('FROM provider_portal_audit_log'));
+    assert.deepEqual(query.args, [PROVIDER_ID, 20, 5]);
+    assert.match(query.sql, /audit\.provider_id = \$1/);
+    assert.match(query.sql, /ORDER BY audit\.created_at DESC, audit\.id DESC/);
+    assert.match(query.sql, /LEFT JOIN app_users actor/);
+    assert.match(query.sql, /LEFT JOIN inquiries inquiry/);
+    assert.doesNotMatch(query.sql, /audit\.reason/);
+  });
+});
+
+test('provider operators cannot read the activity timeline', async () => {
+  const pool = fakePool({ accessRows: [{
+    providerId: PROVIDER_ID,
+    role: 'provider_operator',
+    businessName: 'Impresa Alfa'
+  }] });
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/activity', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    assert.equal(response.status, 403);
+    assert.equal(pool.calls.some(call => call.sql.includes('FROM provider_portal_audit_log')), false);
+  });
+});
+
+test('activity timeline rejects invalid pagination without querying the audit log', async () => {
+  const pool = fakePool();
+  await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/activity?limit=500&unexpected=yes', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    assert.equal(response.status, 400);
+    assert.equal(pool.calls.some(call => call.sql.includes('FROM provider_portal_audit_log')), false);
+  });
+});
+
+test('provider profile grants activity-log permission only to administrators', async () => {
+  const adminPool = fakePool();
+  await withServer(createProviderPortalRouter(adminPool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/me', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.equal(body.data.permissions.viewActivityLog, true);
+  });
+  const operatorPool = fakePool({ accessRows: [{
+    providerId: PROVIDER_ID, role: 'provider_operator', businessName: 'Impresa Alfa'
+  }] });
+  await withServer(createProviderPortalRouter(operatorPool, { authenticate }), async base => {
+    const response = await fetch(base + '/api/v1/provider-portal/me', {
+      headers: { authorization: 'Bearer valid-test-user' }
+    });
+    const body = await response.json();
+    assert.equal(body.data.permissions.viewActivityLog, false);
   });
 });

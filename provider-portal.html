@@ -8,6 +8,7 @@ body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{ba
 <section class="stats"><div class="stat"><b id="total">—</b><small>Attive</small></div><div class="stat"><b id="new">—</b><small>Nuove</small></div><div class="stat"><b id="accepted">—</b><small>Accettate</small></div><div class="stat"><b id="rejected">—</b><small>Rifiutate</small></div></section>
 <section class="panel"><h2>Richieste assegnate</h2><div class="toolbar"><input id="search" type="search" placeholder="Cerca città o servizio"><button data-filter="all" class="active">Tutte</button><button data-filter="new">Nuove</button><button data-filter="accepted">Accettate</button><button data-filter="rejected">Rifiutate</button></div><div id="list">Caricamento…</div></section>
 <section class="panel" id="team"><h2>Invita un collaboratore</h2><p class="muted">Solo l’amministratore dell’impresa può inviare inviti.</p><form id="invite"><div class="row"><div><label for="email">Email</label><input id="email" type="email" maxlength="254" required></div><div><label for="role">Ruolo</label><select id="role"><option value="provider_operator">Collaboratore</option><option value="provider_admin">Amministratore</option></select></div></div><button class="primary">Invia invito</button></form><hr><div class="toolbar"><h3 style="margin:0;flex:1">Inviti collaboratori</h3><button id="refresh-invitations" type="button">Aggiorna</button></div><div id="invitation-list" aria-live="polite">Caricamento inviti…</div><hr><div class="toolbar"><h3 style="margin:0;flex:1">Collaboratori dell’impresa</h3><button id="refresh-members" type="button">Aggiorna</button></div><div id="member-list" aria-live="polite">Caricamento collaboratori…</div></section>
+<section class="panel hidden" id="activity"><div class="toolbar"><h2 style="margin:0;flex:1">Registro attività</h2><button id="refresh-activity" type="button">Aggiorna</button></div><p class="muted">Cronologia delle operazioni effettuate dagli utenti della tua impresa.</p><div id="activity-list" aria-live="polite">Caricamento registro…</div></section>
 </main>
 <dialog id="detail"><h2 id="detail-title">Dettaglio</h2><div id="detail-body"></div><button id="close-detail">Chiudi</button></dialog>
 <dialog id="response"><h2 id="response-title">Rispondi</h2><label for="reason">Motivazione obbligatoria (10–500 caratteri)</label><textarea id="reason" minlength="10" maxlength="500"></textarea><div class="actions"><button id="cancel">Annulla</button><button id="confirm" class="primary">Conferma</button></div></dialog>
@@ -35,7 +36,7 @@ async function load(){
   const results=await Promise.all([api(API+'/me'),api(API+'/dashboard'),api(API+'/inquiries?limit=100&offset=0')]);
   el('business').textContent=results[0].data.businessName||'Portale impresa';const c=results[1].data.counts||{};
   el('total').textContent=c.activeCount??0;el('new').textContent=c.newCount??0;el('accepted').textContent=c.acceptedCount??0;el('rejected').textContent=c.rejectedCount??0;
-  rows=Array.isArray(results[2].data)?results[2].data:[];permissions=results[0].data.permissions||{};const canManageTeam=permissions.manageInvitations===true&&permissions.manageMembers===true;el('team').classList.toggle('hidden',!canManageTeam);render();if(canManageTeam){await loadInvitations();await loadMembers();}
+  rows=Array.isArray(results[2].data)?results[2].data:[];permissions=results[0].data.permissions||{};const canManageTeam=permissions.manageInvitations===true&&permissions.manageMembers===true;el('team').classList.toggle('hidden',!canManageTeam);const canViewActivity=permissions.viewActivityLog===true;el('activity').classList.toggle('hidden',!canViewActivity);render();if(canManageTeam){await loadInvitations();await loadMembers();}if(canViewActivity)await loadActivity();
  }catch(e){show(e.message,false);el('list').textContent=e.message;}
 }
 function invitationStatus(status){
@@ -102,6 +103,39 @@ async function loadMembers(){
  }catch(error){list.textContent=error.message;show(error.message,false);}
 }
 
+
+function activityLabel(action){
+ const labels={
+  'inquiry.accepted':'Richiesta accettata',
+  'inquiry.rejected':'Richiesta rifiutata',
+  'provider.invitation.revoked':'Invito revocato',
+  'provider.invitation.accepted':'Invito accettato',
+  'provider.member.suspended':'Accesso collaboratore sospeso',
+  'provider.member.reactivated':'Accesso collaboratore riattivato',
+  'provider.member.role_changed':'Ruolo collaboratore modificato'
+ };
+ return labels[action]||'Attività registrata';
+}
+async function loadActivity(){
+ const list=el('activity-list');list.textContent='Caricamento registro…';
+ try{
+  const result=await api(API+'/activity?limit=50&offset=0');const events=Array.isArray(result.data)?result.data:[];
+  list.replaceChildren();
+  if(!events.length){list.textContent='Non sono ancora presenti attività registrate.';return;}
+  events.forEach(event=>{
+   const item=document.createElement('article');item.className='invite-item';
+   const info=document.createElement('div');const title=document.createElement('b');
+   title.textContent=activityLabel(event.action);
+   const meta=document.createElement('div');meta.className='meta';
+   const actor=event.actorDisplayName||event.actorUsername||'Utente non disponibile';
+   const when=event.createdAt?new Date(event.createdAt).toLocaleString('it-IT'):'Data non disponibile';
+   const context=event.city?(event.city+(event.serviceType?' · '+event.serviceType:'')):'';
+   meta.textContent=actor+' · '+when+(context?' · '+context:'');
+   info.append(title,meta);item.append(info);list.append(item);
+  });
+ }catch(error){list.textContent=error.message;show(error.message,false);}
+}
+
 async function openDetail(id){
  try{const d=(await api(API+'/inquiries/'+encodeURIComponent(id))).data;el('detail-title').textContent=(d.city||'Richiesta')+' · '+(d.serviceType||'Servizio');const body=el('detail-body');body.replaceChildren();
  [['Stato',label(d.responseStatus||'new')],['Destinazione',d.destinationCountry||'Non indicata'],['Email contatto',d.contactEmail||'Visibile solo dopo accettazione'],['Telefono',d.contactPhone||'Visibile solo dopo accettazione']].forEach(pair=>{const p=document.createElement('p');const b=document.createElement('b');b.textContent=pair[0]+': ';p.append(b,document.createTextNode(pair[1]));body.append(p);});el('detail').showModal();
@@ -111,6 +145,6 @@ function openResponse(id,status){selected=id;decision=status;el('response-title'
 el('confirm').addEventListener('click',async()=>{const reason=el('reason').value.trim();if(reason.length<10||reason.length>500){show('La motivazione deve contenere 10–500 caratteri.',false);return;}try{await api(API+'/inquiries/'+encodeURIComponent(selected)+'/response',{method:'POST',body:JSON.stringify({status:decision,reason})});el('response').close();show('Risposta registrata.',true);await load();}catch(e){show(e.message,false);}});
 el('invite').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api(API+'/invitations',{method:'POST',body:JSON.stringify({email:el('email').value.trim(),role:el('role').value})});el('email').value='';show(d.message||'Invito inviato.',true);await loadInvitations();}catch(x){show(x.message,false);}});
 document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));render();}));
-el('search').addEventListener('input',render);el('refresh-invitations').addEventListener('click',loadInvitations);el('refresh-members').addEventListener('click',loadMembers);el('close-detail').addEventListener('click',()=>el('detail').close());el('cancel').addEventListener('click',()=>el('response').close());
+el('search').addEventListener('input',render);el('refresh-invitations').addEventListener('click',loadInvitations);el('refresh-members').addEventListener('click',loadMembers);el('refresh-activity').addEventListener('click',loadActivity);el('close-detail').addEventListener('click',()=>el('detail').close());el('cancel').addEventListener('click',()=>el('response').close());
 el('logout').addEventListener('click',async()=>{try{await api('/api/v1/auth/logout',{method:'POST'});}finally{location.assign('/admin');}});load();
 </script></body></html>
