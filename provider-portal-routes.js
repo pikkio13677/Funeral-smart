@@ -34,7 +34,8 @@ function createProviderPortalRouter(pool, options = {}) {
           manageInvitations: req.provider.role === 'provider_admin',
           manageMembers: req.provider.role === 'provider_admin',
           manageMemberRoles: req.provider.role === 'provider_admin',
-          viewActivityLog: req.provider.role === 'provider_admin'
+          viewActivityLog: req.provider.role === 'provider_admin',
+          viewBusinessAnalytics: req.provider.role === 'provider_admin'
         },
         status: 'verified'
       }
@@ -249,6 +250,104 @@ function createProviderPortalRouter(pool, options = {}) {
     }
   });
 
+
+
+  // Business analytics are restricted to provider administrators and scoped to the session provider.
+  router.get('/dashboard/analytics', async (req, res, next) => {
+    if (req.provider.role !== 'provider_admin') {
+      return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può consultare le statistiche aziendali.' });
+    }
+    try {
+      const summary = await pool.query(
+        `WITH bounds AS (
+           SELECT date_trunc('month', NOW()) AS start_at,
+                  date_trunc('month', NOW()) + interval '1 month' AS end_at
+         )
+         SELECT
+           (SELECT COUNT(*)::int
+              FROM inquiry_provider_assignments assignment, bounds
+             WHERE assignment.provider_id = $1
+               AND assignment.assigned_at >= bounds.start_at
+               AND assignment.assigned_at < bounds.end_at) AS "monthRequests",
+           (SELECT COUNT(*)::int
+              FROM provider_inquiry_responses response, bounds
+             WHERE response.provider_id = $1
+               AND response.status = 'accepted'
+               AND response.responded_at >= bounds.start_at
+               AND response.responded_at < bounds.end_at) AS "monthAccepted",
+           (SELECT COUNT(*)::int
+              FROM provider_inquiry_responses response, bounds
+             WHERE response.provider_id = $1
+               AND response.status = 'rejected'
+               AND response.responded_at >= bounds.start_at
+               AND response.responded_at < bounds.end_at) AS "monthRejected",
+           (SELECT ROUND(AVG(EXTRACT(EPOCH FROM (response.responded_at - assignment.assigned_at)) / 3600)::numeric, 1)
+              FROM provider_inquiry_responses response
+              JOIN inquiry_provider_assignments assignment
+                ON assignment.id = response.assignment_id
+               AND assignment.provider_id = response.provider_id
+             WHERE response.provider_id = $1
+               AND response.responded_at >= (SELECT start_at FROM bounds)
+               AND response.responded_at < (SELECT end_at FROM bounds)
+               AND response.responded_at >= assignment.assigned_at) AS "averageResponseHours",
+           (SELECT COUNT(*)::int
+              FROM provider_user_access access
+             WHERE access.provider_id = $1
+               AND access.status = 'active') AS "activeMembers"`,
+        [req.provider.providerId]
+      );
+
+      const trend = await pool.query(
+        `WITH months AS (
+           SELECT generate_series(
+             date_trunc('month', NOW()) - interval '5 months',
+             date_trunc('month', NOW()),
+             interval '1 month'
+           ) AS month_start
+         ),
+         assignments AS (
+           SELECT date_trunc('month', assigned_at) AS month_start, COUNT(*)::int AS request_count
+             FROM inquiry_provider_assignments
+            WHERE provider_id = $1
+              AND assigned_at >= date_trunc('month', NOW()) - interval '5 months'
+              AND assigned_at < date_trunc('month', NOW()) + interval '1 month'
+            GROUP BY 1
+         ),
+         responses AS (
+           SELECT date_trunc('month', responded_at) AS month_start,
+                  COUNT(*)::int AS response_count,
+                  COUNT(*) FILTER (WHERE status = 'accepted')::int AS accepted_count,
+                  COUNT(*) FILTER (WHERE status = 'rejected')::int AS rejected_count
+             FROM provider_inquiry_responses
+            WHERE provider_id = $1
+              AND responded_at >= date_trunc('month', NOW()) - interval '5 months'
+              AND responded_at < date_trunc('month', NOW()) + interval '1 month'
+            GROUP BY 1
+         )
+         SELECT to_char(months.month_start, 'YYYY-MM') AS month,
+                COALESCE(assignments.request_count, 0)::int AS "requestCount",
+                COALESCE(responses.response_count, 0)::int AS "responseCount",
+                COALESCE(responses.accepted_count, 0)::int AS "acceptedCount",
+                COALESCE(responses.rejected_count, 0)::int AS "rejectedCount"
+           FROM months
+           LEFT JOIN assignments USING (month_start)
+           LEFT JOIN responses USING (month_start)
+          ORDER BY months.month_start`,
+        [req.provider.providerId]
+      );
+
+      res.set('Cache-Control', 'no-store');
+      res.json({
+        data: {
+          summary: summary.rows[0] || {
+            monthRequests: 0, monthAccepted: 0, monthRejected: 0,
+            averageResponseHours: null, activeMembers: 0
+          },
+          trend: trend.rows
+        }
+      });
+    } catch (error) { next(error); }
+  });
 
   // Audit timeline is visible only to provider administrators and never returns free-text reasons.
   router.get('/activity', async (req, res, next) => {
