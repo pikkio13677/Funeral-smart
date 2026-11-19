@@ -34,7 +34,8 @@ function fakePool({ accessRows = [{
     async query(sql, args) {
       calls.push({ sql, args });
       if (sql.includes('WITH bounds AS')) return { rowCount: 1, rows: [analyticsSummary || { monthRequests: 3, monthAccepted: 2, monthRejected: 1, averageResponseHours: '4.5', activeMembers: 2 }] };
-      if (sql.includes('WITH months AS')) return { rowCount: trendRows.length, rows: trendRows };\n      if (sql.includes('FROM provider_portal_audit_log')) return { rowCount: auditRows.length, rows: auditRows };
+      if (sql.includes('WITH months AS')) return { rowCount: trendRows.length, rows: trendRows };
+      if (sql.includes('FROM provider_portal_audit_log')) return { rowCount: auditRows.length, rows: auditRows };
       if (sql.includes('FROM provider_user_access')) {
         return { rowCount: accessRows.length, rows: accessRows };
       }
