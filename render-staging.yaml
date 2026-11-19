@@ -27,9 +27,9 @@ services:
       - key: EMAIL_VERIFICATION_PEPPER
         sync: false
       - key: CORS_ORIGIN
-        value: https://funeral-smart-web-staging.onrender.com
+        value: https://funeral-smart-web-staging-cszq.onrender.com
       - key: PUBLIC_APP_URL
-        value: https://funeral-smart-web-staging.onrender.com
+        value: https://funeral-smart-web-staging-cszq.onrender.com
       - key: ENABLE_MULTI_TENANT
         value: "false"
       - key: MULTI_TENANT_CUTOVER_APPROVED
@@ -40,7 +40,7 @@ services:
   - type: web
     name: funeral-smart-web-staging
     runtime: static
-    buildCommand: sed -i 's#https://funeral-smart-api.onrender.com#https://funeral-smart-api-staging.onrender.com#g' public/api-config.js && echo "Publishing FUNERAL SMART staging"
+    buildCommand: sed -i 's#https://funeral-smart-api.onrender.com#https://funeral-smart-api-staging-cszq.onrender.com#g' public/api-config.js && echo "Publishing FUNERAL SMART staging"
     staticPublishPath: ./public
 
 databases:
