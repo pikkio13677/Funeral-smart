@@ -1,11 +1,26 @@
 <!doctype html>
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><title>FUNERAL SMART · Portale imprese</title>
 <style>
-body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{background:#173b35;color:white;padding:16px 22px;display:flex;justify-content:space-between}main{max-width:1100px;margin:24px auto;padding:0 16px}.muted{color:#687784}.panel,.stat{background:white;border:1px solid #e4e9ed;border-radius:12px;padding:16px;margin:14px 0}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat b{display:block;font-size:25px}.stat small{color:#687784}input,select,textarea{font:inherit;border:1px solid #d5dfe3;border-radius:8px;padding:10px}input{min-width:150px}button{border:1px solid #d5dfe3;border-radius:8px;padding:9px 12px;background:white;font-weight:650}button.primary{background:#176b52;color:white;border-color:#176b52}button.danger{color:#a33b37}.toolbar,.actions,.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbar input{flex:1}.item{padding:14px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.item:last-child{border:0}.invite-item{padding:12px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.invite-item:last-child{border:0}.meta{font-size:12px;color:#687784}.status{font-size:12px;font-weight:700}.hidden{display:none!important}.message{padding:11px;background:#fff3df;color:#715b31;border-radius:8px;margin:12px 0}.ok{background:#e7f3ee;color:#176b52}label{display:block;font-size:12px;font-weight:700;margin:10px 0 5px}textarea{width:100%;min-height:85px;box-sizing:border-box}dialog{border:0;border-radius:12px;padding:20px;width:min(500px,calc(100vw - 30px))}dialog::backdrop{background:#142b2bbd}@media(max-width:620px){.stats{grid-template-columns:repeat(2,1fr)}.item{display:block}}
+body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{background:#173b35;color:white;padding:16px 22px;display:flex;justify-content:space-between}main{max-width:1100px;margin:24px auto;padding:0 16px}.muted{color:#687784}.panel,.stat{background:white;border:1px solid #e4e9ed;border-radius:12px;padding:16px;margin:14px 0}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.analytics-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.trend-row{padding:10px 0;border-bottom:1px solid #e4e9ed}.trend-row:last-child{border:0}.trend-label{font-weight:700;font-size:13px;margin-bottom:6px}.trend-track{height:8px;background:#edf1f2;border-radius:99px;overflow:hidden;margin:4px 0}.trend-fill{height:100%;background:#176b52;border-radius:99px}.trend-fill.responses{background:#b78b43}.trend-caption{font-size:11px;color:#687784}.stat b{display:block;font-size:25px}.stat small{color:#687784}input,select,textarea{font:inherit;border:1px solid #d5dfe3;border-radius:8px;padding:10px}input{min-width:150px}button{border:1px solid #d5dfe3;border-radius:8px;padding:9px 12px;background:white;font-weight:650}button.primary{background:#176b52;color:white;border-color:#176b52}button.danger{color:#a33b37}.toolbar,.actions,.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbar input{flex:1}.item{padding:14px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.item:last-child{border:0}.invite-item{padding:12px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.invite-item:last-child{border:0}.meta{font-size:12px;color:#687784}.status{font-size:12px;font-weight:700}.hidden{display:none!important}.message{padding:11px;background:#fff3df;color:#715b31;border-radius:8px;margin:12px 0}.ok{background:#e7f3ee;color:#176b52}label{display:block;font-size:12px;font-weight:700;margin:10px 0 5px}textarea{width:100%;min-height:85px;box-sizing:border-box}dialog{border:0;border-radius:12px;padding:20px;width:min(500px,calc(100vw - 30px))}dialog::backdrop{background:#142b2bbd}@media(max-width:850px){.analytics-stats{grid-template-columns:repeat(3,1fr)}}@media(max-width:620px){.stats,.analytics-stats{grid-template-columns:repeat(2,1fr)}.item{display:block}}
 </style></head><body>
 <header><div><b>FUNERAL SMART</b><div>Portale imprese partner</div></div><button id="logout">Esci</button></header>
 <main><h1 id="business">Portale impresa</h1><p class="muted">Richieste assegnate esclusivamente alla tua impresa.</p><div id="message" class="message hidden" role="status"></div>
 <section class="stats"><div class="stat"><b id="total">—</b><small>Attive</small></div><div class="stat"><b id="new">—</b><small>Nuove</small></div><div class="stat"><b id="accepted">—</b><small>Accettate</small></div><div class="stat"><b id="rejected">—</b><small>Rifiutate</small></div></section>
+
+<section class="panel hidden" id="business-analytics">
+ <div class="toolbar"><h2 style="margin:0;flex:1">Andamento dell’impresa</h2><button id="refresh-analytics" type="button">Aggiorna</button></div>
+ <p class="muted">Riepilogo del mese corrente e andamento degli ultimi sei mesi.</p>
+ <div class="analytics-stats">
+  <div class="stat"><b id="month-requests">—</b><small>Richieste del mese</small></div>
+  <div class="stat"><b id="month-accepted">—</b><small>Accettate</small></div>
+  <div class="stat"><b id="month-rejected">—</b><small>Rifiutate</small></div>
+  <div class="stat"><b id="average-response">—</b><small>Ore medie di risposta</small></div>
+  <div class="stat"><b id="active-members">—</b><small>Collaboratori attivi</small></div>
+ </div>
+ <h3>Ultimi sei mesi</h3>
+ <div class="trend-caption">Barra verde: richieste ricevute · Barra oro: risposte inviate</div>
+ <div id="monthly-trend" aria-live="polite">Caricamento statistiche…</div>
+</section>
 <section class="panel"><h2>Richieste assegnate</h2><div class="toolbar"><input id="search" type="search" placeholder="Cerca città o servizio"><button data-filter="all" class="active">Tutte</button><button data-filter="new">Nuove</button><button data-filter="accepted">Accettate</button><button data-filter="rejected">Rifiutate</button></div><div id="list">Caricamento…</div></section>
 <section class="panel" id="team"><h2>Invita un collaboratore</h2><p class="muted">Solo l’amministratore dell’impresa può inviare inviti.</p><form id="invite"><div class="row"><div><label for="email">Email</label><input id="email" type="email" maxlength="254" required></div><div><label for="role">Ruolo</label><select id="role"><option value="provider_operator">Collaboratore</option><option value="provider_admin">Amministratore</option></select></div></div><button class="primary">Invia invito</button></form><hr><div class="toolbar"><h3 style="margin:0;flex:1">Inviti collaboratori</h3><button id="refresh-invitations" type="button">Aggiorna</button></div><div id="invitation-list" aria-live="polite">Caricamento inviti…</div><hr><div class="toolbar"><h3 style="margin:0;flex:1">Collaboratori dell’impresa</h3><button id="refresh-members" type="button">Aggiorna</button></div><div id="member-list" aria-live="polite">Caricamento collaboratori…</div></section>
 <section class="panel hidden" id="activity"><div class="toolbar"><h2 style="margin:0;flex:1">Registro attività</h2><button id="refresh-activity" type="button">Aggiorna</button></div><p class="muted">Cronologia delle operazioni effettuate dagli utenti della tua impresa.</p><div id="activity-list" aria-live="polite">Caricamento registro…</div></section>
@@ -36,7 +51,7 @@ async function load(){
   const results=await Promise.all([api(API+'/me'),api(API+'/dashboard'),api(API+'/inquiries?limit=100&offset=0')]);
   el('business').textContent=results[0].data.businessName||'Portale impresa';const c=results[1].data.counts||{};
   el('total').textContent=c.activeCount??0;el('new').textContent=c.newCount??0;el('accepted').textContent=c.acceptedCount??0;el('rejected').textContent=c.rejectedCount??0;
-  rows=Array.isArray(results[2].data)?results[2].data:[];permissions=results[0].data.permissions||{};const canManageTeam=permissions.manageInvitations===true&&permissions.manageMembers===true;el('team').classList.toggle('hidden',!canManageTeam);const canViewActivity=permissions.viewActivityLog===true;el('activity').classList.toggle('hidden',!canViewActivity);render();if(canManageTeam){await loadInvitations();await loadMembers();}if(canViewActivity)await loadActivity();
+  rows=Array.isArray(results[2].data)?results[2].data:[];permissions=results[0].data.permissions||{};const canManageTeam=permissions.manageInvitations===true&&permissions.manageMembers===true;el('team').classList.toggle('hidden',!canManageTeam);const canViewActivity=permissions.viewActivityLog===true;el('activity').classList.toggle('hidden',!canViewActivity);const canViewAnalytics=permissions.viewBusinessAnalytics===true;el('business-analytics').classList.toggle('hidden',!canViewAnalytics);render();if(canManageTeam){await loadInvitations();await loadMembers();}if(canViewActivity)await loadActivity();if(canViewAnalytics)await loadAnalytics();
  }catch(e){show(e.message,false);el('list').textContent=e.message;}
 }
 function invitationStatus(status){
@@ -104,6 +119,36 @@ async function loadMembers(){
 }
 
 
+
+function monthLabel(value){
+ const parts=String(value||'').split('-');if(parts.length!==2)return value;
+ return new Date(Number(parts[0]),Number(parts[1])-1,1).toLocaleDateString('it-IT',{month:'short',year:'2-digit'});
+}
+async function loadAnalytics(){
+ const trend=el('monthly-trend');trend.textContent='Caricamento statistiche…';
+ try{
+  const result=await api(API+'/dashboard/analytics');const data=result.data||{};const summary=data.summary||{};
+  el('month-requests').textContent=summary.monthRequests??0;
+  el('month-accepted').textContent=summary.monthAccepted??0;
+  el('month-rejected').textContent=summary.monthRejected??0;
+  el('average-response').textContent=summary.averageResponseHours==null?'—':String(summary.averageResponseHours).replace('.',',');
+  el('active-members').textContent=summary.activeMembers??0;
+  const months=Array.isArray(data.trend)?data.trend:[];trend.replaceChildren();
+  if(!months.length){trend.textContent='Non ci sono ancora dati mensili.';return;}
+  const max=Math.max(1,...months.flatMap(item=>[Number(item.requestCount)||0,Number(item.responseCount)||0]));
+  months.forEach(item=>{
+   const row=document.createElement('div');row.className='trend-row';
+   const label=document.createElement('div');label.className='trend-label';label.textContent=monthLabel(item.month);
+   const requestTrack=document.createElement('div');requestTrack.className='trend-track';
+   const requestFill=document.createElement('div');requestFill.className='trend-fill';requestFill.style.width=Math.min(100,(Number(item.requestCount)||0)/max*100)+'%';requestTrack.append(requestFill);
+   const responseTrack=document.createElement('div');responseTrack.className='trend-track';
+   const responseFill=document.createElement('div');responseFill.className='trend-fill responses';responseFill.style.width=Math.min(100,(Number(item.responseCount)||0)/max*100)+'%';responseTrack.append(responseFill);
+   const caption=document.createElement('div');caption.className='trend-caption';caption.textContent='Richieste: '+(item.requestCount??0)+' · Risposte: '+(item.responseCount??0)+' (accettate '+(item.acceptedCount??0)+', rifiutate '+(item.rejectedCount??0)+')';
+   row.append(label,requestTrack,responseTrack,caption);trend.append(row);
+  });
+ }catch(error){trend.textContent=error.message;show(error.message,false);}
+}
+
 function activityLabel(action){
  const labels={
   'inquiry.accepted':'Richiesta accettata',
@@ -145,6 +190,6 @@ function openResponse(id,status){selected=id;decision=status;el('response-title'
 el('confirm').addEventListener('click',async()=>{const reason=el('reason').value.trim();if(reason.length<10||reason.length>500){show('La motivazione deve contenere 10–500 caratteri.',false);return;}try{await api(API+'/inquiries/'+encodeURIComponent(selected)+'/response',{method:'POST',body:JSON.stringify({status:decision,reason})});el('response').close();show('Risposta registrata.',true);await load();}catch(e){show(e.message,false);}});
 el('invite').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api(API+'/invitations',{method:'POST',body:JSON.stringify({email:el('email').value.trim(),role:el('role').value})});el('email').value='';show(d.message||'Invito inviato.',true);await loadInvitations();}catch(x){show(x.message,false);}});
 document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));render();}));
-el('search').addEventListener('input',render);el('refresh-invitations').addEventListener('click',loadInvitations);el('refresh-members').addEventListener('click',loadMembers);el('refresh-activity').addEventListener('click',loadActivity);el('close-detail').addEventListener('click',()=>el('detail').close());el('cancel').addEventListener('click',()=>el('response').close());
+el('search').addEventListener('input',render);el('refresh-invitations').addEventListener('click',loadInvitations);el('refresh-members').addEventListener('click',loadMembers);el('refresh-activity').addEventListener('click',loadActivity);el('refresh-analytics').addEventListener('click',loadAnalytics);el('close-detail').addEventListener('click',()=>el('detail').close());el('cancel').addEventListener('click',()=>el('response').close());
 el('logout').addEventListener('click',async()=>{try{await api('/api/v1/auth/logout',{method:'POST'});}finally{location.assign('/admin');}});load();
 </script></body></html>
