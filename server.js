@@ -12,6 +12,7 @@ const assertTenantCutoverReady = require('./tenant-cutover-guard');
 const assertTenantSchemaReady = require('./tenant-cutover-readiness');
 const mountApiRouters = require('./api-route-mounts');
 const createPublicIntakeRouter = require('./public-intake-routes');
+const getAllowedOrigins = require('./cors-origins');
 
 // Tenant routes require a separate approval flag and a read-only database preflight before the listener opens.
 assertTenantCutoverReady(process.env);
@@ -24,7 +25,7 @@ app.disable('x-powered-by');
 // Render terminates TLS at its proxy; trust exactly one proxy hop for client IP rate limits.
 app.set('trust proxy', 1);
 app.use(helmet());
-const allowedOrigins = [...new Set(['https://pikkio13677.github.io', 'https://funeral-smart-api.onrender.com', 'https://funeral-smart-web.onrender.com', 'https://funeralsmartapp.com', 'https://www.funeralsmartapp.com', ...(process.env.CORS_ORIGIN || '').split(',').map(x => x.trim()).filter(Boolean)])];
+const allowedOrigins = getAllowedOrigins(process.env);
 app.use(cors({ credentials: true, origin(origin, cb) {
   if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
   return cb(new Error('Origine non autorizzata'));
