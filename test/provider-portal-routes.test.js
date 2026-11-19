@@ -332,7 +332,8 @@ test('provider profile returns an explicit permission matrix for administrators'
       manageInvitations: true,
       manageMembers: true,
       manageMemberRoles: true,
-      viewActivityLog: true
+      viewActivityLog: true,
+      viewBusinessAnalytics: true
     });
   });
 });
@@ -352,7 +353,8 @@ test('provider operators can view and respond to inquiries but cannot manage tea
       manageInvitations: false,
       manageMembers: false,
       manageMemberRoles: false,
-      viewActivityLog: false
+      viewActivityLog: false,
+      viewBusinessAnalytics: false
     });
   });
 });
