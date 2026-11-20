@@ -222,6 +222,82 @@ function createMariaDbProviderPortalRouter(database, options = {}) {
     }
   });
 
+  // Company analytics are administrator-only and always scoped to the authenticated provider.
+  router.get('/dashboard/analytics', async (req, res, next) => {
+    if (req.provider.role !== 'provider_admin') {
+      return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può consultare le statistiche aziendali.' });
+    }
+    try {
+      const [summaryRows] = await database.query(
+        "SELECT " +
+        "(SELECT COUNT(*) FROM inquiry_provider_assignments a WHERE a.provider_id = ? AND a.assigned_at >= DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01') AND a.assigned_at < DATE_ADD(DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01'), INTERVAL 1 MONTH)) AS monthRequests, " +
+        "(SELECT COUNT(*) FROM provider_inquiry_responses r WHERE r.provider_id = ? AND r.status = 'accepted' AND r.responded_at >= DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01') AND r.responded_at < DATE_ADD(DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01'), INTERVAL 1 MONTH)) AS monthAccepted, " +
+        "(SELECT COUNT(*) FROM provider_inquiry_responses r WHERE r.provider_id = ? AND r.status = 'rejected' AND r.responded_at >= DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01') AND r.responded_at < DATE_ADD(DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01'), INTERVAL 1 MONTH)) AS monthRejected, " +
+        "(SELECT ROUND(AVG(TIMESTAMPDIFF(MICROSECOND, a.assigned_at, r.responded_at) / 3600000000), 1) FROM provider_inquiry_responses r JOIN inquiry_provider_assignments a ON a.id = r.assignment_id AND a.provider_id = r.provider_id WHERE r.provider_id = ? AND r.responded_at >= DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01') AND r.responded_at < DATE_ADD(DATE_FORMAT(UTC_TIMESTAMP(), '%Y-%m-01'), INTERVAL 1 MONTH) AND r.responded_at >= a.assigned_at) AS averageResponseHours, " +
+        "(SELECT COUNT(*) FROM provider_user_access access WHERE access.provider_id = ? AND access.status = 'active') AS activeMembers",
+        [req.provider.providerId, req.provider.providerId, req.provider.providerId, req.provider.providerId, req.provider.providerId]
+      );
+      const [trendRows] = await database.query(
+        "SELECT months.month AS month, COALESCE(assignments.requestCount, 0) AS requestCount, " +
+        "COALESCE(responses.responseCount, 0) AS responseCount, COALESCE(responses.acceptedCount, 0) AS acceptedCount, COALESCE(responses.rejectedCount, 0) AS rejectedCount " +
+        "FROM (" +
+        " SELECT DATE_FORMAT(DATE_SUB(UTC_DATE(), INTERVAL 5 MONTH), '%Y-%m-01') AS month UNION ALL " +
+        " SELECT DATE_FORMAT(DATE_SUB(UTC_DATE(), INTERVAL 4 MONTH), '%Y-%m-01') UNION ALL " +
+        " SELECT DATE_FORMAT(DATE_SUB(UTC_DATE(), INTERVAL 3 MONTH), '%Y-%m-01') UNION ALL " +
+        " SELECT DATE_FORMAT(DATE_SUB(UTC_DATE(), INTERVAL 2 MONTH), '%Y-%m-01') UNION ALL " +
+        " SELECT DATE_FORMAT(DATE_SUB(UTC_DATE(), INTERVAL 1 MONTH), '%Y-%m-01') UNION ALL " +
+        " SELECT DATE_FORMAT(UTC_DATE(), '%Y-%m-01')" +
+        ") months " +
+        "LEFT JOIN (SELECT DATE_FORMAT(assigned_at, '%Y-%m-01') AS month, COUNT(*) AS requestCount FROM inquiry_provider_assignments WHERE provider_id = ? AND assigned_at >= DATE_SUB(DATE_FORMAT(UTC_DATE(), '%Y-%m-01'), INTERVAL 5 MONTH) AND assigned_at < DATE_ADD(DATE_FORMAT(UTC_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH) GROUP BY DATE_FORMAT(assigned_at, '%Y-%m-01')) assignments ON assignments.month = months.month " +
+        "LEFT JOIN (SELECT DATE_FORMAT(responded_at, '%Y-%m-01') AS month, COUNT(*) AS responseCount, SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) AS acceptedCount, SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejectedCount FROM provider_inquiry_responses WHERE provider_id = ? AND responded_at >= DATE_SUB(DATE_FORMAT(UTC_DATE(), '%Y-%m-01'), INTERVAL 5 MONTH) AND responded_at < DATE_ADD(DATE_FORMAT(UTC_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH) GROUP BY DATE_FORMAT(responded_at, '%Y-%m-01')) responses ON responses.month = months.month " +
+        "ORDER BY months.month",
+        [req.provider.providerId, req.provider.providerId]
+      );
+      const summary = summaryRows[0] || {};
+      res.set('Cache-Control', 'no-store').json({ data: {
+        summary: {
+          monthRequests: Number(summary.monthRequests || 0),
+          monthAccepted: Number(summary.monthAccepted || 0),
+          monthRejected: Number(summary.monthRejected || 0),
+          averageResponseHours: summary.averageResponseHours === null ? null : Number(summary.averageResponseHours),
+          activeMembers: Number(summary.activeMembers || 0)
+        },
+        trend: trendRows.map(row => ({
+          month: row.month,
+          requestCount: Number(row.requestCount || 0),
+          responseCount: Number(row.responseCount || 0),
+          acceptedCount: Number(row.acceptedCount || 0),
+          rejectedCount: Number(row.rejectedCount || 0)
+        }))
+      } });
+    } catch (error) { next(error); }
+  });
+
+  router.get('/activity', async (req, res, next) => {
+    if (req.provider.role !== 'provider_admin') {
+      return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può consultare il registro attività.' });
+    }
+    const parsed = paginationSchema.safeParse(req.query);
+    if (!parsed.success) return res.status(400).json({ error: 'Parametri di paginazione non validi.' });
+    try {
+      const [rows] = await database.query(
+        "SELECT audit.id, audit.action, audit.created_at AS createdAt, " +
+        "actor.display_name AS actorDisplayName, actor.username AS actorUsername, " +
+        "inquiry.city, inquiry.service_type AS serviceType " +
+        "FROM provider_portal_audit_log audit " +
+        "LEFT JOIN app_users actor ON actor.id = audit.user_id " +
+        "LEFT JOIN inquiry_provider_assignments assignment ON assignment.id = audit.assignment_id AND assignment.provider_id = audit.provider_id " +
+        "LEFT JOIN inquiries inquiry ON inquiry.id = assignment.inquiry_id " +
+        "WHERE audit.provider_id = ? ORDER BY audit.created_at DESC, audit.id DESC LIMIT ? OFFSET ?",
+        [req.provider.providerId, parsed.data.limit, parsed.data.offset]
+      );
+      res.set('Cache-Control', 'no-store').json({
+        data: rows,
+        pagination: { limit: parsed.data.limit, offset: parsed.data.offset, returned: rows.length }
+      });
+    } catch (error) { next(error); }
+  });
+
   return router;
 }
 
