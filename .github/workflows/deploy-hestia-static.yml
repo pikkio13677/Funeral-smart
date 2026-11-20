@@ -3,8 +3,16 @@ name: Funeral Smart - manual Hestia static deploy
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "VERIFY_ONLY verifica il runner senza pubblicare; DEPLOY pubblica la PWA"
+        required: true
+        type: choice
+        options:
+          - "VERIFY_ONLY"
+          - "DEPLOY"
+        default: "VERIFY_ONLY"
       confirm_deploy:
-        description: "Conferma la pubblicazione sul dominio funeralsmart.app"
+        description: "Per DEPLOY selezionare YES. VERIFY_ONLY non pubblica file."
         required: true
         type: choice
         options:
@@ -21,12 +29,38 @@ concurrency:
 
 jobs:
   deploy-static:
-    name: Publish PWA static files on HestiaCP
+    name: Verify pikkio-runner and optionally publish PWA
     if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, x64]
     timeout-minutes: 10
     steps:
-      - name: Require explicit manual confirmation
+      # This must be the first step: no checkout or filesystem change before identity is confirmed.
+      - name: Verify this job was assigned to pikkio-runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "GitHub runner name: ${RUNNER_NAME:-unknown}"
+          echo "Runner OS: ${RUNNER_OS:-unknown}"
+          echo "Runner architecture: ${RUNNER_ARCH:-unknown}"
+          echo "Linux user: $(id -un)"
+          [[ "${RUNNER_NAME:-}" == "pikkio-runner" ]] || {
+            echo "::error::Job assegnato a un runner diverso da pikkio-runner. Arresto prima di checkout o deploy."
+            exit 1
+          }
+          [[ "$(id -un)" == "pikkio" ]] || {
+            echo "::error::Il runner pikkio-runner non è eseguito dall'utente Linux pikkio."
+            exit 1
+          }
+          echo "Identità del runner confermata."
+
+      - name: Stop after runner verification only
+        if: inputs.mode == 'VERIFY_ONLY'
+        shell: bash
+        run: |
+          echo "Verifica completata: nessun checkout e nessun file pubblicato."
+
+      - name: Require explicit manual deployment confirmation
+        if: inputs.mode == 'DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
@@ -34,28 +68,24 @@ jobs:
             echo "::error::Deploy non confermato. Seleziona YES per autorizzare la pubblicazione."
             exit 1
           fi
-          echo "Conferma manuale ricevuta."
+          echo "Conferma manuale ricevuta per funeralsmartapp.com."
 
       - name: Checkout main
+        if: inputs.mode == 'DEPLOY'
         uses: actions/checkout@v4
         with:
           ref: main
           clean: true
 
-      - name: Verify runner, Hestia path and static source
+      - name: Verify Hestia path and static source
+        if: inputs.mode == 'DEPLOY'
         id: preflight
         shell: bash
         run: |
           set -euo pipefail
 
-          EXPECTED_DIR="/home/pikkio/web/funeralsmart.app/public_html"
+          EXPECTED_DIR="/home/pikkio/web/funeralsmartapp.com/public_html"
           DEPLOY_DIR="$EXPECTED_DIR"
-
-          echo "Runner user: $(id -un)"
-          [[ "$(id -un)" == "pikkio" ]] || {
-            echo "::error::Il runner non è eseguito dall'utente Linux pikkio."
-            exit 1
-          }
 
           [[ -d "$DEPLOY_DIR" ]] || {
             echo "::error::Cartella Hestia non trovata: $DEPLOY_DIR"
@@ -84,13 +114,7 @@ jobs:
             exit 1
           }
 
-          for file in \
-            public/index.html \
-            public/manifest.webmanifest \
-            public/icon.svg \
-            public/api-config.js \
-            sw.js
-          do
+          for file in public/index.html public/manifest.webmanifest public/icon.svg public/api-config.js sw.js; do
             [[ -s "$GITHUB_WORKSPACE/$file" ]] || {
               echo "::error::File statico richiesto mancante o vuoto: $file"
               exit 1
@@ -98,16 +122,14 @@ jobs:
           done
 
           grep -q 'https://funeral-smart-api.onrender.com' public/api-config.js || {
-            echo "::error::URL API atteso non trovato in public/api-config.js. Nessun deploy eseguito."
+            echo "::error::URL API Render atteso non trovato in public/api-config.js. Nessun deploy eseguito."
             exit 1
           }
 
-          echo "Preflight superato."
-          echo "Percorso verificato: $REAL_DIR"
-          echo "Proprietario: $OWNER"
-          echo "File PHP index.php assente."
+          echo "Preflight superato: $REAL_DIR (owner=$OWNER)."
 
       - name: Assemble static PWA release
+        if: inputs.mode == 'DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
@@ -128,10 +150,11 @@ jobs:
           find "$RELEASE_DIR" -type f -printf '%P\n' | sort
 
       - name: Copy files to Hestia public_html without deleting existing data
+        if: inputs.mode == 'DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
-          DEPLOY_DIR="/home/pikkio/web/funeralsmart.app/public_html"
+          DEPLOY_DIR="/home/pikkio/web/funeralsmartapp.com/public_html"
 
           # Copia additiva: nessun --delete, nessun rm, nessuna pulizia della destinazione.
           cp -a "$RELEASE_DIR/." "$DEPLOY_DIR/"
@@ -143,14 +166,13 @@ jobs:
             }
           done
 
-          echo "Pubblicazione statica completata."
-          echo "File verificati in $DEPLOY_DIR:"
+          echo "Copia statica completata. Verificare ora il sito e le chiamate API."
           for file in index.html manifest.webmanifest icon.svg api-config.js sw.js; do
             stat -c '%n | %s byte | owner=%U' "$DEPLOY_DIR/$file"
           done
 
       - name: Cleanup temporary release
-        if: always()
+        if: always() && inputs.mode == 'DEPLOY'
         shell: bash
         run: |
           if [[ -n "${RELEASE_DIR:-}" && -d "${RELEASE_DIR:-}" ]]; then
