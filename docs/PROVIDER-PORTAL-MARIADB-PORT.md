@@ -25,6 +25,24 @@ Mantenere il contratto HTTP e le schermate dell'Area Imprese, sostituendo il liv
 - Inviti: creazione, elenco, revoca e accettazione
 - Collaboratori: elenco, sospensione/riattivazione e modifica ruolo
 
+## Stato del porting nel branch di lavoro
+
+Branch isolato: `work/provider-area-mariadb`. Nessuna modifica a `main`, nessun deploy e nessuna migrazione eseguita.
+
+- Implementati adapter MariaDB, middleware provider, endpoint `/me`, dashboard e richieste.
+- Implementate route MariaDB per inviti, accettazione con email verificata, revoca, membri, sospensione/riattivazione e cambio ruolo.
+- Implementati endpoint MariaDB per statistiche mensili, andamento a sei mesi e registro attività.
+- Aggiunti test unitari con adapter finti e controlli sintattici per i moduli portati.
+- I test non sono ancora stati eseguiti su MariaDB reale; i test con adapter finti non provano schema, tipi, vincoli o comportamento del motore.
+
+## Verifiche ancora obbligatorie prima dell'integrazione
+
+1. Confrontare ogni tabella/colonna usata dalle route con le migrazioni marketplace effettive e con lo schema del MariaDB di staging.
+2. Definire una migrazione MariaDB separata per accessi, inviti, risposte e audit, con chiavi UUID coerenti, indici, vincoli univoci e FK tenant-safe.
+3. Verificare compatibilità con il runtime: il progetto dichiara Node >=20, mentre il server era stato rilevato con Node 18.19.1.
+4. Eseguire `npm ci`, `npm run check` e `npm test` in un ambiente isolato; poi test d'integrazione su database temporaneo MariaDB.
+5. Verificare il contratto frontend e montare le route soltanto su staging dopo approvazione esplicita. Non abilitare il portale sul backend PostgreSQL attuale.
+
 ## Incompatibilità PostgreSQL da risolvere
 1. Placeholder `$1` → placeholder `?` del driver MariaDB, con adeguata gestione dell'ordine dei parametri.
 2. `RETURNING` → `insertId` e successiva SELECT nella stessa transazione quando occorre restituire la riga inserita.
