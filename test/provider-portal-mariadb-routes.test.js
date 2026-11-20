@@ -116,6 +116,8 @@ test('POST /inquiries/:id/response scrive risposta e audit nella stessa transazi
     assert.equal(writes.filter(call => /INSERT INTO provider_portal_audit_log/.test(call.sql)).length, 1);
     assert.ok(writes.every(call => !/\$[0-9]/.test(call.sql)));
   });
+});
+
 test('GET /dashboard/analytics è disponibile solo agli amministratori e usa query per provider', async () => {
   const database = makeDatabase();
   await withServer(database, async base => {
@@ -154,6 +156,4 @@ test('gli operatori non possono leggere analytics o registro attività', async (
     assert.equal(analytics.status, 403);
     assert.equal(activity.status, 403);
   });
-});
-
 });
