@@ -74,14 +74,14 @@ jobs:
           echo "Conferma manuale ricevuta per funeralsmartapp.com."
 
       - name: Checkout main
-        if: inputs.mode == 'DEPLOY'
+        if: github.event_name == 'push' || inputs.mode == 'DEPLOY'
         uses: actions/checkout@v4
         with:
           ref: main
           clean: true
 
       - name: Verify Hestia path and static source
-        if: inputs.mode == 'DEPLOY'
+        if: github.event_name == 'push' || inputs.mode == 'DEPLOY'
         id: preflight
         shell: bash
         run: |
@@ -132,7 +132,7 @@ jobs:
           echo "Preflight superato: $REAL_DIR (owner=$OWNER)."
 
       - name: Assemble static PWA release
-        if: inputs.mode == 'DEPLOY'
+        if: github.event_name == 'push' || inputs.mode == 'DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
@@ -153,7 +153,7 @@ jobs:
           find "$RELEASE_DIR" -type f -printf '%P\n' | sort
 
       - name: Copy files to Hestia public_html without deleting existing data
-        if: inputs.mode == 'DEPLOY'
+        if: github.event_name == 'push' || inputs.mode == 'DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
