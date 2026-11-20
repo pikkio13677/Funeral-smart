@@ -39,7 +39,6 @@ function createApp({ database, auth, env = process.env, sendInvitationEmail } = 
     }
   });
 
-  app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
   app.use((req, _res, next) => {
     const raw = req.headers.cookie || '';
     req.cookies = Object.fromEntries(raw.split(';').map(part => {
@@ -48,8 +47,7 @@ function createApp({ database, auth, env = process.env, sendInvitationEmail } = 
     }).filter(([key]) => key));
     next();
   });
-  // Re-mount auth after cookie parsing so login/logout share the same session cookie parser.
-  app.use('/api/v1/auth', auth.router);
+  app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
   app.use('/api/v1/provider-portal', createMariaDbProviderAreaRouter(database, {
     authenticate: auth.authenticate,
     publicAppUrl: env.PUBLIC_APP_URL,
