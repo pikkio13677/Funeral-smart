@@ -10,7 +10,7 @@ const sql = fs.readFileSync(schemaPath, 'utf8');
 
 test('lo schema MariaDB contiene tutte le tabelle base e del portale', () => {
   for (const table of [
-    'app_users', 'providers', 'service_types', 'provider_services',
+    'app_users', 'app_sessions', 'audit_log', 'providers', 'service_types', 'provider_services',
     'price_lists', 'provider_applications', 'inquiries',
     'inquiry_provider_assignments', 'provider_user_access',
     'provider_user_invitations', 'provider_inquiry_responses',
@@ -39,4 +39,8 @@ test('lo schema non viene collegato automaticamente all’avvio o alle migrazion
   assert.match(sql, /STAGING ONLY/);
   assert.match(sql, /NON eseguire automaticamente/);
   assert.doesNotMatch(sql, /DROP TABLE|TRUNCATE TABLE|DELETE FROM/i);
+});
+
+test('gli account staging supportano i ruoli amministrativi usati dal bootstrap controllato', () => {
+  assert.match(sql, /ck_app_users_role CHECK \(role IN \('admin','platform_owner'/);
 });
