@@ -116,4 +116,44 @@ test('POST /inquiries/:id/response scrive risposta e audit nella stessa transazi
     assert.equal(writes.filter(call => /INSERT INTO provider_portal_audit_log/.test(call.sql)).length, 1);
     assert.ok(writes.every(call => !/\$[0-9]/.test(call.sql)));
   });
+test('GET /dashboard/analytics è disponibile solo agli amministratori e usa query per provider', async () => {
+  const database = makeDatabase();
+  await withServer(database, async base => {
+    const response = await fetch(base + '/portal/dashboard/analytics', {
+      headers: { authorization: 'Bearer test' }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.data.summary.monthRequests, 0);
+    const analytics = database.calls.find(call => call.kind === 'query' && /averageResponseHours/.test(call.sql));
+    assert.ok(analytics);
+    assert.equal(analytics.values.length, 5);
+    assert.ok(analytics.sql.includes('provider_id = ?'));
+    assert.doesNotMatch(analytics.sql, /\$[0-9]/);
+  });
+});
+
+test('GET /activity limita il registro all’impresa autenticata', async () => {
+  const database = makeDatabase();
+  await withServer(database, async base => {
+    const response = await fetch(base + '/portal/activity?limit=10&offset=0', {
+      headers: { authorization: 'Bearer test' }
+    });
+    assert.equal(response.status, 200);
+    const query = database.calls.find(call => call.kind === 'query' && /FROM provider_portal_audit_log/.test(call.sql));
+    assert.deepEqual(query.values, [PROVIDER, 10, 0]);
+    assert.match(query.sql, /audit\.provider_id = \?/);
+  });
+});
+
+test('gli operatori non possono leggere analytics o registro attività', async () => {
+  const database = makeDatabase({ providerRows: [{ providerId: PROVIDER, role: 'provider_operator', businessName: 'Impresa Test' }] });
+  await withServer(database, async base => {
+    const analytics = await fetch(base + '/portal/dashboard/analytics', { headers: { authorization: 'Bearer test' } });
+    const activity = await fetch(base + '/portal/activity', { headers: { authorization: 'Bearer test' } });
+    assert.equal(analytics.status, 403);
+    assert.equal(activity.status, 403);
+  });
+});
+
 });
