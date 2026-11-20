@@ -12,7 +12,7 @@ const ACCESS = '33333333-3333-4333-8333-333333333333';
 const INVITATION = '44444444-4444-4444-8444-444444444444';
 const TOKEN = 'a'.repeat(43);
 
-function makeDatabase({ role = 'provider_admin', userRows = [], activeAdmins = 1 } = {}) {
+function makeDatabase({ role = 'provider_admin', userRows = [], activeAdmins = 1, invitationRows = [{ id: INVITATION, providerId: PROVIDER, email: 'collaboratore@example.com', role: 'provider_operator', status: 'pending', expiresAt: '2099-01-01 00:00:00.000', isExpired: 0, invitedByUserId: USER }] } = {}) {
   const calls = [];
   const database = {
     calls,
@@ -26,6 +26,7 @@ function makeDatabase({ role = 'provider_admin', userRows = [], activeAdmins = 1
         async execute(sql, values = []) {
           calls.push({ type: 'execute', sql, values });
           if (/SELECT business_name/.test(sql)) return [[{ businessName: 'Impresa Test' }], []];
+          if (/FROM provider_user_invitations WHERE token_hash/.test(sql)) return [invitationRows, []];
           if (/SELECT access\.id/.test(sql)) return [[], []];
           if (/SELECT id FROM provider_user_invitations/.test(sql)) return [[{ id: INVITATION }], []];
           if (/SELECT id, email, email_verified_at/.test(sql)) return [userRows, []];
