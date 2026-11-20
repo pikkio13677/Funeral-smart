@@ -47,6 +47,20 @@ Branch isolato: `work/provider-area-mariadb`. Nessuna modifica a `main`, nessun 
 
 Questi file sono PostgreSQL e le migrazioni 007, 014 e 015 sono bozze non eseguite. La verifica del sorgente conferma i nomi delle colonne attese, ma non prova che tali tabelle esistano già nel MariaDB installato né stabilisce i tipi MariaDB da usare. La migrazione MariaDB deve tradurre anche vincoli, indici parziali e chiavi composte; non basta copiare il DDL PostgreSQL.
 
+## Schema MariaDB preparato
+
+È stato aggiunto `mariadb/schema-provider-portal.sql` nel branch di lavoro.
+
+- Schema base marketplace coerente con `schema.sql`: utenti/sessioni, imprese, servizi, listini, candidature e richieste.
+- Tabelle portale: assegnazioni, accessi, inviti, risposte e audit.
+- UUID rappresentati come `CHAR(36)` ASCII binario; date come `DATETIME(3)` UTC; importi come `DECIMAL`.
+- Un solo incarico attivo per richiesta e un solo invito pendente per impresa/email sono protetti con colonne generate e indici univoci, in sostituzione degli indici parziali PostgreSQL.
+- Relazioni risposta/audit verso assegnazione e impresa protette da FK composte.
+- Email verificata univoca tramite colonna generata; nessun collegamento automatico degli account per email.
+- Seed dei tipi servizio ripetibile.
+
+Il file è un DDL autonomo per un database MariaDB di staging vuoto. Non è stato eseguito, non è incluso in `migrate.js`, non crea account amministrativi e non invia email. Prima dell'uso vanno verificati supporto effettivo delle CHECK su MariaDB 10.11, permessi, collation, modalità SQL e coerenza del driver. L'esecuzione dovrà essere esplicita e solo su database temporaneo dedicato.
+
 ## Verifiche ancora obbligatorie prima dell'integrazione
 
 1. Confrontare ogni tabella/colonna usata dalle route con le migrazioni marketplace effettive e con lo schema del MariaDB di staging.
