@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS app_users (
   PRIMARY KEY (id),
   UNIQUE KEY uq_app_users_username (username),
   UNIQUE KEY uq_app_users_verified_email (verified_email),
-  CONSTRAINT ck_app_users_role CHECK (role IN ('admin','manager','operator','warehouse','accounting')),
+  CONSTRAINT ck_app_users_role CHECK (role IN ('admin','platform_owner','manager','operator','warehouse','accounting')),
   CONSTRAINT ck_app_users_email_normalized CHECK (email IS NULL OR email = LOWER(TRIM(email))),
   CONSTRAINT ck_app_users_email_verification CHECK (email_verified_at IS NULL OR email IS NOT NULL)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
