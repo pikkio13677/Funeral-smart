@@ -7,6 +7,32 @@
 <title>FUNERAL SMART — Trasparenza, scelta, assistenza</title>
 <style>
 :root{--green:#123b32;--green2:#1d5b4b;--gold:#c9ad78;--bg:#f4f6f2;--ink:#202b26;--muted:#68756e;--line:#e1e7e0;--white:#fff;--warn:#fff5df}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}.wrap{max-width:1050px;margin:auto;padding:0 16px}header{background:linear-gradient(135deg,var(--green),var(--green2));color:white;padding:20px 0 42px}.brand{display:flex;align-items:center;gap:12px}.logo{width:46px;height:46px;border:1px solid var(--gold);border-radius:50%;display:grid;place-items:center;color:var(--gold);font-size:26px}h1{font-size:21px;letter-spacing:1.5px;margin:0}.tag{font-size:10px;letter-spacing:2px;color:#e4d7bb}.hero{padding:32px 0 0}.hero h2{font-size:clamp(28px,5vw,44px);line-height:1.08;max-width:700px;margin:0 0 13px}.hero p{max-width:690px;color:#e2ebe5;margin:0}.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}main{margin-top:-12px;padding-bottom:38px}.panel,.card,.step{background:white;border:1px solid var(--line);border-radius:17px;box-shadow:0 5px 22px #163b2b0b}.panel{padding:19px;margin-bottom:20px}h3{font-size:19px;margin:0 0 13px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.field label{display:block;font-size:13px;font-weight:700;margin:0 0 6px;color:#43564c}.field input,.field select,.field textarea{width:100%;padding:13px;border:1px solid #d5ded6;border-radius:11px;background:white;color:var(--ink)}.field textarea{min-height:90px;resize:vertical}.btn{border:0;border-radius:11px;padding:12px 16px;background:var(--green);color:white;font-weight:700}.btn.alt{background:#edf3ed;color:var(--green);border:1px solid #d9e3da}.btn.gold{background:var(--gold);color:#24382f}.btn.small{padding:9px 12px;font-size:13px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}.section-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:23px 2px 12px}.muted{color:var(--muted);font-size:13px}.pill{font-size:11px;padding:5px 9px;border-radius:30px;background:#edf4ee;color:#245b46;white-space:nowrap}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.card{padding:17px}.card h4{font-size:17px;margin:0 0 6px}.price{font-size:25px;font-weight:850;color:var(--green);margin:11px 0 3px}.price small{font-size:11px;font-weight:500;color:var(--muted)}ul{padding-left:19px;color:#536158;font-size:14px;margin:10px 0}.card .btn{width:100%;margin-top:8px}.notice{background:var(--warn);border:1px solid #f0dfb9;border-radius:13px;padding:14px;font-size:13px;color:#65532f;margin:16px 0}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}.step{padding:15px}.step b{display:block;color:var(--green);margin-bottom:4px}.hidden{display:none!important}.empty{background:white;border:1px dashed #b9c8bc;border-radius:14px;padding:22px;text-align:center;color:var(--muted)}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:15px}.divider{height:1px;background:var(--line);margin:18px 0}footer{text-align:center;padding:22px;color:#778179;font-size:12px}dialog{border:0;border-radius:18px;max-width:560px;width:calc(100% - 28px);padding:23px;box-shadow:0 20px 60px #0003}dialog::backdrop{background:#10231dcc}.close{float:right;border:0;border-radius:8px;padding:7px 10px;background:#edf3ed;color:var(--green)}.result{white-space:pre-wrap;background:#f4f6f2;border:1px solid var(--line);padding:12px;border-radius:10px;font-size:13px;margin-top:12px}.topline{display:flex;justify-content:space-between;align-items:center;gap:12px}.install{display:none}@media(max-width:650px){.grid,.cards,.steps,.two-col{grid-template-columns:1fr}.section-head{align-items:flex-start;flex-direction:column}.hero h2{max-width:520px}}
+
+/* FUNERAL SMART — charcoal, gold and ivory design system */
+:root{--brand-ink:#191817;--brand-ink2:#302d29;--brand-gold:#c9ad78;--brand-paper:#f5f1e8;--brand-text:#28251f;--brand-muted:#746e64;--brand-line:#e5ddcf;--brand-shadow:0 14px 38px rgba(38,31,22,.075)}
+html{scroll-behavior:smooth}
+body{background:radial-gradient(ellipse at 50% 0%,#fffdf8 0,var(--brand-paper) 68%);color:var(--brand-text)}
+header,.top{background:linear-gradient(118deg,#171615 0%,#282521 62%,#40372b 100%);color:#fff}
+header h1,.brand strong{letter-spacing:.13em}
+.sub,.tag,.brand small{color:#ddc99f}
+.panel,.card,.stat,.module,.step,.overview-panel{border:1px solid var(--brand-line);border-radius:18px;box-shadow:var(--brand-shadow);background:rgba(255,253,248,.97)}
+h1,h2,h3,.welcome h1,.card h3{letter-spacing:-.02em}
+h2,h3,.welcome h1{font-family:Georgia,'Times New Roman',serif;font-weight:400}
+input,select,textarea{border:1px solid #ded5c5;border-radius:12px;background:#fffefa;color:var(--brand-text)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#b99a67;box-shadow:0 0 0 3px rgba(201,173,120,.17)}
+button,.btn{border-radius:999px;transition:transform .16s ease,box-shadow .16s ease}
+button:hover,.btn:hover{transform:translateY(-1px);box-shadow:0 7px 18px #0002}
+button.primary,.btn,.btn.primary{background:#25221e;color:#fff;border-color:#25221e}
+button.gold,.btn.gold{background:linear-gradient(135deg,#d9c49a,#b99861);color:#211d17;border-color:#b99861}
+button.alt,.btn.alt{background:#f3eee4;color:#51432e;border:1px solid #e5dac5}
+button.danger,.btn.danger{background:#8e3932;color:#fff}
+.tab.active{background:#25221e;color:#ead9b5;border-color:#25221e}
+.stat b,.stat strong,.stat strong{color:#826638}
+.muted,.hint,.stat small{color:#81786d}
+.notice,.msg{border-radius:13px}
+@media(max-width:700px){.wrap{padding-left:15px;padding-right:15px}.stats,.analytics-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.panel,.module{padding:16px}.toolbar input{min-width:0;width:100%}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important}}
+
 </style>
 </head>
 <body>
