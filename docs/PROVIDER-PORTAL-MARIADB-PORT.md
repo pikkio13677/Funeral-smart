@@ -131,3 +131,50 @@ routers, that the composed router mounts invitation handling before provider
 membership handling, and that SQL aliases include fields consumed by the UI.
 These are source-level checks only; they do not replace HTTP integration tests
 against a running MariaDB staging service.
+
+
+## Standalone MariaDB staging API
+
+The isolated entry point is `provider-portal-mariadb/staging-server.js`.
+It is separate from `server.js`: it does not import `pg`, open
+`DATABASE_URL`, run PostgreSQL migrations, or enable PostgreSQL tenant flags.
+
+Start command for a dedicated Node 20 staging service:
+
+```sh
+node provider-portal-mariadb/staging-server.js
+```
+
+Required environment configuration (set only in the staging service's secret
+manager, never in source control):
+
+- `FUNERAL_SMART_ENV=staging`
+- `MARIADB_HOST`, `MARIADB_PORT`, `MARIADB_USER`, `MARIADB_PASSWORD`
+- `MARIADB_DATABASE` and `MARIADB_STAGING_DATABASE` must be identical; startup
+  fails closed if either is missing or they differ.
+- `PUBLIC_APP_URL` must be the HTTPS origin used to construct invitation links.
+
+The standalone API exposes `/api/health`, `/api/v1/auth/login`,
+`/api/v1/auth/logout`, `/api/v1/auth/me`, and mounts the provider portal at
+`/api/v1/provider-portal`. Authentication uses the existing scrypt password
+format and hashed opaque session tokens in MariaDB. Session cookies are
+HttpOnly, SameSite=Lax, and Secure when `NODE_ENV=production`.
+
+No email sender is configured in this entry point. Invitation creation returns
+503 until a staging-only mail adapter is explicitly added. No real email can be
+sent by the current standalone server. The first staging platform account must
+be provisioned through a separately reviewed, one-time staging bootstrap
+procedure; this server intentionally has no public account-creation endpoint.
+
+The schema and server remain unexecuted against a real database. The staging
+database must be positively identified and confirmed empty before applying the
+DDL. Do not use the production PostgreSQL service or the current production
+database for this work. Hestia's currently reported Node 18 runtime is below
+the repository's Node >=20 engine requirement; do not deploy this backend there
+until Node 20+ is installed or use a separate Node 20 staging runtime.
+
+This is an API-only staging service. The existing frontend still uses same-origin
+`/api/v1/provider-portal`; connecting it to a separate API host requires a
+staging reverse-proxy path or an explicitly configured frontend API origin with
+credentialed CORS and matching cookie settings. That integration is not yet
+enabled.
