@@ -12,8 +12,8 @@ const invitations = fs.readFileSync(path.join(root, 'provider-portal-mariadb', '
 const composed = fs.readFileSync(path.join(root, 'provider-portal-mariadb', 'index.js'), 'utf8');
 
 function routeExists(source, method, route) {
-  const escaped = route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp('router\\.' + method + '\\([\\'"]' + escaped + '[\\'"]').test(source);
+  return source.includes("router." + method + "('" + route + "'") ||
+    source.includes('router.' + method + '("' + route + '"');
 }
 
 test('ogni endpoint Area Imprese chiamato dal frontend è presente nei router MariaDB', () => {
