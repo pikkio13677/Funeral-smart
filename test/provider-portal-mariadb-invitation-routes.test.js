@@ -27,8 +27,9 @@ function makeDatabase({ role = 'provider_admin', userRows = [], activeAdmins = 1
           calls.push({ type: 'execute', sql, values });
           if (/SELECT business_name/.test(sql)) return [[{ businessName: 'Impresa Test' }], []];
           if (/FROM provider_user_invitations WHERE token_hash/.test(sql)) return [invitationRows, []];
+          if (/FROM provider_user_invitations WHERE provider_id/.test(sql)) return [[], []];
           if (/SELECT access\.id/.test(sql)) return [[], []];
-          if (/SELECT id FROM provider_user_invitations/.test(sql)) return [[{ id: INVITATION }], []];
+          if (/SELECT id FROM provider_user_invitations WHERE provider_id = \? AND token_hash/.test(sql)) return [[{ id: INVITATION }], []];
           if (/SELECT id, email, email_verified_at/.test(sql)) return [userRows, []];
           if (/SELECT COUNT\(\*\) AS activeAdmins/.test(sql)) return [[{ activeAdmins }], []];
           if (/SELECT a\.id, a\.role, a\.status/.test(sql)) return [[{ id: ACCESS, role: 'provider_admin', status: 'active', accountActive: 1 }], []];
