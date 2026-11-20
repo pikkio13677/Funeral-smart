@@ -135,13 +135,13 @@ function createMariaDbProviderInvitationRouter(database, options = {}) {
     try {
       const result = await database.withTransaction(async connection => {
         const [rows] = await connection.execute(
-          'SELECT id, status, expires_at AS expiresAt FROM provider_user_invitations WHERE id = ? AND provider_id = ? FOR UPDATE',
+          'SELECT id, status, expires_at AS expiresAt, (expires_at <= UTC_TIMESTAMP(3)) AS isExpired FROM provider_user_invitations WHERE id = ? AND provider_id = ? FOR UPDATE',
           [id.data, req.provider.providerId]
         );
         if (!rows.length) return { status: 404, body: { error: 'Invito non trovato.' } };
         const invite = rows[0];
         if (invite.status !== 'pending') return { status: 409, body: { error: 'Solo un invito in attesa può essere revocato.' } };
-        if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+        if (Number(invite.isExpired) === 1) {
           await connection.execute("UPDATE provider_user_invitations SET status = 'expired' WHERE id = ? AND provider_id = ? AND status = 'pending'", [invite.id, req.provider.providerId]);
           return { status: 410, body: { error: 'L’invito è scaduto e non può essere revocato.' } };
         }
@@ -161,12 +161,12 @@ function createMariaDbProviderInvitationRouter(database, options = {}) {
     try {
       const result = await database.withTransaction(async connection => {
         const [invites] = await connection.execute(
-          'SELECT id, provider_id AS providerId, email, role, status, expires_at AS expiresAt, invited_by_user_id AS invitedByUserId FROM provider_user_invitations WHERE token_hash = ? FOR UPDATE',
+          'SELECT id, provider_id AS providerId, email, role, status, expires_at AS expiresAt, (expires_at <= UTC_TIMESTAMP(3)) AS isExpired, invited_by_user_id AS invitedByUserId FROM provider_user_invitations WHERE token_hash = ? FOR UPDATE',
           [hashToken(parsed.data.token)]
         );
         if (!invites.length || invites[0].status !== 'pending') return { status: 400, body: { error: 'Invito non valido, revocato o già utilizzato.' } };
         const invite = invites[0];
-        if (new Date(invite.expiresAt).getTime() <= Date.now()) {
+        if (Number(invite.isExpired) === 1) {
           await connection.execute("UPDATE provider_user_invitations SET status = 'expired' WHERE id = ? AND status = 'pending'", [invite.id]);
           return { status: 410, body: { error: 'Invito scaduto. Chiedi all’impresa di inviarne uno nuovo.' } };
         }
