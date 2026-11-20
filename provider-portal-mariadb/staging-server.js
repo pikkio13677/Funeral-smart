@@ -43,7 +43,10 @@ function createApp({ database, auth, env = process.env, sendInvitationEmail } = 
     const raw = req.headers.cookie || '';
     req.cookies = Object.fromEntries(raw.split(';').map(part => {
       const index = part.indexOf('=');
-      return index < 0 ? ['', ''] : [part.slice(0, index).trim(), decodeURIComponent(part.slice(index + 1).trim())];
+      if (index < 0) return ['', ''];
+      const key = part.slice(0, index).trim();
+      try { return [key, decodeURIComponent(part.slice(index + 1).trim())]; }
+      catch (_) { return [key, '']; }
     }).filter(([key]) => key));
     next();
   });
