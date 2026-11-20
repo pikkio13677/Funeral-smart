@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const { promisify } = require('node:util');
 const createMariaDbAuth = require('../provider-portal-mariadb/auth');
 const { assertStagingDatabase } = require('../provider-portal-mariadb/staging-server');
+const { assertBootstrapEnvironment } = require('../scripts/bootstrap-mariadb-staging-admin');
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -78,4 +79,19 @@ test('unauthenticated requests do not query MariaDB', async () => {
   await auth.authenticate({ cookies: {} }, response, () => assert.fail('next must not be called'));
   assert.equal(response.statusCode, 401);
   assert.equal(queried, false);
+});
+
+test('bootstrap account amministratore richiede conferma esplicita e database staging coincidente', () => {
+  const base = {
+    FUNERAL_SMART_ENV: 'staging',
+    MARIADB_DATABASE: 'funeral_smart_staging',
+    MARIADB_STAGING_DATABASE: 'funeral_smart_staging',
+    STAGING_BOOTSTRAP_CONFIRM: 'CREATE_FIRST_STAGING_ADMIN',
+    STAGING_BOOTSTRAP_USERNAME: 'stage.admin',
+    STAGING_BOOTSTRAP_DISPLAY_NAME: 'Amministratore Staging',
+    STAGING_BOOTSTRAP_PASSWORD: 'a-very-long-staging-password'
+  };
+  assert.doesNotThrow(() => assertBootstrapEnvironment(base));
+  assert.throws(() => assertBootstrapEnvironment({ ...base, MARIADB_DATABASE: 'production' }), /database MariaDB non identificato/);
+  assert.throws(() => assertBootstrapEnvironment({ ...base, STAGING_BOOTSTRAP_CONFIRM: '' }), /Conferma bootstrap mancante/);
 });
