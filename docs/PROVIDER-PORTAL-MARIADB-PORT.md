@@ -35,6 +35,18 @@ Branch isolato: `work/provider-area-mariadb`. Nessuna modifica a `main`, nessun 
 - Aggiunti test unitari con adapter finti e controlli sintattici per i moduli portati.
 - I test non sono ancora stati eseguiti su MariaDB reale; i test con adapter finti non provano schema, tipi, vincoli o comportamento del motore.
 
+## Dipendenze schema verificate nel repository
+
+È stata completata anche la ricognizione dei file SQL sorgente (non del database live):
+
+- `schema.sql` definisce `providers`, `service_types`, `provider_services`, `price_lists`, `provider_applications` e `inquiries`. Le colonne lette dalle route richieste risultano presenti.
+- `users.sql` definisce `app_users` con `id`, `username`, `display_name`, `role` e `active`.
+- La bozza `migrations/007_audit_invitations.draft.sql` aggiunge `app_users.email` e `email_verified_at`; senza l'equivalente MariaDB l'accettazione invito deve restare disabilitata.
+- La bozza `migrations/014_platform_inquiry_assignments.draft.sql` definisce `inquiry_provider_assignments` con `inquiry_id`, `provider_id`, `assigned_at` e `status`.
+- La bozza `migrations/015_provider_portal_access.draft.sql` definisce accessi, inviti, risposte e audit usati dalle nuove route.
+
+Questi file sono PostgreSQL e le migrazioni 007, 014 e 015 sono bozze non eseguite. La verifica del sorgente conferma i nomi delle colonne attese, ma non prova che tali tabelle esistano già nel MariaDB installato né stabilisce i tipi MariaDB da usare. La migrazione MariaDB deve tradurre anche vincoli, indici parziali e chiavi composte; non basta copiare il DDL PostgreSQL.
+
 ## Verifiche ancora obbligatorie prima dell'integrazione
 
 1. Confrontare ogni tabella/colonna usata dalle route con le migrazioni marketplace effettive e con lo schema del MariaDB di staging.
