@@ -107,3 +107,17 @@ Questo esito non equivale ancora a un test SQL sul motore MariaDB né a un test 
 - Nessuna attivazione di `ENABLE_PROVIDER_PORTAL` finché il porting e i test non sono completati.
 - Nessuna email reale durante i test.
 - Conservare la demo e le pagine attuali; non sostituirle con una nuova interfaccia prima del collaudo API.
+
+
+## Router composition
+
+The MariaDB Area Imprese router factory is `provider-portal-mariadb/index.js`.
+It mounts the invitation router before the provider-membership router under the same
+API prefix. This ordering is intentional: platform administrators must be able to
+create the first provider invitation, and an already authenticated user must be
+able to accept an invitation before they have provider membership. The regular
+portal endpoints still require the provider context.
+
+The composition is tested by `test/provider-portal-mariadb-index.test.js`.
+This factory is not mounted by the production PostgreSQL `server.js`; a separate
+staging server and staging-only authentication/email configuration are still required.
