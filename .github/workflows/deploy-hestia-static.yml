@@ -1,0 +1,158 @@
+name: Funeral Smart - manual Hestia static deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_deploy:
+        description: "Conferma la pubblicazione sul dominio funeralsmart.app"
+        required: true
+        type: choice
+        options:
+          - "NO"
+          - "YES"
+        default: "NO"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: funeral-smart-hestia-static-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-static:
+    name: Publish PWA static files on HestiaCP
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 10
+    steps:
+      - name: Require explicit manual confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.confirm_deploy }}" != "YES" ]]; then
+            echo "::error::Deploy non confermato. Seleziona YES per autorizzare la pubblicazione."
+            exit 1
+          fi
+          echo "Conferma manuale ricevuta."
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          clean: true
+
+      - name: Verify runner, Hestia path and static source
+        id: preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          EXPECTED_DIR="/home/pikkio/web/funeralsmart.app/public_html"
+          DEPLOY_DIR="$EXPECTED_DIR"
+
+          echo "Runner user: $(id -un)"
+          [[ "$(id -un)" == "pikkio" ]] || {
+            echo "::error::Il runner non è eseguito dall'utente Linux pikkio."
+            exit 1
+          }
+
+          [[ -d "$DEPLOY_DIR" ]] || {
+            echo "::error::Cartella Hestia non trovata: $DEPLOY_DIR"
+            exit 1
+          }
+
+          REAL_DIR="$(realpath "$DEPLOY_DIR")"
+          [[ "$REAL_DIR" == "$EXPECTED_DIR" ]] || {
+            echo "::error::Il percorso reale non coincide con il percorso Hestia atteso: $REAL_DIR"
+            exit 1
+          }
+
+          [[ -w "$DEPLOY_DIR" ]] || {
+            echo "::error::L'utente pikkio non può scrivere nella cartella di pubblicazione."
+            exit 1
+          }
+
+          OWNER="$(stat -c '%U' "$DEPLOY_DIR")"
+          [[ "$OWNER" == "pikkio" ]] || {
+            echo "::error::La cartella public_html appartiene a '$OWNER', non a pikkio. Nessuna modifica eseguita."
+            exit 1
+          }
+
+          [[ ! -e "$DEPLOY_DIR/index.php" ]] || {
+            echo "::error::È presente index.php: potrebbe avere precedenza su index.html. Verificare prima il sito Hestia."
+            exit 1
+          }
+
+          for file in \
+            public/index.html \
+            public/manifest.webmanifest \
+            public/icon.svg \
+            public/api-config.js \
+            sw.js
+          do
+            [[ -s "$GITHUB_WORKSPACE/$file" ]] || {
+              echo "::error::File statico richiesto mancante o vuoto: $file"
+              exit 1
+            }
+          done
+
+          grep -q 'https://funeral-smart-api.onrender.com' public/api-config.js || {
+            echo "::error::URL API atteso non trovato in public/api-config.js. Nessun deploy eseguito."
+            exit 1
+          }
+
+          echo "Preflight superato."
+          echo "Percorso verificato: $REAL_DIR"
+          echo "Proprietario: $OWNER"
+          echo "File PHP index.php assente."
+
+      - name: Assemble static PWA release
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_DIR="$(mktemp -d "${RUNNER_TEMP}/funeral-smart-static.XXXXXX")"
+          echo "RELEASE_DIR=$RELEASE_DIR" >> "$GITHUB_ENV"
+          cp -a "$GITHUB_WORKSPACE/public/." "$RELEASE_DIR/"
+          # public/index.html registra ./sw.js; il service worker sorgente è nella root del repository.
+          cp "$GITHUB_WORKSPACE/sw.js" "$RELEASE_DIR/sw.js"
+
+          for file in index.html manifest.webmanifest icon.svg api-config.js sw.js; do
+            [[ -s "$RELEASE_DIR/$file" ]] || {
+              echo "::error::File richiesto assente nel pacchetto: $file"
+              exit 1
+            }
+          done
+
+          echo "Pacchetto statico pronto:"
+          find "$RELEASE_DIR" -type f -printf '%P\n' | sort
+
+      - name: Copy files to Hestia public_html without deleting existing data
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="/home/pikkio/web/funeralsmart.app/public_html"
+
+          # Copia additiva: nessun --delete, nessun rm, nessuna pulizia della destinazione.
+          cp -a "$RELEASE_DIR/." "$DEPLOY_DIR/"
+
+          for file in index.html manifest.webmanifest icon.svg api-config.js sw.js; do
+            [[ -s "$DEPLOY_DIR/$file" ]] || {
+              echo "::error::Verifica post-copia fallita per $file"
+              exit 1
+            }
+          done
+
+          echo "Pubblicazione statica completata."
+          echo "File verificati in $DEPLOY_DIR:"
+          for file in index.html manifest.webmanifest icon.svg api-config.js sw.js; do
+            stat -c '%n | %s byte | owner=%U' "$DEPLOY_DIR/$file"
+          done
+
+      - name: Cleanup temporary release
+        if: always()
+        shell: bash
+        run: |
+          if [[ -n "${RELEASE_DIR:-}" && -d "${RELEASE_DIR:-}" ]]; then
+            rm -rf -- "$RELEASE_DIR"
+          fi
