@@ -2,6 +2,32 @@
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><title>FUNERAL SMART · Portale imprese</title>
 <style>
 body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{background:#173b35;color:white;padding:16px 22px;display:flex;justify-content:space-between}main{max-width:1100px;margin:24px auto;padding:0 16px}.muted{color:#687784}.panel,.stat{background:white;border:1px solid #e4e9ed;border-radius:12px;padding:16px;margin:14px 0}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.analytics-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}.trend-row{padding:10px 0;border-bottom:1px solid #e4e9ed}.trend-row:last-child{border:0}.trend-label{font-weight:700;font-size:13px;margin-bottom:6px}.trend-track{height:8px;background:#edf1f2;border-radius:99px;overflow:hidden;margin:4px 0}.trend-fill{height:100%;background:#176b52;border-radius:99px}.trend-fill.responses{background:#b78b43}.trend-caption{font-size:11px;color:#687784}.stat b{display:block;font-size:25px}.stat small{color:#687784}input,select,textarea{font:inherit;border:1px solid #d5dfe3;border-radius:8px;padding:10px}input{min-width:150px}button{border:1px solid #d5dfe3;border-radius:8px;padding:9px 12px;background:white;font-weight:650}button.primary{background:#176b52;color:white;border-color:#176b52}button.danger{color:#a33b37}.toolbar,.actions,.row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbar input{flex:1}.item{padding:14px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}.item:last-child{border:0}.invite-item{padding:12px 0;border-bottom:1px solid #e4e9ed;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.invite-item:last-child{border:0}.meta{font-size:12px;color:#687784}.status{font-size:12px;font-weight:700}.hidden{display:none!important}.message{padding:11px;background:#fff3df;color:#715b31;border-radius:8px;margin:12px 0}.ok{background:#e7f3ee;color:#176b52}label{display:block;font-size:12px;font-weight:700;margin:10px 0 5px}textarea{width:100%;min-height:85px;box-sizing:border-box}dialog{border:0;border-radius:12px;padding:20px;width:min(500px,calc(100vw - 30px))}dialog::backdrop{background:#142b2bbd}@media(max-width:850px){.analytics-stats{grid-template-columns:repeat(3,1fr)}}@media(max-width:620px){.stats,.analytics-stats{grid-template-columns:repeat(2,1fr)}.item{display:block}}
+
+/* FUNERAL SMART — charcoal, gold and ivory design system */
+:root{--brand-ink:#191817;--brand-ink2:#302d29;--brand-gold:#c9ad78;--brand-paper:#f5f1e8;--brand-text:#28251f;--brand-muted:#746e64;--brand-line:#e5ddcf;--brand-shadow:0 14px 38px rgba(38,31,22,.075)}
+html{scroll-behavior:smooth}
+body{background:radial-gradient(ellipse at 50% 0%,#fffdf8 0,var(--brand-paper) 68%);color:var(--brand-text)}
+header,.top{background:linear-gradient(118deg,#171615 0%,#282521 62%,#40372b 100%);color:#fff}
+header h1,.brand strong{letter-spacing:.13em}
+.sub,.tag,.brand small{color:#ddc99f}
+.panel,.card,.stat,.module,.step,.overview-panel{border:1px solid var(--brand-line);border-radius:18px;box-shadow:var(--brand-shadow);background:rgba(255,253,248,.97)}
+h1,h2,h3,.welcome h1,.card h3{letter-spacing:-.02em}
+h2,h3,.welcome h1{font-family:Georgia,'Times New Roman',serif;font-weight:400}
+input,select,textarea{border:1px solid #ded5c5;border-radius:12px;background:#fffefa;color:var(--brand-text)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#b99a67;box-shadow:0 0 0 3px rgba(201,173,120,.17)}
+button,.btn{border-radius:999px;transition:transform .16s ease,box-shadow .16s ease}
+button:hover,.btn:hover{transform:translateY(-1px);box-shadow:0 7px 18px #0002}
+button.primary,.btn,.btn.primary{background:#25221e;color:#fff;border-color:#25221e}
+button.gold,.btn.gold{background:linear-gradient(135deg,#d9c49a,#b99861);color:#211d17;border-color:#b99861}
+button.alt,.btn.alt{background:#f3eee4;color:#51432e;border:1px solid #e5dac5}
+button.danger,.btn.danger{background:#8e3932;color:#fff}
+.tab.active{background:#25221e;color:#ead9b5;border-color:#25221e}
+.stat b,.stat strong,.stat strong{color:#826638}
+.muted,.hint,.stat small{color:#81786d}
+.notice,.msg{border-radius:13px}
+@media(max-width:700px){.wrap{padding-left:15px;padding-right:15px}.stats,.analytics-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.panel,.module{padding:16px}.toolbar input{min-width:0;width:100%}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important}}
+
 </style></head><body>
 <header><div><b>FUNERAL SMART</b><div>Portale imprese partner</div></div><button id="logout">Esci</button></header>
 <main><h1 id="business">Portale impresa</h1><p class="muted">Richieste assegnate esclusivamente alla tua impresa.</p><div id="message" class="message hidden" role="status"></div>
