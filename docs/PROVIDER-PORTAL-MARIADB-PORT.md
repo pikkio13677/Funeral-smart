@@ -80,16 +80,16 @@ Il file è un DDL autonomo per un database MariaDB di staging vuoto. Non è stat
 8. `to_regclass` nel controllo di disponibilità dello schema → verifica su `information_schema.tables`.
 
 ## Sequenza di implementazione sicura
-1. Definire prima lo schema MariaDB completo delle tabelle marketplace dipendenti (`providers`, `provider_services`, `service_types`, `price_lists`, `inquiries`, `inquiry_provider_assignments`) e confrontare tipi e chiavi con il database di test effettivamente creato sull'hosting.
-2. Scrivere una migrazione MariaDB separata, versionata e non collegata al vecchio `migrate.js` PostgreSQL.
-3. Introdurre un modulo database MariaDB con pool `mysql2/promise`; mantenere le query isolate e parametrizzate.
-4. Portare il middleware di contesto, le route dashboard/inquiry, inviti e collaboratori preservando i controlli tenant/provider e le transazioni.
-5. Aggiungere test automatici MariaDB su database usa-e-getta: accesso non autenticato, isolamento fra imprese, invito con token hash, accettazione/rifiuto atomici, protezione ultimo amministratore e statistiche.
-6. Solo dopo test verdi, predisporre le variabili ambiente e l'avvio Node >=20 sul server di staging. Le email devono essere disabilitate o intercettate in test.
-7. Abilitare il flag del portale esclusivamente nell'ambiente di test e collaudare da smartphone.
+1. Confrontare `mariadb/schema-provider-portal.sql` con il server MariaDB 10.11 di staging (tipi, generated columns, CHECK, default UTC, FK e indici) senza eseguire ancora il file.
+2. Eseguire la prima prova DDL solo su un database temporaneo vuoto, dopo autorizzazione esplicita; verificare creazione, seed ripetibile e rollback/ricreazione.
+3. Generare e committare un `package-lock.json` coerente con Node 20, poi far passare la CI isolata (`npm run check`, `npm test`).
+4. Eseguire test d'integrazione con MariaDB reale usa-e-getta per accesso, isolamento provider, invito con token hash, accettazione/rifiuto, ultimo amministratore, statistiche e audit.
+5. Correggere eventuali differenze fra schema reale, query e frontend; montare i router MariaDB in un server staging separato, non nel server PostgreSQL corrente.
+6. Solo dopo test verdi, predisporre variabili ambiente e Node >=20 sul server di staging. Email disabilitate o intercettate.
+7. Abilitare il portale esclusivamente in staging e collaudare da smartphone.
 
 ## Blocco attuale
-Non è ancora sicuro scrivere la migrazione definitiva: nel repository le API dipendono da tabelle marketplace e richieste create da migrazioni precedenti, mentre non è stato ancora verificato lo schema reale MariaDB sull'hosting. Inventare tipi o chiavi esterne potrebbe produrre una migrazione che sembra corretta ma non si avvia.
+È stato preparato uno schema MariaDB completo di staging, ma non è stato ancora validato dal motore MariaDB effettivo e non è stato eseguito. La CI GitHub è stata aggiunta sul branch isolato e deve ancora produrre un risultato verificato. Il server rilevato in precedenza usa Node 18.19.1, mentre il progetto richiede Node >=20. Prima del collegamento delle API servono test reali MariaDB, verifica del runtime e confronto finale con il frontend.
 
 ## Vincoli
 - Nessuna modifica al database PostgreSQL esistente.
