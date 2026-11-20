@@ -15,7 +15,7 @@ async function withServer(middleware, fn) {
     if (req.headers.authorization === 'Bearer valid-test-user') req.user = { id: USER_ID };
     next();
   });
-  app.use('/portal', middleware, (req, res) => res.json({ provider: req.provider }));
+  app.use('/portal', middleware, (req, res) => res.json({ provider: req.provider, providerFrozen: Object.isFrozen(req.provider) }));
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
@@ -76,7 +76,7 @@ test('ricava l’impresa solo dall’utente autenticato e ignora providerId fals
     assert.equal(response.status, 200);
     assert.equal(body.provider.providerId, PROVIDER_ID);
     assert.deepEqual(database.calls[0].args, [USER_ID]);
-    assert.ok(Object.isFrozen(body.provider) === false); // JSON response is a copy; middleware freezes req.provider.
+    assert.equal(body.providerFrozen, true);
   });
 });
 
