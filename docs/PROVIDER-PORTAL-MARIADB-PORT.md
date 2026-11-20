@@ -178,3 +178,20 @@ This is an API-only staging service. The existing frontend still uses same-origi
 staging reverse-proxy path or an explicitly configured frontend API origin with
 credentialed CORS and matching cookie settings. That integration is not yet
 enabled.
+
+
+### One-time staging administrator
+
+After (and only after) the MariaDB staging database has been positively
+identified, confirmed empty, and the schema has been applied manually, the
+first platform administrator can be created with
+`npm run bootstrap:mariadb-staging-admin`. The script requires
+`FUNERAL_SMART_ENV=staging`, an exact match between
+`MARIADB_DATABASE` and `MARIADB_STAGING_DATABASE`, and the explicit
+`STAGING_BOOTSTRAP_CONFIRM=CREATE_FIRST_STAGING_ADMIN` confirmation.
+Supply `STAGING_BOOTSTRAP_USERNAME`, `STAGING_BOOTSTRAP_DISPLAY_NAME`,
+and `STAGING_BOOTSTRAP_PASSWORD` only through the private shell/service
+environment. The script uses a MariaDB advisory lock, refuses to create a
+second platform administrator, stores the same scrypt hash format used by the
+existing application, and never prints the password. Remove all
+`STAGING_BOOTSTRAP_*` variables immediately after the one-time run.
