@@ -121,3 +121,13 @@ portal endpoints still require the provider context.
 The composition is tested by `test/provider-portal-mariadb-index.test.js`.
 This factory is not mounted by the production PostgreSQL `server.js`; a separate
 staging server and staging-only authentication/email configuration are still required.
+
+
+## Frontend contract checks
+
+The static contract suite `test/provider-portal-mariadb-frontend-contract.test.js`
+checks that the API paths used by `provider-portal.html` exist in the MariaDB
+routers, that the composed router mounts invitation handling before provider
+membership handling, and that SQL aliases include fields consumed by the UI.
+These are source-level checks only; they do not replace HTTP integration tests
+against a running MariaDB staging service.
