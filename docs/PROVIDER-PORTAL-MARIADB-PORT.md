@@ -88,6 +88,16 @@ Il file è un DDL autonomo per un database MariaDB di staging vuoto. Non è stat
 6. Solo dopo test verdi, predisporre variabili ambiente e Node >=20 sul server di staging. Email disabilitate o intercettate.
 7. Abilitare il portale esclusivamente in staging e collaudare da smartphone.
 
+## Esito CI isolata
+
+Il workflow `.github/workflows/provider-mariadb-ci.yml` è stato eseguito su GitHub Actions con Node 20.20.2. Nell'ultimo run verificato sul branch (commit `2380fd7475589da2ba5c7c6a844640568b381a56`):
+- `npm install`: superato.
+- `npm run check`: superato.
+- `npm test`: superato, 279 test totali, 279 passati.
+- Il workflow non esegue deploy e non si collega a database; usa solo test automatizzati con adapter finti e controlli statici sul DDL.
+
+Questo esito non equivale ancora a un test SQL sul motore MariaDB né a un test end-to-end del portale.
+
 ## Blocco attuale
 È stato preparato uno schema MariaDB completo di staging, ma non è stato ancora validato dal motore MariaDB effettivo e non è stato eseguito. La CI GitHub è stata aggiunta sul branch isolato e deve ancora produrre un risultato verificato. Il server rilevato in precedenza usa Node 18.19.1, mentre il progetto richiede Node >=20. Prima del collegamento delle API servono test reali MariaDB, verifica del runtime e confronto finale con il frontend.
 
