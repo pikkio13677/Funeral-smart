@@ -80,8 +80,8 @@ function createMariaDbAuth(database, options = {}) {
       }
       const token = crypto.randomBytes(32).toString('base64url');
       await database.query(
-        'INSERT INTO app_sessions (id, user_id, token_hash, expires_at, created_at, last_seen_at) VALUES (UUID(), ?, ?, DATE_ADD(UTC_TIMESTAMP(3), INTERVAL ? DAY), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))',
-        [user.id, tokenHash(token), SESSION_DAYS]
+        'INSERT INTO app_sessions (id, user_id, token_hash, expires_at, created_at, last_seen_at) VALUES (UUID(), ?, ?, DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 8 DAY), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))',
+        [user.id, tokenHash(token)]
       );
       await database.query('UPDATE app_users SET last_login_at = UTC_TIMESTAMP(3) WHERE id = ?', [user.id]);
       res.cookie(COOKIE, token, cookieOptions(env));
