@@ -1,6 +1,9 @@
 name: Funeral Smart - manual Hestia static deploy
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       mode:
@@ -54,13 +57,13 @@ jobs:
           echo "Identità del runner confermata."
 
       - name: Stop after runner verification only
-        if: inputs.mode == 'VERIFY_ONLY'
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'VERIFY_ONLY'
         shell: bash
         run: |
           echo "Verifica completata: nessun checkout e nessun file pubblicato."
 
       - name: Require explicit manual deployment confirmation
-        if: inputs.mode == 'DEPLOY'
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'DEPLOY'
         shell: bash
         run: |
           set -euo pipefail
@@ -172,7 +175,7 @@ jobs:
           done
 
       - name: Cleanup temporary release
-        if: always() && inputs.mode == 'DEPLOY'
+        if: always() && (github.event_name == 'push' || inputs.mode == 'DEPLOY')
         shell: bash
         run: |
           if [[ -n "${RELEASE_DIR:-}" && -d "${RELEASE_DIR:-}" ]]; then
