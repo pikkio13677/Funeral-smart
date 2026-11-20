@@ -37,8 +37,8 @@ test('both install manifests use the matching app theme', () => {
 test('both app icons contain the shared dark and gold emblem', () => {
   for (const file of ['icon.svg', 'public/icon.svg']) {
     const svg = fs.readFileSync(path.join(root, file), 'utf8');
-    assert.match(svg, /#191615|#171615/, file);
+    assert.match(svg, /fill="#123b32"/, file);
     assert.match(svg, /#c9ad78/, file);
-    assert.match(svg, /corona a sette punte/, file);
+    assert.match(svg, /M256 112l24 92 88-44/, file);
   }
 });
