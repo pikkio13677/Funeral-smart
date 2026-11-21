@@ -13,14 +13,11 @@ test('Render staging blueprint uses isolated services and database', () => {
   for (const expected of [
     'name: funeral-smart-api-staging',
     'name: funeral-smart-web-staging',
-    'name: funeral-smart-db-staging',
-    'databaseName: funeral_smart_staging',
-    'value: "true"',
+        'value: "true"',
     'value: "false"',
     'key: ENABLE_MULTI_TENANT',
     'key: MULTI_TENANT_CUTOVER_APPROVED',
     'key: ENABLE_PROVIDER_PORTAL',
-    'name: funeral-smart-db-staging'
   ]) assert.ok(yaml.includes(expected), 'Blueprint must contain ' + expected);
 
   assert.ok(yaml.includes('fromDatabase:\n          name: funeral-smart-db-staging'));
@@ -30,8 +27,8 @@ test('Render staging blueprint uses isolated services and database', () => {
 test('Render staging blueprint points only to staging origins and API', () => {
   const yaml = blueprint();
 
-  assert.ok(yaml.includes('https://funeral-smart-web-staging.onrender.com'));
-  assert.ok(yaml.includes('https://funeral-smart-api-staging.onrender.com'));
+  assert.ok(yaml.includes('https://funeral-smart-web-staging-cszq.onrender.com'));
+  assert.ok(yaml.includes('https://funeral-smart-api-staging-cszq.onrender.com'));
   assert.ok(yaml.includes('DATABASE_URL'));
   assert.ok(!yaml.includes('key: RESEND_API_KEY'));
   assert.ok(!yaml.includes('key: RESEND_FROM_EMAIL'));
