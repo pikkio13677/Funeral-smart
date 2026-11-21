@@ -1,1 +1,18 @@
-{"name":"FUNERAL SMART","short_name":"FUNERAL SMART","description":"Informazioni e confronto trasparente dei servizi funebri.","start_url":"./","scope":"./","display":"standalone","background_color":"#f4f6f2","theme_color":"#123b32","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "FUNERAL SMART",
+  "short_name": "FUNERAL SMART",
+  "description": "Informazioni e confronto trasparente dei servizi funebri.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#191817",
+  "theme_color": "#191817",
+  "icons": [
+    {
+      "src": "icon.svg?v=20261121-candela",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
