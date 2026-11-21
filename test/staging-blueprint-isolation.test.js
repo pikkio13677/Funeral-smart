@@ -20,10 +20,10 @@ test('Render staging blueprint uses isolated services and external staging datab
     'key: ENABLE_PROVIDER_PORTAL'
   ]) assert.ok(yaml.includes(expected), 'Blueprint must contain ' + expected);
 
-  assert.ok(yaml.includes('key: DATABASE_URL\\n        sync: false'));
+  assert.ok(yaml.includes('key: DATABASE_URL\n        sync: false'));
   assert.ok(!yaml.includes('fromDatabase:'));
   assert.ok(!yaml.includes('databases:'));
-  assert.ok(!yaml.includes('name: funeral-smart-db\\n'));
+  assert.ok(!yaml.includes('name: funeral-smart-db\n'));
 });
 
 test('Render staging blueprint points only to staging origins and API', () => {
@@ -42,6 +42,6 @@ test('staging-only secrets are declared for manual configuration, never hardcode
   const yaml = blueprint();
 
   for (const key of ['ADMIN_API_KEY', 'BOOTSTRAP_ADMIN_TOKEN', 'TOTP_ENCRYPTION_KEY', 'EMAIL_VERIFICATION_PEPPER']) {
-    assert.ok(yaml.includes('key: ' + key + '\\n        sync: false'), key + ' must be supplied privately in Render');
+    assert.ok(yaml.includes('key: ' + key + '\n        sync: false'), key + ' must be supplied privately in Render');
   }
 });
