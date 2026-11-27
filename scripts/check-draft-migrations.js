@@ -33,6 +33,31 @@ async function main() {
 
   await client.connect();
   try {
+    // Verify the combined service migration is safe on an already initialized
+    // database and can be re-run without creating duplicate service types.
+    const combinedServiceSql = await fs.readFile(
+      path.join(__dirname, '..', 'service-cremation-burial.sql'),
+      'utf8'
+    );
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      await client.query('BEGIN');
+      try {
+        await client.query(combinedServiceSql);
+        const service = await client.query(
+          "SELECT code, label FROM service_types WHERE code = $1",
+          ['cremation-burial']
+        );
+        if (service.rowCount !== 1 || service.rows[0].label !== 'Cremazione + Sepoltura') {
+          throw new Error('Combined cremation and burial service migration did not produce exactly one expected service type.');
+        }
+        await client.query('COMMIT');
+        process.stdout.write('Combined service migration OK (pass ' + attempt + ')\\n');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw new Error('service-cremation-burial.sql failed on pass ' + attempt + ': ' + error.message);
+      }
+    }
+
     for (const file of migrationFiles) {
       const sql = await fs.readFile(path.join(__dirname, '..', 'migrations', file), 'utf8');
       if (/^\s*(BEGIN|COMMIT)\s*;/im.test(sql)) {
