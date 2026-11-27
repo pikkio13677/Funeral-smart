@@ -74,6 +74,50 @@ async function main() {
     assert.equal(linked.length, 1);
     assert.equal(linked[0].code, 'cremation-burial');
 
+    // Exercise one-active-assignment uniqueness and history release on the real MariaDB engine.
+    const userId = crypto.randomUUID();
+    const inquiryId = crypto.randomUUID();
+    await connection.execute(
+      "INSERT INTO app_users (id, username, display_name, password_hash, role, active) VALUES (?, ?, ?, ?, 'platform_owner', 1)",
+      [userId, 'ci_' + crypto.randomBytes(5).toString('hex'), 'CI Platform Owner', 'ci-only-password-hash']
+    );
+    await connection.execute(
+      "INSERT INTO inquiries (id, city, service_type, contact_phone, privacy_consent, status) VALUES (?, 'Torino', 'Cremazione + Sepoltura', '+390110000000', 1, 'received')",
+      [inquiryId]
+    );
+    const firstAssignment = crypto.randomUUID();
+    await connection.execute(
+      "INSERT INTO inquiry_provider_assignments (id, inquiry_id, provider_id, assigned_by_user_id, status, active_inquiry_id) VALUES (?, ?, ?, ?, 'active', ?)",
+      [firstAssignment, inquiryId, providerId, userId, inquiryId]
+    );
+    const [activeAssignment] = await connection.execute(
+      "SELECT id FROM inquiry_provider_assignments WHERE active_inquiry_id = ? AND status = 'active'",
+      [inquiryId]
+    );
+    assert.equal(activeAssignment.length, 1);
+    await assert.rejects(
+      connection.execute(
+        "INSERT INTO inquiry_provider_assignments (id, inquiry_id, provider_id, assigned_by_user_id, status, active_inquiry_id) VALUES (?, ?, ?, ?, 'active', ?)",
+        [crypto.randomUUID(), inquiryId, providerId, userId, inquiryId]
+      ),
+      error => error && error.code === 'ER_DUP_ENTRY'
+    );
+    await connection.execute(
+      "UPDATE inquiry_provider_assignments SET status = 'revoked', revoked_at = UTC_TIMESTAMP(3), revoked_by_user_id = ?, revocation_reason = ?, active_inquiry_id = NULL WHERE id = ? AND status = 'active'",
+      [userId, 'Test CI di revoca assegnazione e rilascio vincolo.', firstAssignment]
+    );
+    const [released] = await connection.execute(
+      'SELECT id, status, active_inquiry_id FROM inquiry_provider_assignments WHERE id = ?',
+      [firstAssignment]
+    );
+    assert.equal(released[0].status, 'revoked');
+    assert.equal(released[0].active_inquiry_id, null);
+    const secondAssignment = crypto.randomUUID();
+    await connection.execute(
+      "INSERT INTO inquiry_provider_assignments (id, inquiry_id, provider_id, assigned_by_user_id, status, active_inquiry_id) VALUES (?, ?, ?, ?, 'active', ?)",
+      [secondAssignment, inquiryId, providerId, userId, inquiryId]
+    );
+
     process.stdout.write('MariaDB 10.11 schema, repeatable service seed, provider link and price-list FK checks passed.\n');
   } finally {
     await connection.end();
