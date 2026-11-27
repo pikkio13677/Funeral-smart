@@ -1,7 +1,7 @@
 name: Funeral Smart checks
 on:
   push:
-    branches: [main, "feature/**", "feat/**"]
+    branches: [main, "feature/**", "feat/**", "work/**"]
   pull_request:
     branches: [main]
 jobs:
@@ -16,3 +16,4 @@ jobs:
       - name: Fail on high or critical dependency advisories
         run: npm audit --audit-level=high
       - run: npm run check
+      - run: npm test
