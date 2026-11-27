@@ -23,7 +23,7 @@ test('MariaDB 10.11 loads the base schema and supports the application adapter',
   try {
     const schema = fs.readFileSync(path.join(__dirname, '..', 'schema.mariadb.sql'), 'utf8');
     const statements = schema
-      .split(/;\\s*(?:\\r?\\n|$)/)
+      .split(/;\s*(?:\r?\n|$)/)
       .map(statement => statement.trim())
       .filter(Boolean);
 
