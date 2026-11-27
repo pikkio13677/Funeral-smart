@@ -275,7 +275,7 @@ module.exports = function createAuth(pool) {
       }
       await pool.query('DELETE FROM app_mfa_challenges WHERE token_hash=$1', [tokenHash(challenge)]);
       const session = crypto.randomBytes(32).toString('base64url');
-      if (mariaDb) await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,DATE_ADD(NOW(), INTERVAL 8 DAY))', [row.user_id, tokenHash(session)]);
+      if (mariaDb) await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,DATE_ADD(NOW(), INTERVAL $3 DAY))', [row.user_id, tokenHash(session), SESSION_DAYS]);
       else await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+($3 || \' days\')::interval)', [row.user_id, tokenHash(session), String(SESSION_DAYS)]);
       await pool.query('UPDATE app_users SET last_login_at=NOW() WHERE id=$1', [row.user_id]);
       await audit({ id: row.user_id, username: row.username }, req, usedRecoveryHash ? 'auth.login.recovery' : 'auth.login.mfa');
@@ -340,7 +340,7 @@ module.exports = function createAuth(pool) {
         return res.json({ mfaRequired: true, message: 'Inserisci il codice a 6 cifre della tua app Authenticator.' });
       }
       const token = crypto.randomBytes(32).toString('base64url');
-      if (mariaDb) await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,DATE_ADD(NOW(), INTERVAL 8 DAY))', [user.id, tokenHash(token)]);
+      if (mariaDb) await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,DATE_ADD(NOW(), INTERVAL $3 DAY))', [user.id, tokenHash(token), SESSION_DAYS]);
       else await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+($3 || \' days\')::interval)', [user.id, tokenHash(token), String(SESSION_DAYS)]);
       await pool.query('UPDATE app_users SET last_login_at=NOW() WHERE id=$1', [user.id]);
       await audit(user, req, 'auth.login');
