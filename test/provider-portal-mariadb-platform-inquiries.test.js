@@ -37,7 +37,8 @@ function makeDatabase() {
           if (/SELECT id FROM providers/.test(sql)) return [[{ id: PROVIDER }], []];
           if (/INSERT INTO inquiry_provider_assignments/.test(sql)) { activeAssignment = true; inquiryStatus = 'assigned'; return [{ affectedRows: 1 }, []]; }
           if (/UPDATE inquiry_provider_assignments/.test(sql)) { activeAssignment = false; return [{ affectedRows: 1 }, []]; }
-          if (/UPDATE inquiries SET status/.test(sql)) { inquiryStatus = values[0]; return [{ affectedRows: 1 }, []]; }
+          if (/UPDATE inquiries SET status = 'assigned'/.test(sql)) { inquiryStatus = 'assigned'; return [{ affectedRows: 1 }, []]; }
+          if (/UPDATE inquiries SET status = \?/.test(sql)) { inquiryStatus = values[0]; return [{ affectedRows: 1 }, []]; }
           if (/SELECT id, provider_id AS providerId/.test(sql)) return [[{ id: ASSIGNMENT, providerId: PROVIDER, status: 'active' }], []];
           return [{ affectedRows: 1 }, []];
         }
