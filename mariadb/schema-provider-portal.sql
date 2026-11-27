@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS inquiry_provider_assignments (
   CONSTRAINT fk_assignment_assigned_by FOREIGN KEY (assigned_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL,
   CONSTRAINT fk_assignment_revoked_by FOREIGN KEY (revoked_by_user_id) REFERENCES app_users(id) ON DELETE SET NULL,
   CONSTRAINT ck_assignment_status CHECK (
-    (status = 'active' AND revoked_at IS NULL AND revoked_by_user_id IS NULL AND revocation_reason IS NULL)
+    (status = 'active' AND revoked_at IS NULL AND revocation_reason IS NULL)
     OR (status = 'revoked' AND revoked_at IS NOT NULL AND revocation_reason IS NOT NULL)
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -237,9 +237,9 @@ CREATE TABLE IF NOT EXISTS provider_user_invitations (
   CONSTRAINT ck_provider_invitation_email CHECK (email = LOWER(TRIM(email))),
   CONSTRAINT ck_provider_invitation_expiry CHECK (expires_at > created_at),
   CONSTRAINT ck_provider_invitation_timestamps CHECK (
-    (status = 'accepted' AND accepted_at IS NOT NULL AND revoked_at IS NULL AND accepted_by_user_id IS NOT NULL)
-    OR (status = 'revoked' AND revoked_at IS NOT NULL AND accepted_at IS NULL AND accepted_by_user_id IS NULL)
-    OR (status IN ('pending','expired') AND accepted_at IS NULL AND revoked_at IS NULL AND accepted_by_user_id IS NULL)
+    (status = 'accepted' AND accepted_at IS NOT NULL AND revoked_at IS NULL)
+    OR (status = 'revoked' AND revoked_at IS NOT NULL AND accepted_at IS NULL)
+    OR (status IN ('pending','expired') AND accepted_at IS NULL AND revoked_at IS NULL)
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
