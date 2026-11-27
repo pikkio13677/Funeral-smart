@@ -7,6 +7,26 @@ on:
 jobs:
   syntax:
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: funeral_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_DIALECT: mariadb
+      MARIADB_HOST: 127.0.0.1
+      MARIADB_PORT: 3306
+      MARIADB_USER: root
+      MARIADB_PASSWORD: root
+      MARIADB_DATABASE: funeral_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
