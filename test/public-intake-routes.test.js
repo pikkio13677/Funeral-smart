@@ -74,6 +74,23 @@ test('public family inquiries remain available through the platform intake route
   }
 });
 
+test('public family inquiries accept the combined cremation and burial service', async () => {
+  const app = await startApp();
+  try {
+    const response = await app.post('inquiries', {
+      city: 'Torino',
+      serviceType: 'Cremazione + Sepoltura',
+      contactPhone: '+390110000000',
+      privacyConsent: true
+    });
+    assert.equal(response.status, 201);
+    assert.deepEqual(app.calls[0].values.slice(0, 2), ['Torino', 'Cremazione + Sepoltura']);
+    assert.equal(app.notices[0].value.serviceType, 'Cremazione + Sepoltura');
+  } finally {
+    await app.close();
+  }
+});
+
 test('public provider applications remain available and are not automatically verified', async () => {
   const app = await startApp();
   try {
