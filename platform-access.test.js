@@ -85,3 +85,27 @@ test('active platform support without MFA is rejected', async () => {
   assert.match(res.body.error, /verifica in due passaggi/);
   assert.equal(nextCalled, false);
 });
+
+
+test('MariaDB platform authorization expands allowed roles into bound placeholders', async () => {
+  let querySql;
+  let queryArgs;
+  const middleware = createPlatformAccess({
+    dialect: 'mariadb',
+    query: async (sql, args) => {
+      querySql = sql;
+      queryArgs = args;
+      return { rowCount: 1, rows: [{ role: 'support', mfaEnabled: true }] };
+    }
+  }).requirePlatformRole('owner', 'support');
+  const req = { user: { id: 'user-4' } };
+  const res = response();
+  let nextCalled = false;
+
+  await middleware(req, res, () => { nextCalled = true; });
+
+  assert.equal(nextCalled, true);
+  assert.match(querySql, /pa\.role IN \(\?,\?\)/);
+  assert.deepEqual(queryArgs, ['user-4', 'owner', 'support']);
+  assert.deepEqual(req.platformAccess, { role: 'support' });
+});
