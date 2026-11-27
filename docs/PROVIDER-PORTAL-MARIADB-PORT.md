@@ -226,3 +226,10 @@ Il porting è stato trasferito su `work/provider-area-mariadb-current`, creato d
 Le assegnazioni valorizzano `active_inquiry_id`, che impone al database una sola assegnazione attiva per richiesta; la chiusura revoca l'assegnazione e libera il vincolo senza cancellare lo storico. Le operazioni sono registrate in `audit_log`. Il router è isolato sotto `/api/v1/platform`; nessuna route è stata aggiunta al server PostgreSQL di produzione.
 
 Il percorso resta staging-only e non è ancora pubblicato. Il test CI sul MariaDB reale verifica schema, vincolo di unicità, revoca e possibilità di riassegnazione; i test HTTP coprono autorizzazione, assegnazione, audit e console.
+
+
+### Ingresso pubblico famiglie su MariaDB (staging)
+
+È stato aggiunto e montato `POST /api/v1/inquiries` sul servizio MariaDB staging. Accetta anche **Cremazione + Sepoltura**, richiede consenso privacy e almeno un recapito, limita gli invii e registra le richieste come `received`, senza assegnarle automaticamente. È stato aggiunto anche l'ingresso candidature imprese, sempre con stato `pending` e senza pubblicazione automatica. Nessuna email viene inviata da questo percorso.
+
+I test HTTP verificano richiesta combinata, obbligo di recapito/consenso e stato pending delle candidature. La pagina pubblica non viene ancora puntata al nuovo endpoint: `public/api-config.js` continua a riferirsi all'API attuale finché il servizio MariaDB staging non sarà distribuito e verificato. Non è stato cambiato alcun endpoint live.
