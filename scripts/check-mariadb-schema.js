@@ -74,13 +74,13 @@ async function main() {
     assert.equal(linked.length, 1);
     assert.equal(linked[0].code, 'cremation-burial');
 
-    process.stdout.write('MariaDB 10.11 schema, repeatable service seed, provider link and price-list FK checks passed.\\n');
+    process.stdout.write('MariaDB 10.11 schema, repeatable service seed, provider link and price-list FK checks passed.\n');
   } finally {
     await connection.end();
   }
 }
 
 main().catch(error => {
-  process.stderr.write(error.stack + '\\n');
+  process.stderr.write(error.stack + '\n');
   process.exitCode = 1;
 });
