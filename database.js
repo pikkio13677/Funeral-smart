@@ -34,7 +34,7 @@ function rewriteSql(sql) {
   let rewritten = returning.sql
     .replace(/\bILIKE\b/gi, 'LIKE')
     .replace(/::\s*int\b/gi, '')
-    .replace(/::\s*(?:numeric|varchar|text|date|uuid|timestamptz|bigint|boolean)(?:\s*\([^)]*\))?(?:\[\])?/gi, '');
+    .replace(/::\s*(?:numeric|varchar|text|date|uuid|jsonb|timestamptz|bigint|boolean)(?:\s*\([^)]*\))?(?:\[\])?/gi, '');
   rewritten = rewritten
     .replace(/\s+FOR\s+SHARE(?:\s+OF\s+[\w, ]+)?/gi, ' LOCK IN SHARE MODE')
     .replace(/\s+FOR\s+UPDATE\s+OF\s+[\w, ]+/gi, ' FOR UPDATE')
