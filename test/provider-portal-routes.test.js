@@ -27,20 +27,21 @@ function fakePool({ accessRows = [{
   providerId: PROVIDER_ID,
   role: 'provider_admin',
   businessName: 'Impresa Alfa'
-}], listRows = [], detailRows = [], auditRows = [], analyticsSummary = null, trendRows = [] } = {}) {
+}], listRows = [], detailRows = [], auditRows = [], analyticsSummary = null, assignmentTrendRows = [], responseTrendRows = [] } = {}) {
   const calls = [];
   return {
     calls,
     async query(sql, args) {
       calls.push({ sql, args });
-      if (sql.includes('WITH bounds AS')) return { rowCount: 1, rows: [analyticsSummary || { monthRequests: 3, monthAccepted: 2, monthRejected: 1, averageResponseHours: '4.5', activeMembers: 2 }] };
-      if (sql.includes('WITH months AS')) return { rowCount: trendRows.length, rows: trendRows };
+      if (sql.includes('TIMESTAMPDIFF(SECOND')) return { rowCount: 1, rows: [analyticsSummary || { monthRequests: 3, monthAccepted: 2, monthRejected: 1, averageResponseHours: '4.5', activeMembers: 2 }] };
+      if (sql.includes('DATE_FORMAT(assigned_at')) return { rowCount: assignmentTrendRows.length, rows: assignmentTrendRows };
+      if (sql.includes('DATE_FORMAT(responded_at')) return { rowCount: responseTrendRows.length, rows: responseTrendRows };
       if (sql.includes('FROM provider_portal_audit_log')) return { rowCount: auditRows.length, rows: auditRows };
       if (sql.includes('FROM provider_user_access')) {
         return { rowCount: accessRows.length, rows: accessRows };
       }
       if (sql.includes('assignment.id = $1')) return { rowCount: detailRows.length, rows: detailRows };
-      if (sql.includes('COUNT(*) FILTER')) {
+      if (sql.includes('LEFT JOIN provider_inquiry_responses response')) {
         return {
           rowCount: 1,
           rows: [{ newCount: 2, acceptedCount: 1, rejectedCount: 1, activeCount: 4 }]
@@ -445,10 +446,8 @@ test('provider administrators can read monthly business analytics scoped to thei
       monthRequests: 8, monthAccepted: 5, monthRejected: 2,
       averageResponseHours: '3.5', activeMembers: 4
     },
-    trendRows: [
-      { month: '2026-10', requestCount: 6, responseCount: 5, acceptedCount: 4, rejectedCount: 1 },
-      { month: '2026-11', requestCount: 8, responseCount: 7, acceptedCount: 5, rejectedCount: 2 }
-    ]
+    assignmentTrendRows: [{ month: new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0'), request_count: 8 }],
+    responseTrendRows: [{ month: new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0'), response_count: 7, accepted_count: 5, rejected_count: 2 }]
   });
   await withServer(createProviderPortalRouter(pool, { authenticate }), async base => {
     const response = await fetch(base + '/api/v1/provider-portal/dashboard/analytics', {
@@ -462,16 +461,22 @@ test('provider administrators can read monthly business analytics scoped to thei
     assert.equal(body.data.summary.activeMembers, 4);
     assert.equal(body.data.trend.length, 2);
     assert.equal(body.data.trend[1].acceptedCount, 5);
-    const queries = pool.calls.filter(call => call.sql.includes('WITH bounds AS') || call.sql.includes('WITH months AS'));
-    assert.equal(queries.length, 2);
+    assert.equal(body.data.trend.length, 6);
+    const currentMonth = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+    assert.equal(body.data.trend[5].month, currentMonth);
+    assert.equal(body.data.trend[5].acceptedCount, 5);
+    const queries = pool.calls.filter(call => call.sql.includes('TIMESTAMPDIFF(SECOND') || call.sql.includes('DATE_FORMAT(assigned_at') || call.sql.includes('DATE_FORMAT(responded_at'));
+    assert.equal(queries.length, 3);
     for (const query of queries) {
-      assert.deepEqual(query.args, [PROVIDER_ID]);
+      assert.equal(query.args[0], PROVIDER_ID);
+      assert.equal(query.args.length, 3);
       assert.match(query.sql, /provider_id = \$1/);
       assert.doesNotMatch(query.sql, /contact_email|contact_phone|reason|budget_euro/);
     }
     assert.match(queries[0].sql, /provider_user_access/);
-    assert.match(queries[0].sql, /responded_at - assignment\.assigned_at/);
-    assert.match(queries[1].sql, /generate_series/);
+    assert.match(queries[0].sql, /TIMESTAMPDIFF/);
+    assert.match(queries[1].sql, /DATE_FORMAT/);
+    assert.match(queries[2].sql, /DATE_FORMAT/);
   });
 });
 
