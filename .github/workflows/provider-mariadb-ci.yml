@@ -3,7 +3,7 @@ name: Provider MariaDB isolated CI
 on:
   push:
     branches:
-      - work/provider-area-mariadb
+      - work/provider-area-mariadb-current
   pull_request:
     branches:
       - main
