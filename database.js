@@ -3,27 +3,15 @@
 function splitReturning(sql) {
   const match = /\s+RETURNING\s+([\s\S]+?)\s*;?\s*$/i.exec(sql);
   if (!match) return { sql, projection: null };
-  return { sql: sql.slice(0, match.index).trim(), projection: match[1].replace(/;\s*$/, '').trim() };
-}
-
-function prepareReturning(sql, projection) {
-  if (!projection) return { sql, mode: null, selectSql: null };
-  const insert = /^\s*INSERT\s+INTO\s+([\w.]+)\s*\(([^)]+)\)\s*VALUES\s*\(([\s\S]*)\)\s*$/i.exec(sql);
-  if (insert) {
-    const [, table, columns, values] = insert;
-    if (/(^|,)\s*id\s*(,|$)/i.test(columns)) {
-      throw new Error('MariaDB RETURNING adapter expects generated UUID ids; explicit id inserts need a dedicated query.');
-    }
-    return {
-      sql: \`INSERT INTO \${table} (id, \${columns}) VALUES ((@fs_last_id := UUID()), \${values})\`,
+  return { sql: 'INSERT INTO ' + table + ' (id, ' + columns + ') VALUES ((@fs_last_id := UUID()), ' + values + ')',
       mode: 'insert',
-      selectSql: \`SELECT \${projection} FROM \${table} WHERE id = @fs_last_id\`
+      selectSql: 'SELECT ' + projection + ' FROM ' + table + ' WHERE id = @fs_last_id'
     };
   }
   const update = /^\s*UPDATE\s+([\w.]+)\s+SET\s+([\s\S]+?)\s+WHERE\s+([\s\S]+)$/i.exec(sql);
   if (update) {
     const [, table, , whereClause] = update;
-    return { sql, mode: 'update', selectSql: \`SELECT \${projection} FROM \${table} WHERE \${whereClause}\` };
+    return { sql, mode: 'update', selectSql: 'SELECT ' + projection + ' FROM ' + table + ' WHERE ' + whereClause };
   }
   throw new Error('MariaDB RETURNING non supportato per questa forma SQL: convertire la query esplicitamente.');
 }
