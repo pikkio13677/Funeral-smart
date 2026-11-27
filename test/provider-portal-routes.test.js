@@ -41,7 +41,7 @@ function fakePool({ accessRows = [{
         return { rowCount: accessRows.length, rows: accessRows };
       }
       if (sql.includes('assignment.id = $1')) return { rowCount: detailRows.length, rows: detailRows };
-      if (sql.includes('LEFT JOIN provider_inquiry_responses response')) {
+      if (sql.includes('LEFT JOIN provider_inquiry_responses response') && sql.includes('COUNT(*)')) {
         return {
           rowCount: 1,
           rows: [{ newCount: 2, acceptedCount: 1, rejectedCount: 1, activeCount: 4 }]
@@ -459,8 +459,6 @@ test('provider administrators can read monthly business analytics scoped to thei
     assert.equal(body.data.summary.monthRequests, 8);
     assert.equal(body.data.summary.averageResponseHours, '3.5');
     assert.equal(body.data.summary.activeMembers, 4);
-    assert.equal(body.data.trend.length, 2);
-    assert.equal(body.data.trend[1].acceptedCount, 5);
     assert.equal(body.data.trend.length, 6);
     const currentMonth = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
     assert.equal(body.data.trend[5].month, currentMonth);
