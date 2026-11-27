@@ -10,6 +10,7 @@ const createMariaDbDatabase = require('./database');
 const createMariaDbAuth = require('./auth');
 const createMariaDbProviderAreaRouter = require('./index');
 const createMariaDbPlatformInquiryRouter = require('./platform-inquiry-routes');
+const createMariaDbPublicIntakeRouter = require('./public-intake-routes');
 
 function assertStagingDatabase(env = process.env) {
   if (env.FUNERAL_SMART_ENV !== 'staging') {
@@ -52,6 +53,8 @@ function createApp({ database, auth, env = process.env, sendInvitationEmail } = 
     next();
   });
   app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
+  const publicSubmissionLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: 'draft-7', legacyHeaders: false });
+  app.use('/api/v1', createMariaDbPublicIntakeRouter(database, { submissionLimiter: publicSubmissionLimiter }));
   app.use('/api/v1/platform', createMariaDbPlatformInquiryRouter(database, { authenticate: auth.authenticate }));
   app.use('/api/v1/provider-portal', createMariaDbProviderAreaRouter(database, {
     authenticate: auth.authenticate,
