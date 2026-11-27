@@ -258,83 +258,72 @@ function createProviderPortalRouter(pool, options = {}) {
       return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può consultare le statistiche aziendali.' });
     }
     try {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const trendStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const sqlDateTime = value => value.getFullYear() + '-' +
+        String(value.getMonth() + 1).padStart(2, '0') + '-' +
+        String(value.getDate()).padStart(2, '0') + ' 00:00:00';
+      const monthStartSql = sqlDateTime(monthStart);
+      const nextMonthSql = sqlDateTime(nextMonthStart);
+      const trendStartSql = sqlDateTime(trendStart);
+
       const summary = await pool.query(
-        `WITH bounds AS (
-           SELECT date_trunc('month', NOW()) AS start_at,
-                  date_trunc('month', NOW()) + interval '1 month' AS end_at
-         )
-         SELECT
-           (SELECT COUNT(*)::int
-              FROM inquiry_provider_assignments assignment, bounds
-             WHERE assignment.provider_id = $1
-               AND assignment.assigned_at >= bounds.start_at
-               AND assignment.assigned_at < bounds.end_at) AS "monthRequests",
-           (SELECT COUNT(*)::int
-              FROM provider_inquiry_responses response, bounds
-             WHERE response.provider_id = $1
-               AND response.status = 'accepted'
-               AND response.responded_at >= bounds.start_at
-               AND response.responded_at < bounds.end_at) AS "monthAccepted",
-           (SELECT COUNT(*)::int
-              FROM provider_inquiry_responses response, bounds
-             WHERE response.provider_id = $1
-               AND response.status = 'rejected'
-               AND response.responded_at >= bounds.start_at
-               AND response.responded_at < bounds.end_at) AS "monthRejected",
-           (SELECT ROUND(AVG(EXTRACT(EPOCH FROM (response.responded_at - assignment.assigned_at)) / 3600)::numeric, 1)
+        `SELECT
+           (SELECT COUNT(*) FROM inquiry_provider_assignments
+             WHERE provider_id = $1 AND assigned_at >= $2 AND assigned_at < $3) AS "monthRequests",
+           (SELECT COUNT(*) FROM provider_inquiry_responses
+             WHERE provider_id = $1 AND status = 'accepted'
+               AND responded_at >= $2 AND responded_at < $3) AS "monthAccepted",
+           (SELECT COUNT(*) FROM provider_inquiry_responses
+             WHERE provider_id = $1 AND status = 'rejected'
+               AND responded_at >= $2 AND responded_at < $3) AS "monthRejected",
+           (SELECT ROUND(AVG(TIMESTAMPDIFF(SECOND, assignment.assigned_at, response.responded_at) / 3600), 1)
               FROM provider_inquiry_responses response
               JOIN inquiry_provider_assignments assignment
                 ON assignment.id = response.assignment_id
                AND assignment.provider_id = response.provider_id
              WHERE response.provider_id = $1
-               AND response.responded_at >= (SELECT start_at FROM bounds)
-               AND response.responded_at < (SELECT end_at FROM bounds)
+               AND response.responded_at >= $2 AND response.responded_at < $3
                AND response.responded_at >= assignment.assigned_at) AS "averageResponseHours",
-           (SELECT COUNT(*)::int
-              FROM provider_user_access access
-             WHERE access.provider_id = $1
-               AND access.status = 'active') AS "activeMembers"`,
-        [req.provider.providerId]
+           (SELECT COUNT(*) FROM provider_user_access
+             WHERE provider_id = $1 AND status = 'active') AS "activeMembers"`,
+        [req.provider.providerId, monthStartSql, nextMonthSql]
       );
 
-      const trend = await pool.query(
-        `WITH months AS (
-           SELECT generate_series(
-             date_trunc('month', NOW()) - interval '5 months',
-             date_trunc('month', NOW()),
-             interval '1 month'
-           ) AS month_start
-         ),
-         assignments AS (
-           SELECT date_trunc('month', assigned_at) AS month_start, COUNT(*)::int AS request_count
-             FROM inquiry_provider_assignments
-            WHERE provider_id = $1
-              AND assigned_at >= date_trunc('month', NOW()) - interval '5 months'
-              AND assigned_at < date_trunc('month', NOW()) + interval '1 month'
-            GROUP BY 1
-         ),
-         responses AS (
-           SELECT date_trunc('month', responded_at) AS month_start,
-                  COUNT(*)::int AS response_count,
-                  COUNT(*) FILTER (WHERE status = 'accepted')::int AS accepted_count,
-                  COUNT(*) FILTER (WHERE status = 'rejected')::int AS rejected_count
-             FROM provider_inquiry_responses
-            WHERE provider_id = $1
-              AND responded_at >= date_trunc('month', NOW()) - interval '5 months'
-              AND responded_at < date_trunc('month', NOW()) + interval '1 month'
-            GROUP BY 1
-         )
-         SELECT to_char(months.month_start, 'YYYY-MM') AS month,
-                COALESCE(assignments.request_count, 0)::int AS "requestCount",
-                COALESCE(responses.response_count, 0)::int AS "responseCount",
-                COALESCE(responses.accepted_count, 0)::int AS "acceptedCount",
-                COALESCE(responses.rejected_count, 0)::int AS "rejectedCount"
-           FROM months
-           LEFT JOIN assignments USING (month_start)
-           LEFT JOIN responses USING (month_start)
-          ORDER BY months.month_start`,
-        [req.provider.providerId]
+      const assignmentTrend = await pool.query(
+        `SELECT DATE_FORMAT(assigned_at, '%Y-%m') AS month, COUNT(*) AS request_count
+           FROM inquiry_provider_assignments
+          WHERE provider_id = $1 AND assigned_at >= $2 AND assigned_at < $3
+          GROUP BY DATE_FORMAT(assigned_at, '%Y-%m')`,
+        [req.provider.providerId, trendStartSql, nextMonthSql]
       );
+      const responseTrend = await pool.query(
+        `SELECT DATE_FORMAT(responded_at, '%Y-%m') AS month,
+                COUNT(*) AS response_count,
+                SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) AS accepted_count,
+                SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count
+           FROM provider_inquiry_responses
+          WHERE provider_id = $1 AND responded_at >= $2 AND responded_at < $3
+          GROUP BY DATE_FORMAT(responded_at, '%Y-%m')`,
+        [req.provider.providerId, trendStartSql, nextMonthSql]
+      );
+      const assignmentByMonth = new Map(assignmentTrend.rows.map(row => [row.month, Number(row.request_count || 0)]));
+      const responseByMonth = new Map(responseTrend.rows.map(row => [row.month, row]));
+      const trend = [];
+      for (let offset = 0; offset < 6; offset += 1) {
+        const date = new Date(now.getFullYear(), now.getMonth() - 5 + offset, 1);
+        const month = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+        const response = responseByMonth.get(month) || {};
+        trend.push({
+          month,
+          requestCount: assignmentByMonth.get(month) || 0,
+          responseCount: Number(response.response_count || 0),
+          acceptedCount: Number(response.accepted_count || 0),
+          rejectedCount: Number(response.rejected_count || 0)
+        });
+      }
 
       res.set('Cache-Control', 'no-store');
       res.json({
@@ -343,7 +332,7 @@ function createProviderPortalRouter(pool, options = {}) {
             monthRequests: 0, monthAccepted: 0, monthRejected: 0,
             averageResponseHours: null, activeMembers: 0
           },
-          trend: trend.rows
+          trend
         }
       });
     } catch (error) { next(error); }
