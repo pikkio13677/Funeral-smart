@@ -86,6 +86,7 @@ CREATE INDEX IF NOT EXISTS idx_inquiries_created_at ON inquiries (created_at DES
 INSERT INTO service_types (code, label, description, sort_order) VALUES
  ('burial','Sepoltura','Servizi funebri con sepoltura',10),
  ('cremation','Cremazione','Servizi funebri con cremazione',20),
+ ('cremation-burial','Cremazione + Sepoltura','Servizi che combinano cremazione e successiva sepoltura',25),
  ('international-repatriation','Rimpatrio internazionale','Trasporto internazionale e pratiche correlate',30),
  ('assistance','Assistenza e orientamento','Supporto informativo per le famiglie',40)
 ON CONFLICT (code) DO NOTHING;
