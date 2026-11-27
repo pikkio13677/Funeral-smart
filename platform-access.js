@@ -6,6 +6,8 @@ module.exports = function createPlatformAccess(pool) {
     throw new TypeError('A PostgreSQL-compatible pool is required.');
   }
 
+  const mariaDb = pool.dialect === 'mariadb';
+
   function requirePlatformRole(...allowedRoles) {
     const roles = [...new Set(allowedRoles)];
     if (!roles.length || roles.some(role => !['owner', 'support'].includes(role))) {
@@ -18,12 +20,16 @@ module.exports = function createPlatformAccess(pool) {
       }
 
       try {
+        const rolePredicate = mariaDb
+          ? 'pa.role IN (' + roles.map(() => '?').join(',') + ')'
+          : 'pa.role = ANY($2::varchar[])';
+        const params = mariaDb ? [req.user.id, ...roles] : [req.user.id, roles];
         const result = await pool.query(
           'SELECT pa.role, (u.totp_enabled_at IS NOT NULL) AS "mfaEnabled" ' +
           'FROM platform_access pa JOIN app_users u ON u.id = pa.user_id ' +
           'WHERE pa.user_id = $1 AND pa.status = \'active\' AND u.active = TRUE ' +
-          'AND pa.role = ANY($2::varchar[])',
-          [req.user.id, roles]
+          'AND ' + rolePredicate,
+          params
         );
 
         if (!result.rowCount) {
