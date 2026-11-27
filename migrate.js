@@ -10,7 +10,8 @@ const migrations = [
   { id: '001_base_schema', file: 'schema.sql' },
   { id: '002_gestionale_v1', file: 'gestionale.sql' },
   { id: '003_user_accounts', file: 'users.sql' },
-  { id: '004_totp_mfa', file: 'mfa.sql' }
+  { id: '004_totp_mfa', file: 'mfa.sql' },
+  { id: '005_cremation_burial_service', file: 'service-cremation-burial.sql' }
 ];
 
 async function runMigrations() {
