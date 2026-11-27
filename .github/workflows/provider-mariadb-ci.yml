@@ -1,0 +1,40 @@
+name: Provider MariaDB isolated CI
+
+on:
+  push:
+    branches:
+      - work/provider-area-mariadb
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'provider-portal-mariadb/**'
+      - 'mariadb/**'
+      - 'test/provider-portal-mariadb-*.test.js'
+      - 'package.json'
+      - '.github/workflows/provider-mariadb-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check JavaScript syntax
+        run: npm run check
+
+      - name: Run automated tests
+        run: npm test
