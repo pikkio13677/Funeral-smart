@@ -37,5 +37,5 @@ test('server executes the fail-closed guard before opening the listener', () => 
 test('npm startup checks the tenant cutover flag before running migrations', () => {
   const pkg = require('../package.json');
   assert.equal(pkg.scripts.prestart, 'node scripts/check-tenant-cutover.js');
-  assert.equal(pkg.scripts.start, 'node migrate.js && node server.js');
+  assert.equal(pkg.scripts.start, 'node scripts/start.js');
 });
