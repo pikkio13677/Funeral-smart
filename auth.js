@@ -268,7 +268,7 @@ module.exports = function createAuth(pool) {
       }
       if (usedRecoveryHash) {
         if (mariaDb) {
-          await pool.query(\"UPDATE app_users SET recovery_codes_hashes = CASE WHEN JSON_SEARCH(recovery_codes_hashes, 'one', $1) IS NULL THEN recovery_codes_hashes ELSE JSON_REMOVE(recovery_codes_hashes, JSON_UNQUOTE(JSON_SEARCH(recovery_codes_hashes, 'one', $1))) END WHERE id=$2\", [usedRecoveryHash, row.user_id]);
+          await pool.query("UPDATE app_users SET recovery_codes_hashes = CASE WHEN JSON_SEARCH(recovery_codes_hashes, 'one', $1) IS NULL THEN recovery_codes_hashes ELSE JSON_REMOVE(recovery_codes_hashes, JSON_UNQUOTE(JSON_SEARCH(recovery_codes_hashes, 'one', $1))) END WHERE id=$2", [usedRecoveryHash, row.user_id]);
         } else {
           await pool.query('UPDATE app_users SET recovery_codes_hashes=array_remove(recovery_codes_hashes,$1) WHERE id=$2', [usedRecoveryHash, row.user_id]);
         }
@@ -334,7 +334,8 @@ module.exports = function createAuth(pool) {
       if (user.totp_enabled_at) {
         await pool.query('DELETE FROM app_mfa_challenges WHERE expires_at<NOW()');
         const challenge = crypto.randomBytes(32).toString('base64url');
-        await pool.query("INSERT INTO app_mfa_challenges(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '5 minutes')", [user.id, tokenHash(challenge)]);
+        if (mariaDb) await pool.query('INSERT INTO app_mfa_challenges(user_id,token_hash,expires_at) VALUES($1,$2,DATE_ADD(NOW(), INTERVAL 5 MINUTE))', [user.id, tokenHash(challenge)]);
+        else await pool.query("INSERT INTO app_mfa_challenges(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '5 minutes')", [user.id, tokenHash(challenge)]);
         res.cookie('fs_mfa_challenge', challenge, challengeCookieOptions());
         return res.json({ mfaRequired: true, message: 'Inserisci il codice a 6 cifre della tua app Authenticator.' });
       }
