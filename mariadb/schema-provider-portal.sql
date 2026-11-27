@@ -282,6 +282,7 @@ CREATE TABLE IF NOT EXISTS provider_portal_audit_log (
 INSERT INTO service_types (id, code, label, description, sort_order) VALUES
   (UUID(), 'burial', 'Sepoltura', 'Servizi funebri con sepoltura', 10),
   (UUID(), 'cremation', 'Cremazione', 'Servizi funebri con cremazione', 20),
+  (UUID(), 'cremation-burial', 'Cremazione + Sepoltura', 'Servizi che combinano cremazione e successiva sepoltura', 25),
   (UUID(), 'international-repatriation', 'Rimpatrio internazionale', 'Trasporto internazionale e pratiche correlate', 30),
   (UUID(), 'assistance', 'Assistenza e orientamento', 'Supporto informativo per le famiglie', 40)
 ON DUPLICATE KEY UPDATE
