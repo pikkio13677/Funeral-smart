@@ -96,7 +96,19 @@ Il workflow `.github/workflows/provider-mariadb-ci.yml` è stato eseguito su Git
 - `npm test`: superato, 279 test totali, 279 passati.
 - Il workflow non esegue deploy e non si collega a database; usa solo test automatizzati con adapter finti e controlli statici sul DDL.
 
-Questo esito non equivale ancora a un test SQL sul motore MariaDB né a un test end-to-end del portale.
+Questo esito non equivale ancora a un test end-to-end del portale.
+
+### Test reale dello schema su MariaDB 10.11 (CI temporanea)
+
+È stato aggiunto un servizio MariaDB 10.11 effimero al workflow GitHub Actions. Il job applica due volte lo schema completo in un database CI usa-e-getta e verifica:
+- creazione delle tabelle marketplace e Area Imprese;
+- seed ripetibile dei tipi servizio, incluso `cremation-burial`;
+- collegamento reale `providers → provider_services → service_types`;
+- collegamento di un listino alla stessa tipologia tramite le foreign key.
+
+Il primo test ha evidenziato incompatibilità MariaDB nei CHECK e nelle colonne generate che dipendevano da colonne FK. Lo schema è stato corretto: le chiavi nullable per unicità degli incarichi attivi e degli inviti pendenti sono ora colonne gestite dall'applicazione. Le route inviti popolano e svuotano i campi pendenti nelle transizioni di stato. Il job MariaDB 10.11 è poi passato.
+
+Limite ancora da rispettare: la creazione/riassegnazione degli incarichi attivi deve valorizzare `active_inquiry_id` a `inquiry_id` e azzerarlo quando l'incarico viene revocato; il relativo flusso di assegnazione MariaDB va verificato/implementato prima di abilitarlo. Il test CI convalida DDL e relazioni di provider/listino, non un end-to-end completo del portale.
 
 ## Blocco attuale
 È stato preparato uno schema MariaDB completo di staging, ma non è stato ancora validato dal motore MariaDB effettivo e non è stato eseguito. La CI GitHub è stata trasferita sul branch aggiornato; il risultato del nuovo run deve ancora essere verificato. Il server rilevato in precedenza usa Node 18.19.1, mentre il progetto richiede Node >=20. Prima del collegamento delle API servono test reali MariaDB, verifica del runtime e confronto finale con il frontend.
