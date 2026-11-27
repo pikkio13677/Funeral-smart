@@ -1,19 +1,60 @@
 'use strict';
 
+function splitReturning(sql) {
+  const match = /\s+RETURNING\s+([\s\S]+?)\s*;?\s*$/i.exec(sql);
+  if (!match) return { sql, projection: null };
+  return { sql: sql.slice(0, match.index).trim(), projection: match[1].replace(/;\s*$/, '').trim() };
+}
+
+function prepareReturning(sql, projection) {
+  if (!projection) return { sql, mode: null, selectSql: null };
+  const insert = /^\s*INSERT\s+INTO\s+([\w.]+)\s*\(([^)]+)\)\s*VALUES\s*\(([\s\S]*)\)\s*$/i.exec(sql);
+  if (insert) {
+    const [, table, columns, values] = insert;
+    if (/(^|,)\s*id\s*(,|$)/i.test(columns)) {
+      throw new Error('MariaDB RETURNING adapter expects generated UUID ids; explicit id inserts need a dedicated query.');
+    }
+    return {
+      sql: `INSERT INTO ${table} (id, ${columns}) VALUES ((@fs_last_id := UUID()), ${values})`,
+      mode: 'insert',
+      selectSql: `SELECT ${projection} FROM ${table} WHERE id = @fs_last_id`
+    };
+  }
+  const update = /^\s*UPDATE\s+([\w.]+)\s+SET\s+([\s\S]+?)\s+WHERE\s+([\s\S]+)$/i.exec(sql);
+  if (update) {
+    const [, table, setClause, whereClause] = update;
+    return {
+      sql,
+      mode: 'update',
+      selectSql: `SELECT ${projection} FROM ${table} WHERE ${whereClause}`
+    };
+  }
+  throw new Error('MariaDB RETURNING non supportato per questa forma SQL: convertire la query esplicitamente.');
+}
+
 function rewriteSql(sql) {
   if (typeof sql !== 'string') throw new TypeError('SQL query must be a string.');
-  // The current MariaDB schema uses a case-insensitive utf8mb4 collation.
-  // LIKE therefore preserves the intended case-insensitive search behavior.
-  let rewritten = sql.replace(/\bILIKE\b/gi, 'LIKE');
-  rewritten = rewritten.replace(/::\s*int\b/gi, ''); // COUNT(*)::int is numeric already in MariaDB.
+  const returning = splitReturning(sql);
+  let rewritten = returning.sql
+    .replace(/\\bILIKE\\b/gi, 'LIKE')
+    .replace(/::\\s*int\\b/gi, '')
+    .replace(/::\\s*(?:numeric|varchar|text|date|uuid|timestamptz|bigint|boolean)(?:\\s*\\([^)]*\\))?/gi, '');
+  // MariaDB's default utf8mb4_unicode_ci collation is case-insensitive.
+  rewritten = rewritten.replace(/\\s+FOR\\s+SHARE\\s+OF\\s+[\\w, ]+/gi, ' FOR SHARE');
+  const prepared = prepareReturning(rewritten, returning.projection);
   const values = [];
-  rewritten = rewritten.replace(/\$(\d+)/g, (_match, index) => {
+  const sqlWithPlaceholders = prepared.sql.replace(/\$(\d+)/g, (_match, index) => {
     const position = Number(index) - 1;
     if (!Number.isInteger(position) || position < 0) throw new Error('Invalid PostgreSQL parameter index.');
     values.push(position);
     return '?';
   });
-  return { sql: rewritten, parameterOrder: values };
+  const selectSql = prepared.selectSql?.replace(/\$(\d+)/g, (_match, index) => {
+    const position = Number(index) - 1;
+    if (!Number.isInteger(position) || position < 0) throw new Error('Invalid PostgreSQL parameter index.');
+    return '?';
+  }) || null;
+  return { sql: sqlWithPlaceholders, parameterOrder: values, mode: prepared.mode, selectSql };
 }
 
 function reorderParams(params, order) {
@@ -26,15 +67,14 @@ function reorderParams(params, order) {
 }
 
 function normalizeResult(result) {
-  if (Array.isArray(result)) {
-    return { rows: result, rowCount: result.length, command: 'SELECT' };
-  }
-  return {
-    rows: [],
-    rowCount: Number(result?.affectedRows || 0),
-    command: 'WRITE',
-    insertId: result?.insertId
-  };
+  if (Array.isArray(result)) return { rows: result, rowCount: result.length, command: 'SELECT' };
+  return { rows: [], rowCount: Number(result?.affectedRows || 0), command: 'WRITE', insertId: result?.insertId };
+}
+
+function normalizeMariaError(error) {
+  if (error?.code === 'ER_DUP_ENTRY') error.code = '23505';
+  if (error?.code === 'ER_NO_REFERENCED_ROW_2' || error?.code === 'ER_ROW_IS_REFERENCED_2') error.code = '23503';
+  return error;
 }
 
 function createMariaDbPool(env = process.env) {
@@ -42,27 +82,39 @@ function createMariaDbPool(env = process.env) {
   const required = ['MARIADB_HOST', 'MARIADB_USER', 'MARIADB_PASSWORD', 'MARIADB_DATABASE'];
   const missing = required.filter(key => !env[key]);
   if (missing.length) throw new Error('Configurazione MariaDB incompleta: ' + missing.join(', '));
-
   const pool = mysql.createPool({
-    host: env.MARIADB_HOST,
-    port: Number(env.MARIADB_PORT || 3306),
-    user: env.MARIADB_USER,
-    password: env.MARIADB_PASSWORD,
-    database: env.MARIADB_DATABASE,
-    charset: 'utf8mb4',
-    waitForConnections: true,
-    connectionLimit: Number(env.MARIADB_CONNECTION_LIMIT || 10),
-    queueLimit: 0,
-    enableKeepAlive: true,
-    dateStrings: false,
-    decimalNumbers: true
+    host: env.MARIADB_HOST, port: Number(env.MARIADB_PORT || 3306),
+    user: env.MARIADB_USER, password: env.MARIADB_PASSWORD, database: env.MARIADB_DATABASE,
+    charset: 'utf8mb4', waitForConnections: true,
+    connectionLimit: Number(env.MARIADB_CONNECTION_LIMIT || 10), queueLimit: 0,
+    enableKeepAlive: true, dateStrings: false, decimalNumbers: true
   });
 
   async function run(target, sql, params) {
     const converted = rewriteSql(sql);
     const ordered = reorderParams(params, converted.parameterOrder);
-    const [result] = await target.execute(converted.sql, ordered);
-    return normalizeResult(result);
+    let connection = target;
+    let owned = false;
+    if (converted.mode && typeof target.getConnection === 'function') {
+      connection = await target.getConnection();
+      owned = true;
+    }
+    try {
+      const [result] = await connection.execute(converted.sql, ordered);
+      if (converted.mode === 'insert') {
+        const [rows] = await connection.query(converted.selectSql);
+        return { rows, rowCount: rows.length, command: 'INSERT' };
+      }
+      if (converted.mode === 'update') {
+        const [rows] = await connection.execute(converted.selectSql, ordered.slice(-((converted.selectSql.match(/\\?/g) || []).length)));
+        return { rows, rowCount: rows.length, command: 'UPDATE' };
+      }
+      return normalizeResult(result);
+    } catch (error) {
+      throw normalizeMariaError(error);
+    } finally {
+      if (owned) connection.release();
+    }
   }
 
   return {
@@ -72,8 +124,8 @@ function createMariaDbPool(env = process.env) {
       const connection = await pool.getConnection();
       return {
         query(sql, params = []) { return run(connection, sql, params); },
-        async release() { connection.release(); },
-        async end() { connection.release(); }
+        release() { connection.release(); },
+        end() { connection.release(); }
       };
     },
     async end() { await pool.end(); }
@@ -85,12 +137,9 @@ function createDatabasePool(env = process.env) {
   if (dialect === 'mariadb' || dialect === 'mysql') return createMariaDbPool(env);
   if (dialect === 'postgres' || dialect === 'postgresql') {
     const { Pool } = require('pg');
-    return new Pool({
-      connectionString: env.DATABASE_URL,
-      ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
-    });
+    return new Pool({ connectionString: env.DATABASE_URL, ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined });
   }
   throw new Error('DB_DIALECT non supportato. Valori ammessi: postgres, mariadb.');
 }
 
-module.exports = { createDatabasePool, createMariaDbPool, rewriteSql, reorderParams, normalizeResult };
+module.exports = { createDatabasePool, createMariaDbPool, rewriteSql, reorderParams, normalizeResult, normalizeMariaError };
