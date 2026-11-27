@@ -212,3 +212,17 @@ existing application, and never prints the password. Remove all
 ## Aggiornamento ramo corrente (2026-11-27)
 
 Il porting è stato trasferito su `work/provider-area-mariadb-current`, creato dall'attuale `main` per evitare di basarsi su un ramo divergente. La PR #101 è aperta in bozza verso `main` e non è stata unita. Sono stati aggiunti gli script npm `start:mariadb-staging`, `bootstrap:mariadb-staging-admin` e `test:mariadb`. Il workflow CI è configurato per il ramo corrente e per le pull request verso `main`. Non è ancora disponibile una verifica del nuovo run CI in questa revisione. Restano obbligatori i test su MariaDB reale temporaneo, la verifica runtime Node 20+ e l'integrazione frontend/reverse proxy su staging.
+
+
+### Console richieste famiglie su MariaDB (staging)
+
+È stata aggiunta una console amministrativa separata in `/platform/richieste`, servita esclusivamente dal server MariaDB staging. Usa la sessione MariaDB e accetta soltanto ruoli `admin` o `platform_owner`. Consente di:
+- consultare le richieste delle famiglie e i contatti forniti;
+- scegliere esclusivamente imprese con stato `verified`;
+- assegnare una richiesta con motivazione obbligatoria;
+- vedere lo storico delle assegnazioni;
+- segnare una richiesta come esaminata o chiuderla.
+
+Le assegnazioni valorizzano `active_inquiry_id`, che impone al database una sola assegnazione attiva per richiesta; la chiusura revoca l'assegnazione e libera il vincolo senza cancellare lo storico. Le operazioni sono registrate in `audit_log`. Il router è isolato sotto `/api/v1/platform`; nessuna route è stata aggiunta al server PostgreSQL di produzione.
+
+Il percorso resta staging-only e non è ancora pubblicato. Il test CI sul MariaDB reale verifica schema, vincolo di unicità, revoca e possibilità di riassegnazione; i test HTTP coprono autorizzazione, assegnazione, audit e console.
