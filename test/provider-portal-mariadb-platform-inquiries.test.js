@@ -94,15 +94,16 @@ test('l’assegnazione salva active_inquiry_id e registra l’operazione', async
 test('la chiusura revoca l’assegnazione e libera active_inquiry_id', async () => {
   const database = makeDatabase();
   await withServer(database, async base => {
-    await fetch(base + '/platform/inquiries/' + INQUIRY + '/assign', {
+    const assigned = await fetch(base + '/platform/inquiries/' + INQUIRY + '/assign', {
       method: 'POST', headers: { authorization: 'Bearer admin', 'content-type': 'application/json' },
       body: JSON.stringify({ providerId: PROVIDER, reason: 'Impresa verificata selezionata per il comune richiesto.' })
     });
+    assert.equal(assigned.status, 201, await assigned.clone().text());
     const response = await fetch(base + '/platform/inquiries/' + INQUIRY + '/status', {
       method: 'PATCH', headers: { authorization: 'Bearer admin', 'content-type': 'application/json' },
       body: JSON.stringify({ status: 'closed', reason: 'La richiesta viene chiusa dopo la gestione concordata.' })
     });
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 200, await response.clone().text());
     const revoke = database.calls.find(call => call.kind === 'execute' && /UPDATE inquiry_provider_assignments/.test(call.sql));
     assert.match(revoke.sql, /active_inquiry_id = NULL/);
     assert.equal(revoke.values[2], INQUIRY);
