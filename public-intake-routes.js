@@ -17,7 +17,7 @@ const providerSchema = z.object({
 
 const inquirySchema = z.object({
   city: citySchema,
-  serviceType: z.enum(['Sepoltura', 'Cremazione', 'Rimpatrio internazionale', 'Non so, desidero assistenza']),
+  serviceType: z.enum(['Sepoltura', 'Cremazione', 'Cremazione + sepoltura', 'Rimpatrio internazionale', 'Non so, desidero assistenza']),
   destinationCountry: z.string().trim().max(100).optional().default(''),
   budgetEuro: z.number().int().positive().max(100000).optional(),
   notes: z.string().trim().max(1500).optional().default(''),
