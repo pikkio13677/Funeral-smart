@@ -76,6 +76,26 @@ test('MariaDB 10.11 loads the base schema and supports the application adapter',
     assert.equal(updated.rowCount, 1);
     assert.equal(updated.rows[0].last_name, 'Updated');
 
+    const count = await pool.query('SELECT COUNT(*)::int AS total FROM customers');
+    assert.equal(Number(count.rows[0].total), 1);
+
+    const provider = await pool.query(
+      'INSERT INTO providers(business_name,vat_number,city) VALUES($1,$2,$3) RETURNING id',
+      ['Impresa MariaDB Smoke', 'ITSMOKE' + Date.now(), 'Torino']
+    );
+    const providerSearch = await pool.query(
+      'SELECT id FROM providers WHERE city ILIKE $1',
+      ['%torino%']
+    );
+    assert.equal(providerSearch.rowCount, 1);
+    assert.equal(providerSearch.rows[0].id, provider.rows[0].id);
+
+    await pool.query('INSERT INTO tasks(title,due_date) VALUES($1,$2)', ['Attività smoke', null]);
+    const orderedTasks = await pool.query(
+      'SELECT id FROM tasks ORDER BY due_date NULLS LAST LIMIT 1'
+    );
+    assert.equal(orderedTasks.rowCount, 1);
+
     const user = await pool.query(
       "INSERT INTO app_users(username,display_name,password_hash,role) VALUES($1,$2,$3,'admin') RETURNING id,username",
       ['maria-smoke-' + Date.now(), 'MariaDB Smoke', 'test-hash']
