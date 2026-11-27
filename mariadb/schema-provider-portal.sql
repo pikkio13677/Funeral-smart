@@ -167,9 +167,8 @@ CREATE TABLE IF NOT EXISTS inquiry_provider_assignments (
   revoked_at DATETIME(3) NULL,
   revoked_by_user_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
   revocation_reason VARCHAR(500) NULL,
-  active_inquiry_id CHAR(36) GENERATED ALWAYS AS (
-    CASE WHEN status = 'active' THEN inquiry_id ELSE NULL END
-  ) STORED,
+  -- Application-managed nullable key: set to inquiry_id only while active.
+  active_inquiry_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_assignment_one_active_per_inquiry (active_inquiry_id),
   UNIQUE KEY uq_assignment_id_provider (id, provider_id),
@@ -218,12 +217,9 @@ CREATE TABLE IF NOT EXISTS provider_user_invitations (
   expires_at DATETIME(3) NOT NULL,
   accepted_at DATETIME(3) NULL,
   revoked_at DATETIME(3) NULL,
-  pending_provider_id CHAR(36) GENERATED ALWAYS AS (
-    CASE WHEN status = 'pending' THEN provider_id ELSE NULL END
-  ) STORED,
-  pending_email VARCHAR(254) GENERATED ALWAYS AS (
-    CASE WHEN status = 'pending' THEN email ELSE NULL END
-  ) STORED,
+  -- Application-managed nullable keys: populated only while status is pending.
+  pending_provider_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  pending_email VARCHAR(254) NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_provider_invitation_token_hash (token_hash),
   UNIQUE KEY uq_provider_invitation_pending_email (pending_provider_id, pending_email),
