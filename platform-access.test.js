@@ -105,7 +105,7 @@ test('MariaDB platform authorization expands allowed roles into bound placeholde
   await middleware(req, res, () => { nextCalled = true; });
 
   assert.equal(nextCalled, true);
-  assert.match(querySql, /pa\\.role IN \\(\\$2,\\$3\\)/);
+  assert.match(querySql, /pa\.role IN \(\$2,\$3\)/);
   assert.deepEqual(queryArgs, ['user-4', 'owner', 'support']);
   assert.deepEqual(req.platformAccess, { role: 'support' });
 });
