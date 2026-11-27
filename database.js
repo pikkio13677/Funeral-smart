@@ -15,19 +15,15 @@ function prepareReturning(sql, projection) {
       throw new Error('MariaDB RETURNING adapter expects generated UUID ids; explicit id inserts need a dedicated query.');
     }
     return {
-      sql: `INSERT INTO ${table} (id, ${columns}) VALUES ((@fs_last_id := UUID()), ${values})`,
+      sql: \`INSERT INTO \${table} (id, \${columns}) VALUES ((@fs_last_id := UUID()), \${values})\`,
       mode: 'insert',
-      selectSql: `SELECT ${projection} FROM ${table} WHERE id = @fs_last_id`
+      selectSql: \`SELECT \${projection} FROM \${table} WHERE id = @fs_last_id\`
     };
   }
   const update = /^\s*UPDATE\s+([\w.]+)\s+SET\s+([\s\S]+?)\s+WHERE\s+([\s\S]+)$/i.exec(sql);
   if (update) {
-    const [, table, setClause, whereClause] = update;
-    return {
-      sql,
-      mode: 'update',
-      selectSql: `SELECT ${projection} FROM ${table} WHERE ${whereClause}`
-    };
+    const [, table, , whereClause] = update;
+    return { sql, mode: 'update', selectSql: \`SELECT \${projection} FROM \${table} WHERE \${whereClause}\` };
   }
   throw new Error('MariaDB RETURNING non supportato per questa forma SQL: convertire la query esplicitamente.');
 }
@@ -36,11 +32,13 @@ function rewriteSql(sql) {
   if (typeof sql !== 'string') throw new TypeError('SQL query must be a string.');
   const returning = splitReturning(sql);
   let rewritten = returning.sql
-    .replace(/\\bILIKE\\b/gi, 'LIKE')
-    .replace(/::\\s*int\\b/gi, '')
-    .replace(/::\\s*(?:numeric|varchar|text|date|uuid|timestamptz|bigint|boolean)(?:\\s*\\([^)]*\\))?/gi, '');
-  // MariaDB's default utf8mb4_unicode_ci collation is case-insensitive.
-  rewritten = rewritten.replace(/\\s+FOR\\s+SHARE\\s+OF\\s+[\\w, ]+/gi, ' FOR SHARE');
+    .replace(/\bILIKE\b/gi, 'LIKE')
+    .replace(/::\s*int\b/gi, '')
+    .replace(/::\s*(?:numeric|varchar|text|date|uuid|timestamptz|bigint|boolean)(?:\s*\([^)]*\))?(?:\[\])?/gi, '');
+  // MariaDB 10.11 supports row locks but not PostgreSQL's OF alias list.
+  rewritten = rewritten
+    .replace(/\s+FOR\s+(SHARE|UPDATE)\s+OF\s+[\w, ]+/gi, (_m, mode) => ' FOR ' + mode)
+    .replace(/\s+NULLS\s+LAST\b/gi, ' IS NULL,');
   const prepared = prepareReturning(rewritten, returning.projection);
   const values = [];
   const sqlWithPlaceholders = prepared.sql.replace(/\$(\d+)/g, (_match, index) => {
@@ -49,11 +47,7 @@ function rewriteSql(sql) {
     values.push(position);
     return '?';
   });
-  const selectSql = prepared.selectSql?.replace(/\$(\d+)/g, (_match, index) => {
-    const position = Number(index) - 1;
-    if (!Number.isInteger(position) || position < 0) throw new Error('Invalid PostgreSQL parameter index.');
-    return '?';
-  }) || null;
+  const selectSql = prepared.selectSql?.replace(/\$(\d+)/g, '?') || null;
   return { sql: sqlWithPlaceholders, parameterOrder: values, mode: prepared.mode, selectSql };
 }
 
@@ -106,7 +100,8 @@ function createMariaDbPool(env = process.env) {
         return { rows, rowCount: rows.length, command: 'INSERT' };
       }
       if (converted.mode === 'update') {
-        const [rows] = await connection.execute(converted.selectSql, ordered.slice(-((converted.selectSql.match(/\\?/g) || []).length)));
+        const whereCount = (converted.selectSql.match(/\?/g) || []).length;
+        const [rows] = await connection.execute(converted.selectSql, ordered.slice(ordered.length - whereCount));
         return { rows, rowCount: rows.length, command: 'UPDATE' };
       }
       return normalizeResult(result);
