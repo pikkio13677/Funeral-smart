@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('node:crypto');
 const { z } = require('zod');
 
 const citySchema = z.string().trim().min(2).max(100);
@@ -41,18 +42,20 @@ function createMariaDbPublicIntakeRouter(database, options = {}) {
     });
     const value = parsed.data;
     try {
-      const [result] = await database.query(
-        "INSERT INTO inquiries (id, city, service_type, destination_country, budget_euro, notes, contact_email, contact_phone, privacy_consent, status, created_at) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, 1, 'received', UTC_TIMESTAMP(3))",
-        [value.city, value.serviceType, value.destinationCountry || null, value.budgetEuro ?? null,
+      const id = crypto.randomUUID();
+      await database.query(
+        "INSERT INTO inquiries (id, city, service_type, destination_country, budget_euro, notes, contact_email, contact_phone, privacy_consent, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'received', UTC_TIMESTAMP(3))",
+        [id, value.city, value.serviceType, value.destinationCountry || null, value.budgetEuro ?? null,
           value.notes || null, value.contactEmail || null, value.contactPhone || null]
       );
       const [rows] = await database.query(
-        'SELECT id, created_at AS createdAt FROM inquiries WHERE id = LAST_INSERT_ID() LIMIT 1',
-        []
-      ).catch(() => [[], []]);
-      // UUID primary keys are not numeric auto-increment IDs: retrieve the inserted row by its unique latest timestamp is unsafe.
-      // Generate the UUID in the application and use it for an exact lookup instead.
-      return res.status(500).json({ error: 'Internal intake identifier lookup is not configured.' });
+        'SELECT id, created_at AS createdAt FROM inquiries WHERE id = ? LIMIT 1',
+        [id]
+      );
+      return res.status(201).json({
+        data: rows[0],
+        message: 'Richiesta ricevuta. Non è ancora stata inoltrata a un’impresa.'
+      });
     } catch (error) { return next(error); }
   });
 
