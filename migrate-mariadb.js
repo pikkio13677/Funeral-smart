@@ -37,6 +37,26 @@ async function main() {
     console.log('Database selezionato:', identity[0].databaseName);
     console.log('Versione server:', identity[0].serverVersion);
 
+    const [existingTables] = await connection.execute(
+      "SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'"
+    );
+    const [migrationRows] = existingTables.some(row => row.table_name === 'schema_migrations')
+      ? await connection.execute('SELECT id FROM schema_migrations WHERE id = ?', ['001_mariadb_base_and_gestionale'])
+      : [ [] ];
+    if (migrationRows.length) {
+      console.log('Schema MariaDB iniziale già registrato: nessuna modifica eseguita.');
+      return;
+    }
+    const preExisting = existingTables
+      .map(row => row.table_name)
+      .filter(name => name !== 'schema_migrations');
+    if (preExisting.length) {
+      throw new Error(
+        'Bootstrap rifiutato: il database non è vuoto. Tabelle già presenti: ' +
+        preExisting.slice(0, 20).join(', ')
+      );
+    }
+
     const sql = await fs.readFile(path.join(__dirname, 'schema.mariadb.sql'), 'utf8');
     const statements = sql
       .split(/;\s*(?:\r?\n|$)/)
