@@ -4,7 +4,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const { Pool } = require('pg');
+const { createDatabasePool } = require('./database');
 const { z } = require('zod');
 const emailNotifications = require('./email-notifications')();
 const stagingSubmissionGuard = require('./staging-submission-guard')();
@@ -19,7 +19,7 @@ assertTenantCutoverReady(process.env);
 
 const app = express();
 const port = Number(process.env.PORT || 10000);
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined });
+const pool = createDatabasePool(process.env);
 
 app.disable('x-powered-by');
 // Render terminates TLS at its proxy; trust exactly one proxy hop for client IP rate limits.
