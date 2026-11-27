@@ -38,7 +38,7 @@ function rewriteSql(sql) {
   // MariaDB 10.11 supports row locks but not PostgreSQL's OF alias list.
   rewritten = rewritten
     .replace(/\s+FOR\s+(SHARE|UPDATE)\s+OF\s+[\w, ]+/gi, (_m, mode) => ' FOR ' + mode)
-    .replace(/\s+NULLS\s+LAST\b/gi, ' IS NULL,');
+    .replace(/(\b[\w.]+)\s+NULLS\s+LAST\b/gi, '$1 IS NULL, $1');
   const prepared = prepareReturning(rewritten, returning.projection);
   const values = [];
   const sqlWithPlaceholders = prepared.sql.replace(/\$(\d+)/g, (_match, index) => {
