@@ -36,7 +36,8 @@ function rewriteSql(sql) {
     .replace(/::\s*int\b/gi, '')
     .replace(/::\s*(?:numeric|varchar|text|date|uuid|timestamptz|bigint|boolean)(?:\s*\([^)]*\))?(?:\[\])?/gi, '');
   rewritten = rewritten
-    .replace(/\s+FOR\s+(SHARE|UPDATE)\s+OF\s+[\w, ]+/gi, (_m, mode) => ' FOR ' + mode)
+    .replace(/\s+FOR\s+SHARE(?:\s+OF\s+[\w, ]+)?/gi, ' LOCK IN SHARE MODE')
+    .replace(/\s+FOR\s+UPDATE\s+OF\s+[\w, ]+/gi, ' FOR UPDATE')
     .replace(/(\b[\w.]+)\s+NULLS\s+LAST\b/gi, '$1 IS NULL, $1');
   const prepared = prepareReturning(rewritten, returning.projection);
   const values = [];
