@@ -110,6 +110,13 @@ function cookieOptions() {
 
 module.exports = function createAuth(pool) {
   const router = express.Router();
+  const mariaDb = pool.dialect === 'mariadb';
+
+  function recoveryHashes(value) {
+    if (Array.isArray(value)) return value;
+    if (typeof value !== 'string' || !value) return [];
+    try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch (_e) { return []; }
+  }
 
   async function audit(user, req, action, resource = null, resourceId = null) {
     await pool.query(
@@ -189,7 +196,7 @@ module.exports = function createAuth(pool) {
       await client.query('BEGIN');
       // The singleton state row serializes attempts and makes the bootstrap one-time,
       // even when legacy company users already exist.
-      await client.query('LOCK TABLE platform_bootstrap_state IN EXCLUSIVE MODE');
+      // The singleton row lock serializes bootstrap requests on both engines.
       const state = await client.query(
         'SELECT consumed_at FROM platform_bootstrap_state WHERE singleton = TRUE FOR UPDATE'
       );
@@ -253,16 +260,23 @@ module.exports = function createAuth(pool) {
       if (!valid) {
         const candidate = parsed.data.code.replace(/\s/g, '').toUpperCase();
         const candidateHash = tokenHash(candidate);
-        if ((row.recovery_codes_hashes || []).includes(candidateHash)) { valid = true; usedRecoveryHash = candidateHash; }
+        if (recoveryHashes(row.recovery_codes_hashes).includes(candidateHash)) { valid = true; usedRecoveryHash = candidateHash; }
       }
       if (!valid) {
         await pool.query('UPDATE app_mfa_challenges SET attempts=attempts+1 WHERE token_hash=$1', [tokenHash(challenge)]);
         return res.status(401).json({ error: 'Codice non valido. Riprova.' });
       }
-      if (usedRecoveryHash) await pool.query('UPDATE app_users SET recovery_codes_hashes=array_remove(recovery_codes_hashes,$1) WHERE id=$2', [usedRecoveryHash, row.user_id]);
+      if (usedRecoveryHash) {
+        if (mariaDb) {
+          await pool.query(\"UPDATE app_users SET recovery_codes_hashes = CASE WHEN JSON_SEARCH(recovery_codes_hashes, 'one', $1) IS NULL THEN recovery_codes_hashes ELSE JSON_REMOVE(recovery_codes_hashes, JSON_UNQUOTE(JSON_SEARCH(recovery_codes_hashes, 'one', $1))) END WHERE id=$2\", [usedRecoveryHash, row.user_id]);
+        } else {
+          await pool.query('UPDATE app_users SET recovery_codes_hashes=array_remove(recovery_codes_hashes,$1) WHERE id=$2', [usedRecoveryHash, row.user_id]);
+        }
+      }
       await pool.query('DELETE FROM app_mfa_challenges WHERE token_hash=$1', [tokenHash(challenge)]);
       const session = crypto.randomBytes(32).toString('base64url');
-      await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+($3 || \' days\')::interval)', [row.user_id, tokenHash(session), String(SESSION_DAYS)]);
+      if (mariaDb) await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,DATE_ADD(NOW(), INTERVAL 8 DAY))', [row.user_id, tokenHash(session)]);
+      else await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+($3 || \' days\')::interval)', [row.user_id, tokenHash(session), String(SESSION_DAYS)]);
       await pool.query('UPDATE app_users SET last_login_at=NOW() WHERE id=$1', [row.user_id]);
       await audit({ id: row.user_id, username: row.username }, req, usedRecoveryHash ? 'auth.login.recovery' : 'auth.login.mfa');
       res.clearCookie('fs_mfa_challenge', challengeCookieOptions());
@@ -296,7 +310,8 @@ module.exports = function createAuth(pool) {
       if (!verifyTotp(secret, parsed.data.code)) return res.status(400).json({ error: 'Codice non corretto. Controlla l’orario del telefono e riprova.' });
       const recoveryCodes = Array.from({ length: 10 }, () => crypto.randomBytes(5).toString('hex').toUpperCase());
       const hashes = recoveryCodes.map(code => tokenHash(code));
-      await pool.query('UPDATE app_users SET totp_secret_enc=totp_pending_secret_enc,totp_pending_secret_enc=NULL,totp_enabled_at=NOW(),recovery_codes_hashes=$1,updated_at=NOW() WHERE id=$2', [hashes, req.user.id]);
+      if (mariaDb) await pool.query('UPDATE app_users SET totp_secret_enc=totp_pending_secret_enc,totp_pending_secret_enc=NULL,totp_enabled_at=NOW(),recovery_codes_hashes=$1,updated_at=NOW() WHERE id=$2', [JSON.stringify(hashes), req.user.id]);
+      else await pool.query('UPDATE app_users SET totp_secret_enc=totp_pending_secret_enc,totp_pending_secret_enc=NULL,totp_enabled_at=NOW(),recovery_codes_hashes=$1,updated_at=NOW() WHERE id=$2', [hashes, req.user.id]);
       // Enabling MFA must invalidate every session, including the session used
       // for setup. Otherwise a pre-MFA session could enter platform routes merely
       // because the account now has totp_enabled_at set.
@@ -324,7 +339,8 @@ module.exports = function createAuth(pool) {
         return res.json({ mfaRequired: true, message: 'Inserisci il codice a 6 cifre della tua app Authenticator.' });
       }
       const token = crypto.randomBytes(32).toString('base64url');
-      await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+($3 || \' days\')::interval)', [user.id, tokenHash(token), String(SESSION_DAYS)]);
+      if (mariaDb) await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,DATE_ADD(NOW(), INTERVAL 8 DAY))', [user.id, tokenHash(token)]);
+      else await pool.query('INSERT INTO app_sessions(user_id,token_hash,expires_at) VALUES($1,$2,NOW()+($3 || \' days\')::interval)', [user.id, tokenHash(token), String(SESSION_DAYS)]);
       await pool.query('UPDATE app_users SET last_login_at=NOW() WHERE id=$1', [user.id]);
       await audit(user, req, 'auth.login');
       res.cookie(SESSION_COOKIE, token, cookieOptions());
