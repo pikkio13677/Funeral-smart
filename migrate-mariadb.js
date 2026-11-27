@@ -39,7 +39,7 @@ async function main() {
 
     const sql = await fs.readFile(path.join(__dirname, 'schema.mariadb.sql'), 'utf8');
     const statements = sql
-      .split(/;\\s*(?:\\r?\\n|$)/)
+      .split(/;\s*(?:\r?\n|$)/)
       .map(statement => statement.trim())
       .filter(Boolean);
 
