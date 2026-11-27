@@ -20,6 +20,11 @@ test('lo schema MariaDB contiene tutte le tabelle base e del portale', () => {
   }
 });
 
+test('il catalogo MariaDB include il servizio combinato cremazione e sepoltura', () => {
+  assert.match(sql, /'cremation-burial', 'Cremazione \+ Sepoltura'/);
+  assert.match(sql, /'Servizi che combinano cremazione e successiva sepoltura'/);
+});
+
 test('UUID, timestamp UTC e relazioni tenant sono definiti esplicitamente', () => {
   assert.match(sql, /CHAR\(36\) CHARACTER SET ascii COLLATE ascii_bin/);
   assert.match(sql, /DATETIME\(3\)/);
