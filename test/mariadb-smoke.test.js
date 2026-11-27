@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const mysql = require('mysql2/promise');
 const { createDatabasePool } = require('../database');
 
@@ -35,6 +36,30 @@ test('MariaDB 10.11 loads the base schema and supports the application adapter',
       'SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema = DATABASE()'
     );
     assert.ok(Number(tables[0].total) >= 22, 'base schema tables should all exist');
+
+    const bootstrapEnv = {
+      ...process.env,
+      NODE_ENV: 'test',
+      MARIADB_SCHEMA_SETUP_APPROVED: 'true'
+    };
+    const bootstrapScript = path.join(__dirname, '..', 'migrate-mariadb.js');
+    const blockedBootstrap = spawnSync(process.execPath, [bootstrapScript], {
+      env: bootstrapEnv,
+      encoding: 'utf8'
+    });
+    assert.equal(blockedBootstrap.status, 1);
+    assert.match(blockedBootstrap.stderr, /database non è vuoto/);
+
+    await connection.execute(
+      'INSERT INTO schema_migrations(id) VALUES (?)',
+      ['001_mariadb_base_and_gestionale']
+    );
+    const repeatedBootstrap = spawnSync(process.execPath, [bootstrapScript], {
+      env: bootstrapEnv,
+      encoding: 'utf8'
+    });
+    assert.equal(repeatedBootstrap.status, 0, repeatedBootstrap.stderr);
+    assert.match(repeatedBootstrap.stdout, /già registrato/);
 
     const inserted = await pool.query(
       'INSERT INTO customers(first_name,last_name) VALUES($1,$2) RETURNING id,first_name AS "firstName"',
