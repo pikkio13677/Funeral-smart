@@ -94,11 +94,11 @@ module.exports = function createAdminRouter(pool, adminOnly) {
   router.get('/dashboard', async (_req, res, next) => {
     try {
       const [cases, customers, staff, vehicles, stock, tasks, invoices] = await Promise.all([
-        pool.query("SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status IN ('open','planned','in_progress'))::int AS active FROM funeral_cases"),
+        pool.query("SELECT COUNT(*)::int AS total, SUM(CASE WHEN status IN ('open','planned','in_progress') THEN 1 ELSE 0 END) AS active FROM funeral_cases"),
         pool.query('SELECT COUNT(*)::int AS total FROM customers'),
         pool.query('SELECT COUNT(*)::int AS total FROM staff WHERE active = TRUE'),
-        pool.query("SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status='available')::int AS available FROM vehicles"),
-        pool.query('SELECT COUNT(*) FILTER (WHERE quantity <= min_quantity)::int AS low FROM inventory_items'),
+        pool.query("SELECT COUNT(*)::int AS total, SUM(CASE WHEN status='available' THEN 1 ELSE 0 END) AS available FROM vehicles"),
+        pool.query('SELECT SUM(CASE WHEN quantity <= min_quantity THEN 1 ELSE 0 END) AS low FROM inventory_items'),
         pool.query("SELECT COUNT(*)::int AS open FROM tasks WHERE status IN ('open','in_progress')"),
         pool.query("SELECT COALESCE(SUM(GREATEST(i.amount - COALESCE(p.paid,0),0)),0)::numeric(12,2) AS outstanding FROM invoices i LEFT JOIN (SELECT invoice_id,SUM(amount) AS paid FROM payments GROUP BY invoice_id) p ON p.invoice_id=i.id WHERE i.status IN ('issued','partial','overdue')")
       ]);
