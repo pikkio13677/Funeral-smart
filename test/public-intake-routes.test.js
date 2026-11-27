@@ -142,3 +142,19 @@ test('duplicate provider VAT is returned as a conflict', async () => {
     await app.close();
   }
 });
+
+test('public intake accepts the combined cremation and burial service', async () => {
+  const app = await startApp();
+  try {
+    const response = await app.post('inquiries', {
+      city: 'Torino',
+      serviceType: 'Cremazione + sepoltura',
+      contactPhone: '+390110000000',
+      privacyConsent: true
+    });
+    assert.equal(response.status, 201);
+    assert.deepEqual(app.calls[0].values.slice(0, 2), ['Torino', 'Cremazione + sepoltura']);
+  } finally {
+    await app.close();
+  }
+});
