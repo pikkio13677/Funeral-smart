@@ -93,7 +93,7 @@ module.exports = function createPlatformCompanyRouter(pool, options = {}) {
       const result = await pool.query(
         'SELECT c.id, c.legal_name AS "legalName", c.vat_number AS "vatNumber", c.city, c.province, c.status, c.plan_code AS "planCode", c.created_at AS "createdAt" ' +
         'FROM companies c WHERE ($1::varchar IS NULL OR c.status=$1) ' +
-        'AND ($2::text IS NULL OR c.legal_name ILIKE \'%\' || $2 || \'%\' OR c.vat_number ILIKE \'%\' || $2 || \'%\') ' +
+        'AND ($2::text IS NULL OR c.legal_name LIKE CONCAT(\'%\', $2, \'%\') OR c.vat_number LIKE CONCAT(\'%\', $2, \'%\')) ' +
         'AND ($3::timestamptz IS NULL OR (c.created_at,c.id)<($3,$4::uuid)) ' +
         'ORDER BY c.created_at DESC,c.id DESC LIMIT $5',
         [parsed.data.status || null, parsed.data.q || null, cursor?.createdAt || null, cursor?.id || null, parsed.data.limit + 1]
