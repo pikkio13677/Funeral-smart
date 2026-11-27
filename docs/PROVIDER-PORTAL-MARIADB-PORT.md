@@ -27,7 +27,7 @@ Mantenere il contratto HTTP e le schermate dell'Area Imprese, sostituendo il liv
 
 ## Stato del porting nel branch di lavoro
 
-Branch isolato: `work/provider-area-mariadb`. Nessuna modifica a `main`, nessun deploy e nessuna migrazione eseguita.
+Branch isolato aggiornato: `work/provider-area-mariadb-current` (basato sull'attuale `main`). Nessuna modifica a `main`, nessun deploy e nessuna migrazione eseguita.
 
 - Implementati adapter MariaDB, middleware provider, endpoint `/me`, dashboard e richieste.
 - Implementate route MariaDB per inviti, accettazione con email verificata, revoca, membri, sospensione/riattivazione e cambio ruolo.
@@ -99,7 +99,7 @@ Il workflow `.github/workflows/provider-mariadb-ci.yml` è stato eseguito su Git
 Questo esito non equivale ancora a un test SQL sul motore MariaDB né a un test end-to-end del portale.
 
 ## Blocco attuale
-È stato preparato uno schema MariaDB completo di staging, ma non è stato ancora validato dal motore MariaDB effettivo e non è stato eseguito. La CI GitHub è stata aggiunta sul branch isolato e deve ancora produrre un risultato verificato. Il server rilevato in precedenza usa Node 18.19.1, mentre il progetto richiede Node >=20. Prima del collegamento delle API servono test reali MariaDB, verifica del runtime e confronto finale con il frontend.
+È stato preparato uno schema MariaDB completo di staging, ma non è stato ancora validato dal motore MariaDB effettivo e non è stato eseguito. La CI GitHub è stata trasferita sul branch aggiornato; il risultato del nuovo run deve ancora essere verificato. Il server rilevato in precedenza usa Node 18.19.1, mentre il progetto richiede Node >=20. Prima del collegamento delle API servono test reali MariaDB, verifica del runtime e confronto finale con il frontend.
 
 ## Vincoli
 - Nessuna modifica al database PostgreSQL esistente.
@@ -195,3 +195,8 @@ environment. The script uses a MariaDB advisory lock, refuses to create a
 second platform administrator, stores the same scrypt hash format used by the
 existing application, and never prints the password. Remove all
 `STAGING_BOOTSTRAP_*` variables immediately after the one-time run.
+
+
+## Aggiornamento ramo corrente (2026-11-27)
+
+Il porting è stato trasferito su `work/provider-area-mariadb-current`, creato dall'attuale `main` per evitare di basarsi su un ramo divergente. La PR #101 è aperta in bozza verso `main` e non è stata unita. Sono stati aggiunti gli script npm `start:mariadb-staging`, `bootstrap:mariadb-staging-admin` e `test:mariadb`. Il workflow CI è configurato per il ramo corrente e per le pull request verso `main`. Non è ancora disponibile una verifica del nuovo run CI in questa revisione. Restano obbligatori i test su MariaDB reale temporaneo, la verifica runtime Node 20+ e l'integrazione frontend/reverse proxy su staging.
