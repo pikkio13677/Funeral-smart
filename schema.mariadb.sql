@@ -250,8 +250,30 @@ CREATE TABLE IF NOT EXISTS app_users (
   totp_pending_secret_enc TEXT NULL,
   totp_enabled_at DATETIME(3) NULL,
   recovery_codes_hashes JSON NULL,
-  CONSTRAINT chk_app_users_role CHECK (role IN ('admin','manager','operator','warehouse','accounting'))
+  CONSTRAINT chk_app_users_role CHECK (role IN ('admin','manager','operator','warehouse','accounting','platform_owner'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS platform_access (
+  user_id CHAR(36) NOT NULL PRIMARY KEY,
+  role VARCHAR(16) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'active',
+  granted_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT chk_platform_access_role CHECK (role IN ('owner','support')),
+  CONSTRAINT chk_platform_access_status CHECK (status IN ('active','suspended')),
+  CONSTRAINT fk_platform_access_user FOREIGN KEY (user_id) REFERENCES app_users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS platform_bootstrap_state (
+  singleton BOOLEAN NOT NULL PRIMARY KEY,
+  consumed_at DATETIME(3) NULL,
+  consumed_by CHAR(36) NULL,
+  CONSTRAINT chk_platform_bootstrap_singleton CHECK (singleton = TRUE),
+  CONSTRAINT fk_platform_bootstrap_consumed_by FOREIGN KEY (consumed_by) REFERENCES app_users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO platform_bootstrap_state(singleton) VALUES(TRUE)
+ON DUPLICATE KEY UPDATE singleton = VALUES(singleton);
 
 CREATE TABLE IF NOT EXISTS app_sessions (
   id CHAR(36) NOT NULL DEFAULT (UUID()) PRIMARY KEY,
