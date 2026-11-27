@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const createMariaDbDatabase = require('./database');
 const createMariaDbAuth = require('./auth');
 const createMariaDbProviderAreaRouter = require('./index');
+const createMariaDbPlatformInquiryRouter = require('./platform-inquiry-routes');
 
 function assertStagingDatabase(env = process.env) {
   if (env.FUNERAL_SMART_ENV !== 'staging') {
@@ -51,12 +52,22 @@ function createApp({ database, auth, env = process.env, sendInvitationEmail } = 
     next();
   });
   app.use('/api/v1/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-7', legacyHeaders: false }), auth.router);
+  app.use('/api/v1/platform', createMariaDbPlatformInquiryRouter(database, { authenticate: auth.authenticate }));
   app.use('/api/v1/provider-portal', createMariaDbProviderAreaRouter(database, {
     authenticate: auth.authenticate,
     publicAppUrl: env.PUBLIC_APP_URL,
     // No real email sender is configured by this staging server.
     sendInvitationEmail
   }));
+
+
+  app.get('/platform/richieste', (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.set('Referrer-Policy', 'no-referrer');
+    res.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    res.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+    res.sendFile(require('node:path').join(__dirname, '..', 'platform-inquiries-mariadb.html'));
+  });
 
   app.use((err, _req, res, _next) => {
     // Do not leak SQL, credentials, tokens, or stack traces to clients or logs.
