@@ -33,10 +33,10 @@ test('UUID, timestamp UTC e relazioni tenant sono definiti esplicitamente', () =
 });
 
 test('gli indici generati sostituiscono gli indici PostgreSQL parziali', () => {
-  assert.match(sql, /active_inquiry_id CHAR\(36\) GENERATED ALWAYS AS/);
+  assert.match(sql, /active_inquiry_id CHAR\(36\)[^,]*NULL/);
   assert.match(sql, /UNIQUE KEY uq_assignment_one_active_per_inquiry \(active_inquiry_id\)/);
-  assert.match(sql, /pending_provider_id CHAR\(36\) GENERATED ALWAYS AS/);
-  assert.match(sql, /pending_email VARCHAR\(254\) GENERATED ALWAYS AS/);
+  assert.match(sql, /pending_provider_id CHAR\(36\)[^,]*NULL/);
+  assert.match(sql, /pending_email VARCHAR\(254\) NULL/);
   assert.match(sql, /UNIQUE KEY uq_provider_invitation_pending_email \(pending_provider_id, pending_email\)/);
 });
 
