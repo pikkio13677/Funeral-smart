@@ -36,6 +36,13 @@ test('adatta blocchi di lock e ordinamento NULLS LAST', () => {
   assert.equal(rewriteSql('SELECT id FROM tasks ORDER BY due_date NULLS LAST').sql, 'SELECT id FROM tasks ORDER BY due_date IS NULL, due_date');
 });
 
+test('converte JSONB e lock condivisi nelle forme MariaDB', () => {
+  const json = rewriteSql('UPDATE app_users SET recovery_codes_hashes=$1::jsonb WHERE id=$2');
+  assert.equal(json.sql, 'UPDATE app_users SET recovery_codes_hashes=? WHERE id=?');
+  const shared = rewriteSql('SELECT id FROM funeral_cases WHERE id=$1 FOR SHARE OF funeral_cases');
+  assert.equal(shared.sql, 'SELECT id FROM funeral_cases WHERE id=? LOCK IN SHARE MODE');
+});
+
 test('normalizza righe, risultati di scrittura ed errori MariaDB', () => {
   assert.deepEqual(normalizeResult([{ id: 'x' }]), { rows: [{ id: 'x' }], rowCount: 1, command: 'SELECT' });
   assert.deepEqual(normalizeResult({ affectedRows: 2, insertId: 7 }), { rows: [], rowCount: 2, command: 'WRITE', insertId: 7 });
