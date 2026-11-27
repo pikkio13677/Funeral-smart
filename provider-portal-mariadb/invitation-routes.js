@@ -66,7 +66,7 @@ function createMariaDbProviderInvitationRouter(database, options = {}) {
         if (pending.length) return { status: 409, body: { error: 'Esiste già un invito in attesa per questo indirizzo.' } };
 
         await connection.execute(
-          "INSERT INTO provider_user_invitations (id, provider_id, email, role, token_hash, invited_by_user_id, status, created_at, expires_at) VALUES (UUID(), ?, ?, ?, ?, ?, 'pending', UTC_TIMESTAMP(3), ?)",
+          "INSERT INTO provider_user_invitations (id, provider_id, email, role, token_hash, invited_by_user_id, status, created_at, expires_at, pending_provider_id, pending_email) VALUES (UUID(), ?, ?, ?, ?, ?, 'pending', UTC_TIMESTAMP(3), ?, ?, ?)",
           [providerId, email, parsed.data.role, tokenHash, req.user.id, expiresAt]
         );
         const [rows] = await connection.execute(
@@ -91,7 +91,7 @@ function createMariaDbProviderInvitationRouter(database, options = {}) {
     } catch (_) {
       try {
         await database.query(
-          "UPDATE provider_user_invitations SET status = 'revoked', revoked_at = UTC_TIMESTAMP(3) WHERE id = ? AND status = 'pending'",
+          "UPDATE provider_user_invitations SET status = 'revoked', revoked_at = UTC_TIMESTAMP(3), pending_provider_id = NULL, pending_email = NULL WHERE id = ? AND status = 'pending'",
           [created.id]
         );
       } catch (_) {}
@@ -142,7 +142,7 @@ function createMariaDbProviderInvitationRouter(database, options = {}) {
         const invite = rows[0];
         if (invite.status !== 'pending') return { status: 409, body: { error: 'Solo un invito in attesa può essere revocato.' } };
         if (Number(invite.isExpired) === 1) {
-          await connection.execute("UPDATE provider_user_invitations SET status = 'expired' WHERE id = ? AND provider_id = ? AND status = 'pending'", [invite.id, req.provider.providerId]);
+          await connection.execute("UPDATE provider_user_invitations SET status = 'expired', pending_provider_id = NULL, pending_email = NULL WHERE id = ? AND provider_id = ? AND status = 'pending'", [invite.id, req.provider.providerId]);
           return { status: 410, body: { error: 'L’invito è scaduto e non può essere revocato.' } };
         }
         await connection.execute("UPDATE provider_user_invitations SET status = 'revoked', revoked_at = UTC_TIMESTAMP(3) WHERE id = ? AND provider_id = ? AND status = 'pending'", [invite.id, req.provider.providerId]);
@@ -189,7 +189,7 @@ function createMariaDbProviderInvitationRouter(database, options = {}) {
           [invite.providerId, req.user.id, invite.role, invite.invitedByUserId || null]
         );
         const [access] = await connection.execute('SELECT id FROM provider_user_access WHERE provider_id = ? AND user_id = ? LIMIT 1', [invite.providerId, req.user.id]);
-        await connection.execute("UPDATE provider_user_invitations SET status = 'accepted', accepted_at = UTC_TIMESTAMP(3), accepted_by_user_id = ? WHERE id = ? AND status = 'pending'", [req.user.id, invite.id]);
+        await connection.execute("UPDATE provider_user_invitations SET status = 'accepted', accepted_at = UTC_TIMESTAMP(3), accepted_by_user_id = ?, pending_provider_id = NULL, pending_email = NULL WHERE id = ? AND status = 'pending'", [req.user.id, invite.id]);
         await connection.execute("INSERT INTO provider_portal_audit_log (provider_id, user_id, action, reason, created_at) VALUES (?, ?, 'provider.invitation.accepted', 'Accesso attivato tramite invito verificato', UTC_TIMESTAMP(3))", [invite.providerId, req.user.id]);
         return { status: 201, body: { message: 'Invito accettato. Ora puoi accedere al portale dell’impresa.', data: { accessId: access[0].id, providerId: invite.providerId, role: invite.role } } };
       });
