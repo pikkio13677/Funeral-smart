@@ -3,14 +3,26 @@
 function splitReturning(sql) {
   const match = /\s+RETURNING\s+([\s\S]+?)\s*;?\s*$/i.exec(sql);
   if (!match) return { sql, projection: null };
-  return { sql: 'INSERT INTO ' + table + ' (id, ' + columns + ') VALUES ((@fs_last_id := UUID()), ' + values + ')',
+  return { sql: sql.slice(0, match.index).trim(), projection: match[1].replace(/;\s*$/, '').trim() };
+}
+
+function prepareReturning(sql, projection) {
+  if (!projection) return { sql, mode: null, selectSql: null };
+  const insert = /^\s*INSERT\s+INTO\s+([\w.]+)\s*\(([^)]+)\)\s*VALUES\s*\(([\s\S]*)\)\s*$/i.exec(sql);
+  if (insert) {
+    const table = insert[1], columns = insert[2], values = insert[3];
+    if (/(^|,)\s*id\s*(,|$)/i.test(columns)) {
+      throw new Error('MariaDB RETURNING adapter expects generated UUID ids; explicit id inserts need a dedicated query.');
+    }
+    return {
+      sql: 'INSERT INTO ' + table + ' (id, ' + columns + ') VALUES ((@fs_last_id := UUID()), ' + values + ')',
       mode: 'insert',
       selectSql: 'SELECT ' + projection + ' FROM ' + table + ' WHERE id = @fs_last_id'
     };
   }
   const update = /^\s*UPDATE\s+([\w.]+)\s+SET\s+([\s\S]+?)\s+WHERE\s+([\s\S]+)$/i.exec(sql);
   if (update) {
-    const [, table, , whereClause] = update;
+    const table = update[1], whereClause = update[3];
     return { sql, mode: 'update', selectSql: 'SELECT ' + projection + ' FROM ' + table + ' WHERE ' + whereClause };
   }
   throw new Error('MariaDB RETURNING non supportato per questa forma SQL: convertire la query esplicitamente.');
@@ -23,7 +35,6 @@ function rewriteSql(sql) {
     .replace(/\bILIKE\b/gi, 'LIKE')
     .replace(/::\s*int\b/gi, '')
     .replace(/::\s*(?:numeric|varchar|text|date|uuid|timestamptz|bigint|boolean)(?:\s*\([^)]*\))?(?:\[\])?/gi, '');
-  // MariaDB 10.11 supports row locks but not PostgreSQL's OF alias list.
   rewritten = rewritten
     .replace(/\s+FOR\s+(SHARE|UPDATE)\s+OF\s+[\w, ]+/gi, (_m, mode) => ' FOR ' + mode)
     .replace(/(\b[\w.]+)\s+NULLS\s+LAST\b/gi, '$1 IS NULL, $1');
@@ -35,7 +46,7 @@ function rewriteSql(sql) {
     values.push(position);
     return '?';
   });
-  const selectSql = prepared.selectSql?.replace(/\$(\d+)/g, '?') || null;
+  const selectSql = prepared.selectSql ? prepared.selectSql.replace(/\$(\d+)/g, '?') : null;
   return { sql: sqlWithPlaceholders, parameterOrder: values, mode: prepared.mode, selectSql };
 }
 
@@ -50,12 +61,12 @@ function reorderParams(params, order) {
 
 function normalizeResult(result) {
   if (Array.isArray(result)) return { rows: result, rowCount: result.length, command: 'SELECT' };
-  return { rows: [], rowCount: Number(result?.affectedRows || 0), command: 'WRITE', insertId: result?.insertId };
+  return { rows: [], rowCount: Number(result && result.affectedRows || 0), command: 'WRITE', insertId: result && result.insertId };
 }
 
 function normalizeMariaError(error) {
-  if (error?.code === 'ER_DUP_ENTRY') error.code = '23505';
-  if (error?.code === 'ER_NO_REFERENCED_ROW_2' || error?.code === 'ER_ROW_IS_REFERENCED_2') error.code = '23503';
+  if (error && error.code === 'ER_DUP_ENTRY') error.code = '23505';
+  if (error && (error.code === 'ER_NO_REFERENCED_ROW_2' || error.code === 'ER_ROW_IS_REFERENCED_2')) error.code = '23503';
   return error;
 }
 
@@ -65,11 +76,18 @@ function createMariaDbPool(env = process.env) {
   const missing = required.filter(key => !env[key]);
   if (missing.length) throw new Error('Configurazione MariaDB incompleta: ' + missing.join(', '));
   const pool = mysql.createPool({
-    host: env.MARIADB_HOST, port: Number(env.MARIADB_PORT || 3306),
-    user: env.MARIADB_USER, password: env.MARIADB_PASSWORD, database: env.MARIADB_DATABASE,
-    charset: 'utf8mb4', waitForConnections: true,
-    connectionLimit: Number(env.MARIADB_CONNECTION_LIMIT || 10), queueLimit: 0,
-    enableKeepAlive: true, dateStrings: false, decimalNumbers: true
+    host: env.MARIADB_HOST,
+    port: Number(env.MARIADB_PORT || 3306),
+    user: env.MARIADB_USER,
+    password: env.MARIADB_PASSWORD,
+    database: env.MARIADB_DATABASE,
+    charset: 'utf8mb4',
+    waitForConnections: true,
+    connectionLimit: Number(env.MARIADB_CONNECTION_LIMIT || 10),
+    queueLimit: 0,
+    enableKeepAlive: true,
+    dateStrings: false,
+    decimalNumbers: true
   });
 
   async function run(target, sql, params) {
@@ -82,14 +100,17 @@ function createMariaDbPool(env = process.env) {
       owned = true;
     }
     try {
-      const [result] = await connection.execute(converted.sql, ordered);
+      const resultTuple = await connection.execute(converted.sql, ordered);
+      const result = resultTuple[0];
       if (converted.mode === 'insert') {
-        const [rows] = await connection.query(converted.selectSql);
+        const rowsTuple = await connection.query(converted.selectSql);
+        const rows = rowsTuple[0];
         return { rows, rowCount: rows.length, command: 'INSERT' };
       }
       if (converted.mode === 'update') {
         const whereCount = (converted.selectSql.match(/\?/g) || []).length;
-        const [rows] = await connection.execute(converted.selectSql, ordered.slice(ordered.length - whereCount));
+        const rowsTuple = await connection.execute(converted.selectSql, ordered.slice(ordered.length - whereCount));
+        const rows = rowsTuple[0];
         return { rows, rowCount: rows.length, command: 'UPDATE' };
       }
       return normalizeResult(result);
@@ -120,7 +141,10 @@ function createDatabasePool(env = process.env) {
   if (dialect === 'mariadb' || dialect === 'mysql') return createMariaDbPool(env);
   if (dialect === 'postgres' || dialect === 'postgresql') {
     const { Pool } = require('pg');
-    return new Pool({ connectionString: env.DATABASE_URL, ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined });
+    return new Pool({
+      connectionString: env.DATABASE_URL,
+      ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
+    });
   }
   throw new Error('DB_DIALECT non supportato. Valori ammessi: postgres, mariadb.');
 }
