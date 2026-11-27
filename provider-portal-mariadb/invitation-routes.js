@@ -204,7 +204,7 @@ function createMariaDbProviderInvitationRouter(database, options = {}) {
     if (req.provider.role !== 'provider_admin') return res.status(403).json({ error: 'Solo l’amministratore dell’impresa può gestire i collaboratori.' });
     try {
       const [rows] = await database.query(
-        "SELECT a.id AS accessId, a.user_id AS userId, u.username, u.display_name AS displayName, u.active AS accountActive, a.role, a.status, a.created_at AS createdAt, a.updated_at AS updatedAt FROM provider_user_access a JOIN app_users u ON u.id = a.user_id WHERE a.provider_id = ? AND a.status IN ('active', 'suspended') ORDER BY CASE WHEN a.role = 'provider_admin' THEN 0 ELSE 1 END, u.display_name, u.username",
+        "SELECT a.id AS accessId, a.user_id AS userId, u.username AS username, u.display_name AS displayName, u.active AS accountActive, a.role, a.status, a.created_at AS createdAt, a.updated_at AS updatedAt FROM provider_user_access a JOIN app_users u ON u.id = a.user_id WHERE a.provider_id = ? AND a.status IN ('active', 'suspended') ORDER BY CASE WHEN a.role = 'provider_admin' THEN 0 ELSE 1 END, u.display_name, u.username",
         [req.provider.providerId]
       );
       return res.status(200).set('Cache-Control', 'no-store').json({ data: rows });
