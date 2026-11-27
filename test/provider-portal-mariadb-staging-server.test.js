@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { promisify } = require('node:util');
 const createMariaDbAuth = require('../provider-portal-mariadb/auth');
-const { assertStagingDatabase } = require('../provider-portal-mariadb/staging-server');
+const { assertStagingDatabase, createApp } = require('../provider-portal-mariadb/staging-server');
 const { assertBootstrapEnvironment } = require('../scripts/bootstrap-mariadb-staging-admin');
 
 const scrypt = promisify(crypto.scrypt);
@@ -94,4 +94,26 @@ test('bootstrap account amministratore richiede conferma esplicita e database st
   assert.doesNotThrow(() => assertBootstrapEnvironment(base));
   assert.throws(() => assertBootstrapEnvironment({ ...base, MARIADB_DATABASE: 'production' }), /database MariaDB non identificato/);
   assert.throws(() => assertBootstrapEnvironment({ ...base, STAGING_BOOTSTRAP_CONFIRM: '' }), /Conferma bootstrap mancante/);
+});
+
+test('console richieste MariaDB è servita e API piattaforma usa il controllo admin', async () => {
+  const app = createApp({
+    database: { async ping() { return true; }, async query() { return [[], []]; }, async withTransaction(work) { return work({ async execute() { return [[], []]; } }); } },
+    auth: {
+      router: require('express').Router(),
+      authenticate(req, _res, next) { req.user = { id: 'user-1', username: 'admin', role: 'admin' }; next(); }
+    },
+    env: { NODE_ENV: 'test' }
+  });
+  const server = require('node:http').createServer(app);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const base = 'http://127.0.0.1:' + server.address().port;
+    const page = await fetch(base + '/platform/richieste');
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /Richieste delle famiglie/);
+    const api = await fetch(base + '/api/v1/platform/providers');
+    assert.equal(api.status, 200);
+    assert.match(api.headers.get('cache-control') || '', /no-store/);
+  } finally { await new Promise(resolve => server.close(resolve)); }
 });
