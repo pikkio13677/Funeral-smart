@@ -29,10 +29,11 @@ body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{ba
 <dialog id="response"><h2 id="response-title">Rispondi</h2><label for="reason">Motivazione obbligatoria (10–500 caratteri)</label><textarea id="reason" minlength="10" maxlength="500"></textarea><div class="actions"><button id="cancel">Annulla</button><button id="confirm" class="primary">Conferma</button></div></dialog>
 <script>
 'use strict';
-const API='/api/v1/provider-portal',el=id=>document.getElementById(id);
+const API_BASE=String(window.FUNERAL_SMART_API_BASE||'').trim().replace(/\/+$/,'');
+const API=API_BASE+'/api/v1/provider-portal',el=id=>document.getElementById(id);
 let rows=[],filter='all',selected='',decision='',permissions={};
 function show(t,ok){el('message').textContent=t;el('message').className='message'+(ok?' ok':'');}
-async function api(path,options){const r=await fetch(path,{credentials:'same-origin',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options&&options.headers||{})}});const d=await r.json().catch(()=>({error:'Risposta server non valida'}));if(!r.ok)throw new Error(d.error||'Operazione non riuscita');return d;}
+async function api(path,options){const r=await fetch(path,{credentials:'include',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options&&options.headers||{})}});const d=await r.json().catch(()=>({error:'Risposta server non valida'}));if(!r.ok)throw new Error(d.error||'Operazione non riuscita');return d;}
 function state(x){return x.responseStatus||'new';}
 function label(x){return x==='accepted'?'Accettata':x==='rejected'?'Rifiutata':'Nuova';}
 function render(){
@@ -191,5 +192,5 @@ el('confirm').addEventListener('click',async()=>{const reason=el('reason').value
 el('invite').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api(API+'/invitations',{method:'POST',body:JSON.stringify({email:el('email').value.trim(),role:el('role').value})});el('email').value='';show(d.message||'Invito inviato.',true);await loadInvitations();}catch(x){show(x.message,false);}});
 document.querySelectorAll('[data-filter]').forEach(b=>b.addEventListener('click',()=>{filter=b.dataset.filter;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));render();}));
 el('search').addEventListener('input',render);el('refresh-invitations').addEventListener('click',loadInvitations);el('refresh-members').addEventListener('click',loadMembers);el('refresh-activity').addEventListener('click',loadActivity);el('refresh-analytics').addEventListener('click',loadAnalytics);el('close-detail').addEventListener('click',()=>el('detail').close());el('cancel').addEventListener('click',()=>el('response').close());
-el('logout').addEventListener('click',async()=>{try{await api('/api/v1/auth/logout',{method:'POST'});}finally{location.assign('/admin');}});load();
+el('logout').addEventListener('click',async()=>{try{await api(API_BASE+'/api/v1/auth/logout',{method:'POST'});}finally{location.assign('/admin');}});load();
 </script></body></html>

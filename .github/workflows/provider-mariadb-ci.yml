@@ -1,0 +1,63 @@
+name: Provider MariaDB isolated CI
+
+on:
+  push:
+    branches:
+      - work/provider-area-mariadb-current
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'provider-portal-mariadb/**'
+      - 'mariadb/**'
+      - 'scripts/check-mariadb-schema.js'
+      - 'test/provider-portal-mariadb-*.test.js'
+      - 'package.json'
+      - '.github/workflows/provider-mariadb-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: ci-only-root-password
+          MARIADB_DATABASE: funeral_smart_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout isolated branch
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check JavaScript syntax
+        run: npm run check
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Apply and verify full schema on disposable MariaDB 10.11
+        run: npm run test:mariadb-schema
+        env:
+          MARIADB_HOST: 127.0.0.1
+          MARIADB_PORT: 3306
+          MARIADB_USER: root
+          MARIADB_PASSWORD: ci-only-root-password
+          MARIADB_DATABASE: funeral_smart_ci
