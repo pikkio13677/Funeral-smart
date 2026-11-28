@@ -105,7 +105,8 @@ function createMariaDbAuth(database, options = {}) {
     try {
       const token = req.cookies[COOKIE];
       await database.query('DELETE FROM app_sessions WHERE token_hash = ?', [tokenHash(token)]);
-      const { maxAge, ...clearOptions } = cookieOptions(env);\n      res.clearCookie(COOKIE, clearOptions);
+      const { maxAge, ...clearOptions } = cookieOptions(env);
+      res.clearCookie(COOKIE, clearOptions);
       return res.set('Cache-Control', 'no-store').json({ message: 'Sessione terminata.' });
     } catch (error) {
       return next(error);
