@@ -29,7 +29,8 @@ body{margin:0;background:#f4f6f7;color:#202b36;font:15px/1.5 system-ui}header{ba
 <dialog id="response"><h2 id="response-title">Rispondi</h2><label for="reason">Motivazione obbligatoria (10–500 caratteri)</label><textarea id="reason" minlength="10" maxlength="500"></textarea><div class="actions"><button id="cancel">Annulla</button><button id="confirm" class="primary">Conferma</button></div></dialog>
 <script>
 'use strict';
-const API_BASE=String(window.FUNERAL_SMART_API_BASE||'').trim().replace(/\\/+$/,'');\nconst API=API_BASE+'/api/v1/provider-portal',el=id=>document.getElementById(id);
+const API_BASE=String(window.FUNERAL_SMART_API_BASE||'').trim().replace(/\/+$/,'');
+const API=API_BASE+'/api/v1/provider-portal',el=id=>document.getElementById(id);
 let rows=[],filter='all',selected='',decision='',permissions={};
 function show(t,ok){el('message').textContent=t;el('message').className='message'+(ok?' ok':'');}
 async function api(path,options){const r=await fetch(path,{credentials:'include',cache:'no-store',...options,headers:{'Content-Type':'application/json',...(options&&options.headers||{})}});const d=await r.json().catch(()=>({error:'Risposta server non valida'}));if(!r.ok)throw new Error(d.error||'Operazione non riuscita');return d;}
