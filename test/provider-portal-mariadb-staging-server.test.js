@@ -117,3 +117,32 @@ test('console richieste MariaDB è servita e API piattaforma usa il controllo ad
     assert.match(api.headers.get('cache-control') || '', /no-store/);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+
+test('staging API consente cookie cross-origin soltanto agli origin configurati', async () => {
+  const app = createApp({
+    database: { async ping() { return true; }, async query() { return [[], []]; }, async withTransaction(work) { return work({ async execute() { return [[], []]; } }); } },
+    auth: { router: require('express').Router(), authenticate(_req, _res, next) { next(); } },
+    env: { NODE_ENV: 'production', CORS_ORIGIN: 'https://funeralsmartapp.com, https://www.funeralsmartapp.com' }
+  });
+  const server = require('node:http').createServer(app);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const url = 'http://127.0.0.1:' + server.address().port + '/api/v1/provider-portal/me';
+    const allowed = await fetch(url, { method: 'OPTIONS', headers: {
+      Origin: 'https://funeralsmartapp.com',
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'content-type'
+    } });
+    assert.equal(allowed.status, 204);
+    assert.equal(allowed.headers.get('access-control-allow-origin'), 'https://funeralsmartapp.com');
+    assert.equal(allowed.headers.get('access-control-allow-credentials'), 'true');
+
+    const denied = await fetch(url, { method: 'OPTIONS', headers: {
+      Origin: 'https://evil.example',
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'content-type'
+    } });
+    assert.equal(denied.headers.get('access-control-allow-origin'), null);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
