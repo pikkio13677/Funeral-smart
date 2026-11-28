@@ -29,7 +29,7 @@ test('provider portal reads scoped APIs and requires a reason for every response
   assert.match(portal, /API\+'\/inquiries\/'\+encodeURIComponent\(id\)/);
   assert.match(portal, /API\+'\/invitations'/);
   assert.match(portal, /reason\.length<10/);
-  assert.match(portal, /credentials:'same-origin'/);
+  assert.match(portal, /credentials:'include'/);
   assert.match(portal, /cache:'no-store'/);
   assert.doesNotMatch(portal, /Impresa Aurora|family@example|example\.invalid|demo data/i);
   assert.doesNotMatch(portal, /localStorage|sessionStorage/);
