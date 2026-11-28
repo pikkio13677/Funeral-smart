@@ -61,6 +61,17 @@ Questi file sono PostgreSQL e le migrazioni 007, 014 e 015 sono bozze non esegui
 
 Il file è un DDL autonomo per un database MariaDB di staging vuoto. Non è stato eseguito, non è incluso in `migrate.js`, non crea account amministrativi e non invia email. Prima dell'uso vanno verificati supporto effettivo delle CHECK su MariaDB 10.11, permessi, collation, modalità SQL e coerenza del driver. L'esecuzione dovrà essere esplicita e solo su database temporaneo dedicato.
 
+## Collegamento frontend/API e cookie di sessione
+
+Il portale usa `window.FUNERAL_SMART_API_BASE` come origine API configurabile; se vuota, mantiene il comportamento same-origin. L'API staging accetta richieste con credenziali soltanto dagli origin elencati esattamente in `CORS_ORIGIN`.
+
+- Se frontend e API sono su origini diverse ma sullo stesso sito registrabile, preferire un reverse proxy same-origin o sottodomini dello stesso dominio.
+- Se sono realmente cross-site, configurare `SESSION_COOKIE_SAME_SITE=none` insieme a `NODE_ENV=production`, così il cookie è anche `Secure`; `SameSite=None` è rifiutato in ambienti non production.
+- Il browser o le impostazioni privacy possono comunque bloccare cookie di terze parti. Perciò il solo CORS non garantisce il login cross-site: il collaudo va fatto sul dominio definitivo e da smartphone.
+- Non impostare wildcard in `CORS_ORIGIN`; indicare solo gli origin reali, senza path e senza slash finale.
+
+Il file `.env.mariadb-staging.example` contiene le variabili da impostare nel servizio isolato. Non contiene credenziali reali.
+
 ## Verifiche ancora obbligatorie prima dell'integrazione
 
 1. Confrontare ogni tabella/colonna usata dalle route con le migrazioni marketplace effettive e con lo schema del MariaDB di staging.
