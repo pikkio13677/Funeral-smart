@@ -146,3 +146,14 @@ test('staging API consente cookie cross-origin soltanto agli origin configurati'
     assert.equal(denied.headers.get('access-control-allow-origin'), null);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+
+test('cookie cross-site richiede produzione e SameSite=None usa Secure', () => {
+  const cookieOptions = createMariaDbAuth.cookieOptions;
+  assert.equal(cookieOptions({ NODE_ENV: 'production' }).sameSite, 'lax');
+  const crossSite = cookieOptions({ NODE_ENV: 'production', SESSION_COOKIE_SAME_SITE: 'none' });
+  assert.equal(crossSite.sameSite, 'none');
+  assert.equal(crossSite.secure, true);
+  assert.throws(() => cookieOptions({ NODE_ENV: 'development', SESSION_COOKIE_SAME_SITE: 'none' }), /richiede NODE_ENV=production/);
+  assert.throws(() => cookieOptions({ NODE_ENV: 'production', SESSION_COOKIE_SAME_SITE: 'invalid' }), /deve essere lax/);
+});
