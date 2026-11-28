@@ -124,3 +124,4 @@ function createMariaDbAuth(database, options = {}) {
 module.exports = createMariaDbAuth;
 module.exports.tokenHash = tokenHash;
 module.exports.verifyPassword = verifyPassword;
+module.exports.cookieOptions = cookieOptions;
