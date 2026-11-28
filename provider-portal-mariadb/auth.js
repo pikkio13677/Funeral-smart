@@ -26,10 +26,18 @@ async function verifyPassword(password, stored) {
 }
 
 function cookieOptions(env) {
+  const sameSite = String(env.SESSION_COOKIE_SAME_SITE || 'lax').toLowerCase();
+  if (!['lax', 'strict', 'none'].includes(sameSite)) {
+    throw new Error('SESSION_COOKIE_SAME_SITE deve essere lax, strict o none.');
+  }
+  const secure = env.NODE_ENV === 'production';
+  if (sameSite === 'none' && !secure) {
+    throw new Error('SameSite=None richiede NODE_ENV=production e cookie Secure.');
+  }
   return {
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure,
+    sameSite,
     path: '/',
     maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000
   };
@@ -97,7 +105,7 @@ function createMariaDbAuth(database, options = {}) {
     try {
       const token = req.cookies[COOKIE];
       await database.query('DELETE FROM app_sessions WHERE token_hash = ?', [tokenHash(token)]);
-      res.clearCookie(COOKIE, { httpOnly: true, secure: env.NODE_ENV === 'production', sameSite: 'lax', path: '/' });
+      const { maxAge, ...clearOptions } = cookieOptions(env);\n      res.clearCookie(COOKIE, clearOptions);
       return res.set('Cache-Control', 'no-store').json({ message: 'Sessione terminata.' });
     } catch (error) {
       return next(error);
